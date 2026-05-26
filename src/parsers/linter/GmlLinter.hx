@@ -438,8 +438,17 @@ class GmlLinter {
 	}
 	function checkTypeCastEq(source:GmlType, target:GmlType, ?ctx:String):Bool {
 		var unassignable = GmlTypeDef.parse("uncompareable"); // caches
-		if (source.canCastTo(unassignable) && target.canCastTo(unassignable)) {
-			if (source.canCastTo(target, null, getImports())) return true;
+		var sourceKind = source.getKind();
+		var targetKind = target.getKind();
+		if (sourceKind == KUndefined || targetKind == KUndefined) {
+			return true;
+		}
+		var imports = getImports();
+		var sourceToTarget = source.canCastTo(target, null, imports);
+		if (source.canCastTo(unassignable, null, imports) && target.canCastTo(unassignable, null, imports)) {
+			if (sourceToTarget) return true;
+			addWarning("Can't compare a " + source.toString() + " to a " + target.toString());
+		} else if (!sourceToTarget && !target.canCastTo(source, null, imports)) {
 			addWarning("Can't compare a " + source.toString() + " to a " + target.toString());
 		}
 		return true;
