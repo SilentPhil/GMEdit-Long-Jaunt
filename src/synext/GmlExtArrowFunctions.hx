@@ -32,7 +32,10 @@ class GmlExtArrowFunctions extends SyntaxExtension {
 			if (q.skipCommon() >= 0) continue;
 			var p = q.pos;
 			var c:CharCode = q.read();
-			if (c != "f".code || !q.skipIfIdentEquals("unction")) continue;
+			if (c != "f".code) continue;
+			var prev:CharCode = p > 0 ? q.get(p - 1) : -1;
+			if (prev.isIdent1()) continue;
+			if (!q.skipIfIdentEquals("unction")) continue;
 			q.skipSpaces1_local();
 			
 			// skip over (...)...
