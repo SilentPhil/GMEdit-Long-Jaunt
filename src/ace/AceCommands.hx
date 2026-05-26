@@ -7,6 +7,7 @@ import js.html.Console;
 import js.lib.RegExp;
 import tools.CharCode;
 import tools.NativeString;
+import ui.AICodeCompletion;
 import ui.CommandPalette;
 import ace.extern.AceCommand;
 import ui.ext.Bookmarks;
@@ -149,6 +150,13 @@ using StringTools;
 			},
 			bindKey: "Ctrl-Space|Ctrl-Shift-Space|Alt-Space"
 		});
+		add({
+			name: "aiCompleteCode",
+			bindKey: wm("Ctrl-Alt-Space", "Command-Alt-Space"),
+			exec: function(editor:AceWrap) {
+				AICodeCompletion.complete(editor);
+			}
+		}, "AI: Complete code");
 		add({
 			name: "showKeyboardShortcuts",
 			bindKey: wm("Ctrl-Alt-h", "Command-Alt-h"),

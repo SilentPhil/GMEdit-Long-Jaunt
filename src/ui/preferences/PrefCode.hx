@@ -6,6 +6,7 @@ import gml.GmlAPI;
 import gml.file.GmlFile;
 import ui.preferences.PrefData;
 using tools.HtmlTools;
+import js.html.InputElement;
 import js.html.SelectElement;
 import file.kind.misc.KSnippets;
 
@@ -90,6 +91,36 @@ class PrefCode {
 			save();
 		});
 	}
+	static function buildAI(out:Element) {
+		addText(out, "Experimental command-palette code completion via an OpenAI-compatible Responses API.");
+		addCheckbox(out, "Enable AI code completion", current.aiCompletion.enabled, function(z) {
+			current.aiCompletion.enabled = z;
+			save();
+		});
+		addInput(out, "AI API base URL", current.aiCompletion.baseUrl, function(s) {
+			current.aiCompletion.baseUrl = tools.NativeString.trimBoth(s);
+			save();
+		}).title = "OpenAI default: https://api.openai.com/v1";
+		var keyEl = addInput(out, "AI API key", current.aiCompletion.apiKey, function(s) {
+			current.aiCompletion.apiKey = tools.NativeString.trimBoth(s);
+			save();
+		});
+		var keyInput:InputElement = keyEl.querySelectorAuto("input");
+		keyInput.type = "password";
+		keyEl.title = "Stored in GMEdit user preferences.";
+		addInput(out, "AI model", current.aiCompletion.model, function(s) {
+			current.aiCompletion.model = tools.NativeString.trimBoth(s);
+			save();
+		});
+		addIntInput(out, "AI context size (characters)", current.aiCompletion.maxContextChars, function(v) {
+			current.aiCompletion.maxContextChars = v;
+			save();
+		});
+		addIntInput(out, "AI max output tokens (minimum 16)", current.aiCompletion.maxOutputTokens, function(v) {
+			current.aiCompletion.maxOutputTokens = v;
+			save();
+		});
+	}
 	public static function build(out:Element) {
 		out = addGroup(out, "Code editor");
 		out.id = "pref-code";
@@ -106,6 +137,7 @@ class PrefCode {
 		
 		//
 		buildComp(addGroup(out, "Auto-completion"));
+		buildAI(addGroup(out, "AI completion"));
 		buildTooltips(addGroup(out, "Tooltips"));
 		
 		//
