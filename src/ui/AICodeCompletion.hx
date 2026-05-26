@@ -16,6 +16,8 @@ typedef AICompletionConfig = {
 	model:String,
 	maxContextChars:Int,
 	maxOutputTokens:Int,
+	inlineContextChars:Int,
+	inlineMaxOutputTokens:Int,
 }
 
 class AICodeCompletion {
@@ -67,12 +69,33 @@ class AICodeCompletion {
 		inlineSuggestion:Bool,
 		showErrors:Bool,
 		onSuccess:String->Void,
-		onError:String->Void
+		onError:String->Void,
+		?onDelta:String->Void
 	):Bool {
 		var cfg = readConfig(showErrors);
 		if (cfg == null) return false;
-		var request = buildRequest(editor, cfg.model, cfg.maxContextChars, cfg.maxOutputTokens, inlineSuggestion);
-		postJson(endpointUrl(cfg.baseUrl), cfg.apiKey, Json.stringify(request), function(responseText) {
+		var requestLinePrefix = getCurrentLinePrefix(editor);
+		var requestContextChars = inlineSuggestion ? cfg.inlineContextChars : cfg.maxContextChars;
+		var requestMaxOutputTokens = inlineSuggestion ? cfg.inlineMaxOutputTokens : cfg.maxOutputTokens;
+		var request = buildRequest(editor, cfg.model, requestContextChars, requestMaxOutputTokens, inlineSuggestion);
+		var isStreaming = inlineSuggestion && onDelta != null;
+		if (isStreaming) Reflect.setField(request, "stream", true);
+		var onText = function(rawText:String, isFinal:Bool) {
+			var completion = cleanupCompletion(rawText);
+			completion = removeDuplicatedLinePrefix(completion, requestLinePrefix);
+			if (isFinal) {
+				if (completion == "") {
+					var message = "AI completion returned empty text.";
+					if (showErrors) Dialog.showWarning(message);
+					onError(message);
+					return;
+				}
+				onSuccess(completion);
+			} else if (completion != "" && onDelta != null) {
+				onDelta(completion);
+			}
+		};
+		var onResponse = function(responseText:String) {
 			var response:Dynamic;
 			try {
 				response = Json.parse(responseText);
@@ -82,19 +105,22 @@ class AICodeCompletion {
 				onError(message);
 				return;
 			}
-			var completion = cleanupCompletion(extractText(response));
-			if (completion == "") {
-				var message = "AI completion returned empty text.";
-				if (showErrors) Dialog.showWarning(message);
-				onError(message);
-				return;
-			}
-			onSuccess(completion);
-		}, function(errorText) {
+			onText(extractText(response), true);
+		};
+		var onRequestError = function(errorText:String) {
 			var message = "AI completion failed:\n" + errorText;
 			if (showErrors) Dialog.showError(message);
 			onError(message);
-		});
+		};
+		if (isStreaming) {
+			postJsonStream(endpointUrl(cfg.baseUrl), cfg.apiKey, Json.stringify(request), function(text) {
+				onText(text, false);
+			}, function(text) {
+				onText(text, true);
+			}, onRequestError);
+		} else {
+			postJson(endpointUrl(cfg.baseUrl), cfg.apiKey, Json.stringify(request), onResponse, onRequestError);
+		}
 		return true;
 	}
 	
@@ -132,7 +158,21 @@ class AICodeCompletion {
 			model: model,
 			maxContextChars: prefs.maxContextChars,
 			maxOutputTokens: maxOutputTokens,
+			inlineContextChars: sanitizeContextChars(prefs.inlineContextChars, 3000),
+			inlineMaxOutputTokens: sanitizeMaxOutputTokens(prefs.inlineMaxOutputTokens, 96),
 		};
+	}
+
+	static function sanitizeContextChars(value:Int, fallback:Int):Int {
+		if (value <= 0) return fallback;
+		if (value < 1000) return 1000;
+		return value;
+	}
+
+	static function sanitizeMaxOutputTokens(value:Int, fallback:Int):Int {
+		if (value <= 0) value = fallback;
+		if (value < 16) value = 16;
+		return value;
 	}
 	
 	static function buildRequest(editor:AceWrap, model:String, maxContextChars:Int, maxOutputTokens:Int, inlineSuggestion:Bool):Dynamic {
@@ -154,7 +194,8 @@ class AICodeCompletion {
 		var selected = editor.getSelectedText();
 		var prompt = "Complete GameMaker Language code at the cursor.\n"
 			+ "File: " + fileName + "\n"
-			+ "Return only the code to insert at the cursor. Do not repeat code from BEFORE or AFTER.\n";
+			+ "Return only the code to insert at the cursor. Do not repeat code from BEFORE or AFTER.\n"
+			+ "If BEFORE ends with a partially typed declaration or expression, return only the missing suffix after the cursor.\n";
 		if (inlineSuggestion) {
 			prompt += "This will be shown as an inline ghost suggestion. Prefer the shortest useful continuation; one line is best unless a small block is clearly needed.\n";
 		}
@@ -185,9 +226,10 @@ class AICodeCompletion {
 			var parsed:Dynamic = Syntax.code("new URL({0})", url);
 			var protocol = Std.string(Reflect.field(parsed, "protocol"));
 			var client:Dynamic = reqFn(protocol == "http:" ? "http" : "https");
-			var headers:Dynamic = {};
-			Reflect.setField(headers, "Content-Type", "application/json");
-			Reflect.setField(headers, "Authorization", "Bearer " + apiKey);
+		var headers:Dynamic = {};
+		Reflect.setField(headers, "Content-Type", "application/json");
+		Reflect.setField(headers, "Accept", "application/json");
+		Reflect.setField(headers, "Authorization", "Bearer " + apiKey);
 			Reflect.setField(headers, "Content-Length", Syntax.code("Buffer.byteLength({0})", body));
 			var options:Dynamic = {};
 			Reflect.setField(options, "method", "POST");
@@ -212,6 +254,121 @@ class AICodeCompletion {
 				});
 			});
 			req.on("error", function(err:Dynamic) onError(Std.string(err)));
+			req.write(body);
+			req.end();
+		} catch (x:Dynamic) {
+			onError(Std.string(x));
+		}
+	}
+
+	static function postJsonStream(url:String, apiKey:String, body:String, onDelta:String->Void, onSuccess:String->Void, onError:String->Void):Void {
+		try {
+			var reqFn:Dynamic = Syntax.code("require");
+			if (reqFn == null) {
+				onError("Node require() is unavailable in this GMEdit window.");
+				return;
+			}
+			var parsed:Dynamic = Syntax.code("new URL({0})", url);
+			var protocol = Std.string(Reflect.field(parsed, "protocol"));
+			var client:Dynamic = reqFn(protocol == "http:" ? "http" : "https");
+			var headers:Dynamic = {};
+			Reflect.setField(headers, "Content-Type", "application/json");
+			Reflect.setField(headers, "Accept", "text/event-stream");
+			Reflect.setField(headers, "Authorization", "Bearer " + apiKey);
+			Reflect.setField(headers, "Content-Length", Syntax.code("Buffer.byteLength({0})", body));
+			var options:Dynamic = {};
+			Reflect.setField(options, "method", "POST");
+			Reflect.setField(options, "hostname", Reflect.field(parsed, "hostname"));
+			var port = Std.string(Reflect.field(parsed, "port"));
+			if (port != "") Reflect.setField(options, "port", port);
+			Reflect.setField(options, "path", Std.string(Reflect.field(parsed, "pathname")) + Std.string(Reflect.field(parsed, "search")));
+			Reflect.setField(options, "headers", headers);
+			var done = false;
+			var streamedText = "";
+			var eventBuffer = "";
+			var errorChunks:Array<String> = [];
+			function finish():Void {
+				if (done) return;
+				done = true;
+				onSuccess(streamedText);
+			}
+			function fail(message:String):Void {
+				if (done) return;
+				done = true;
+				onError(message);
+			}
+			function handleEvent(block:String):Void {
+				var dataLines:Array<String> = [];
+				for (line in block.split("\n")) {
+					if (line.startsWith("data:")) dataLines.push(line.substring(5).trim());
+				}
+				if (dataLines.length == 0) return;
+				var data = dataLines.join("\n");
+				if (data == "[DONE]") {
+					finish();
+					return;
+				}
+				var event:Dynamic;
+				try {
+					event = Json.parse(data);
+				} catch (x:Dynamic) {
+					fail("Invalid streamed JSON:\n" + shorten(data, 1200));
+					return;
+				}
+				var type = Std.string(Reflect.field(event, "type"));
+				var delta:Dynamic = Reflect.field(event, "delta");
+				if (delta != null && type.indexOf("delta") >= 0) {
+					streamedText += Std.string(delta);
+					onDelta(streamedText);
+					return;
+				}
+				if (type == "response.output_text.done") {
+					var text:Dynamic = Reflect.field(event, "text");
+					if (text != null) streamedText = Std.string(text);
+					return;
+				}
+				if (type == "response.completed") {
+					finish();
+					return;
+				}
+				if (type == "response.failed" || type == "error") {
+					var err:Dynamic = Reflect.field(event, "error");
+					fail(err != null ? Std.string(Reflect.field(err, "message")) : shorten(data, 1200));
+				}
+			}
+			function pumpEvents(chunk:String):Void {
+				eventBuffer += chunk;
+				eventBuffer = eventBuffer.replace("\r\n", "\n").replace("\r", "\n");
+				var sep = eventBuffer.indexOf("\n\n");
+				while (sep >= 0) {
+					var block = eventBuffer.substring(0, sep);
+					eventBuffer = eventBuffer.substring(sep + 2);
+					handleEvent(block);
+					if (done) return;
+					sep = eventBuffer.indexOf("\n\n");
+				}
+			}
+			var req:Dynamic = client.request(options, function(res:Dynamic) {
+				res.setEncoding("utf8");
+				var status:Null<Int> = Reflect.field(res, "statusCode");
+				if (status == null) status = 0;
+				var ok = status >= 200 && status < 300;
+				res.on("data", function(chunk:String) {
+					if (!ok) {
+						errorChunks.push(chunk);
+						return;
+					}
+					pumpEvents(chunk);
+				});
+				res.on("end", function() {
+					if (!ok) {
+						fail("HTTP " + status + ": " + shorten(errorChunks.join(""), 1600));
+					} else {
+						finish();
+					}
+				});
+			});
+			req.on("error", function(err:Dynamic) fail(Std.string(err)));
 			req.write(body);
 			req.end();
 		} catch (x:Dynamic) {
@@ -259,6 +416,47 @@ class AICodeCompletion {
 			if (fence >= 0) out = out.substring(0, fence);
 		}
 		return trimBlankLines(out);
+	}
+
+	static function getCurrentLinePrefix(editor:AceWrap):String {
+		var pos = editor.getCursorPosition();
+		var line = editor.session.getLine(pos.row);
+		var column = pos.column;
+		if (column < 0) column = 0;
+		if (column > line.length) column = line.length;
+		return line.substring(0, column);
+	}
+
+	static function removeDuplicatedLinePrefix(completion:String, linePrefix:String):String {
+		if (completion == null || completion == "") return "";
+		if (linePrefix == null || linePrefix == "") return completion;
+		if (linePrefix.startsWith(completion)) return "";
+		var max = linePrefix.length;
+		if (max > completion.length) max = completion.length;
+		while (max > 0) {
+			var start = linePrefix.length - max;
+			var overlap = linePrefix.substring(start);
+			if (completion.startsWith(overlap) && canTrimOverlap(linePrefix, start, overlap)) {
+				return completion.substring(max);
+			}
+			max--;
+		}
+		return completion;
+	}
+
+	static function canTrimOverlap(linePrefix:String, start:Int, overlap:String):Bool {
+		if (overlap == "") return false;
+		var first = overlap.charCodeAt(0);
+		if (!isIdentChar(first)) return true;
+		if (overlap.length == 1) return false;
+		return start == 0 || !isIdentChar(linePrefix.charCodeAt(start - 1));
+	}
+
+	static function isIdentChar(c:Int):Bool {
+		return (c >= "A".code && c <= "Z".code)
+			|| (c >= "a".code && c <= "z".code)
+			|| (c >= "0".code && c <= "9".code)
+			|| c == "_".code;
 	}
 	
 	static function trimBlankLines(text:String):String {
@@ -356,14 +554,21 @@ class AICodeCompletionState {
 		var pos = copyPos(editor.getCursorPosition());
 		var id = ++requestId;
 		if (!explicit) AICodeCompletion.setStatus(editor, "AI inline completion: requesting...");
+		function isCurrent():Bool {
+			return id == requestId && editor.session == session && samePos(editor.getCursorPosition(), pos);
+		}
 		if (!AICodeCompletion.requestCompletion(editor, true, explicit, function(completion) {
-			if (id != requestId || editor.session != session || !samePos(editor.getCursorPosition(), pos)) return;
+			if (!isCurrent()) return;
 			show(completion, pos, session);
 			AICodeCompletion.setStatus(editor, "AI inline completion ready");
 		}, function(errorText) {
 			if (id != requestId) return;
 			AICodeCompletion.setStatus(editor, "AI inline completion failed");
 			if (!explicit) untyped console.warn(errorText);
+		}, function(completion) {
+			if (!isCurrent()) return;
+			show(completion, pos, session);
+			AICodeCompletion.setStatus(editor, "AI inline completion streaming...");
 		})) {
 			if (!explicit) AICodeCompletion.setStatus(editor, "");
 		}

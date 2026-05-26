@@ -105,6 +105,14 @@ class PrefCode {
 			current.aiCompletion.inlineDelayMs = v;
 			save();
 		});
+		addIntInput(out, "AI inline context size (characters)", current.aiCompletion.inlineContextChars, function(v) {
+			current.aiCompletion.inlineContextChars = v;
+			save();
+		});
+		addIntInput(out, "AI inline max output tokens (minimum 16)", current.aiCompletion.inlineMaxOutputTokens, function(v) {
+			current.aiCompletion.inlineMaxOutputTokens = v;
+			save();
+		});
 		addInput(out, "AI API base URL", current.aiCompletion.baseUrl, function(s) {
 			current.aiCompletion.baseUrl = tools.NativeString.trimBoth(s);
 			save();
