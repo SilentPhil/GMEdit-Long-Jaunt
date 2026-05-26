@@ -102,7 +102,11 @@ class AICodeCompletion {
 		if (isStreaming) Reflect.setField(request, "stream", true);
 		var onText = function(rawText:String, isFinal:Bool) {
 			var completion = cleanupCompletion(rawText);
-			if (!inlineSuggestion) completion = removeDuplicatedLinePrefix(completion, requestLinePrefix);
+			if (inlineSuggestion) {
+				completion = trimInlineExtraDeclarations(completion);
+			} else {
+				completion = removeDuplicatedLinePrefix(completion, requestLinePrefix);
+			}
 			if (isFinal) {
 				if (completion == "") {
 					var message = "AI completion returned empty text.";
@@ -237,7 +241,8 @@ class AICodeCompletion {
 			+ "Return only the code to insert at the cursor. Do not repeat code from BEFORE or AFTER.\n"
 			+ "If BEFORE ends with a partially typed declaration or expression, return only the missing suffix after the cursor.\n";
 		if (inlineSuggestion) {
-			prompt += "This will be shown as an inline ghost suggestion. Prefer the shortest useful continuation; one line is best unless a small block is clearly needed.\n";
+			prompt += "This will be shown as an inline ghost suggestion. Prefer the shortest useful continuation; one line is best unless a small block is clearly needed.\n"
+				+ "Complete only the current expression, statement, or function body. Never include a following top-level/static member, function, enum, macro, or code copied from AFTER.\n";
 		}
 		if (selected != null && selected != "") {
 			prompt += "The editor currently has selected text; return replacement text for that selection if appropriate.\n";
@@ -513,6 +518,50 @@ class AICodeCompletion {
 		return completion;
 	}
 
+	static function trimInlineExtraDeclarations(completion:String):String {
+		if (completion == null || completion == "") return "";
+		var text = completion.replace("\r\n", "\n").replace("\r", "\n");
+		var depth = 0;
+		var closedTopLevelBlock = false;
+		var lineStart = 0;
+		var lineIndex = 0;
+		while (lineStart <= text.length) {
+			var lineEnd = text.indexOf("\n", lineStart);
+			if (lineEnd < 0) lineEnd = text.length;
+			var line = text.substring(lineStart, lineEnd);
+			if (lineIndex > 0 && closedTopLevelBlock && depth <= 0 && isTopLevelDeclarationLine(line)) {
+				return trimBlankLines(text.substring(0, lineStart));
+			}
+			var i = 0;
+			while (i < line.length) {
+				var c = line.charCodeAt(i);
+				if (c == "{".code) {
+					depth++;
+				} else if (c == "}".code) {
+					if (depth > 0) depth--;
+					if (depth <= 0) closedTopLevelBlock = true;
+				}
+				i++;
+			}
+			if (lineEnd >= text.length) break;
+			lineStart = lineEnd + 1;
+			lineIndex++;
+		}
+		return text;
+	}
+
+	static function isTopLevelDeclarationLine(line:String):Bool {
+		var text = line.trim();
+		return text.startsWith("static ")
+			|| text.startsWith("static\t")
+			|| text.startsWith("function ")
+			|| text.startsWith("function\t")
+			|| text.startsWith("enum ")
+			|| text.startsWith("enum\t")
+			|| text.startsWith("#macro ")
+			|| text.startsWith("#macro\t");
+	}
+
 	static function canTrimOverlap(linePrefix:String, start:Int, overlap:String):Bool {
 		if (overlap == "") return false;
 		var first = overlap.charCodeAt(0);
@@ -579,6 +628,7 @@ class AICodeCompletionState {
 	var widget:Dynamic = null;
 	var widgetSession:Dynamic = null;
 	var suppressSelectionHide:Bool = false;
+	var skipNextInsertAdvance:Bool = false;
 	
 	public function new(editor:AceWrap) {
 		this.editor = editor;
@@ -591,7 +641,13 @@ class AICodeCompletionState {
 		editor.on("changeSelection", function(_) {
 			if (suppressSelectionHide) return;
 			if (suggestion != null) {
-				if (!samePos(editor.getCursorPosition(), suggestion.replaceEnd)) hide();
+				if (!samePos(editor.getCursorPosition(), suggestion.replaceEnd)) {
+					if (rebaseCurrentSuggestionToCursor()) {
+						skipNextInsertAdvance = true;
+					} else {
+						hide();
+					}
+				}
 			} else if (activeRequest != null) {
 				hide();
 			}
@@ -687,6 +743,7 @@ class AICodeCompletionState {
 	
 	public function hide(invalidate:Bool = true):Void {
 		clearTimer();
+		skipNextInsertAdvance = false;
 		if (invalidate) {
 			requestId++;
 			cancelActiveRequest();
@@ -714,6 +771,10 @@ class AICodeCompletionState {
 		var name = e.command != null ? e.command.name : "";
 		if (name == "acceptAICompletion" || name == "acceptAICompletionWord" || name == "acceptAICompletionLine" || name == "hideAICompletion") return;
 		if (name == "insertstring") {
+			if (skipNextInsertAdvance) {
+				skipNextInsertAdvance = false;
+				return;
+			}
 			var text = e.args != null ? Std.string(e.args) : "";
 			if (advanceSuggestion(text)) return;
 			hide();
@@ -785,6 +846,22 @@ class AICodeCompletionState {
 		if (!next.insertText.startsWith(typedText)) return false;
 		next.replaceEnd = copyPos(cursor);
 		next.displayText = next.insertText.substring(typedText.length);
+		return true;
+	}
+
+	function rebaseCurrentSuggestionToCursor():Bool {
+		if (suggestion == null || editor.session != suggestion.session) return false;
+		var cursor = editor.getCursorPosition();
+		if (!isForwardPos(suggestion.replaceEnd, cursor)) return false;
+		var typedText = editor.session.getTextRange(AceRange.fromPair(suggestion.replaceStart, cursor));
+		if (!suggestion.insertText.startsWith(typedText)) return false;
+		suggestion.replaceEnd = copyPos(cursor);
+		suggestion.displayText = suggestion.insertText.substring(typedText.length);
+		if (suggestion.displayText == "") {
+			clearRender();
+		} else {
+			renderSuggestion();
+		}
 		return true;
 	}
 
@@ -1051,5 +1128,9 @@ class AICodeCompletionState {
 	
 	function samePos(a:AcePos, b:AcePos):Bool {
 		return a != null && b != null && a.row == b.row && a.column == b.column;
+	}
+
+	function isForwardPos(from:AcePos, to:AcePos):Bool {
+		return from != null && to != null && (to.row > from.row || (to.row == from.row && to.column >= from.column));
 	}
 }
