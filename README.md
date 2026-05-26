@@ -79,3 +79,135 @@ Same page also houses screenshots and development log.
 ### License
 
 [MIT license](https://opensource.org/licenses/mit-license.php)
+
+## Long Jaunt additions
+
+This fork keeps a set of extra GML typing/navigation improvements aimed at large typed projects.
+
+### Legacy enum integer types
+
+The older `int<ENUM>` syntax remains supported and should not warn just because newer upstream GMEdit
+can treat enum values as a separate `ENUM` type.
+
+```gml
+var phase:int<GAME_DIRECTOR_PHASE> = GAME_DIRECTOR_PHASE.EVENTS;
+
+static get_base_tickets = function()->(int<GAME_DIRECTOR_PHASE>|number)[] {
+	return [GAME_DIRECTOR_PHASE.EVENTS, 10];
+}
+```
+
+### Nullable type completion
+
+Fields and methods on `T?` are completed as if the value were `T`, so nullable object references keep
+their usual member hints.
+
+```gml
+var lord:SoulBasic? = get_possible_lord();
+
+// GMEdit still suggests SoulBasic fields/methods here:
+lord.get_caption();
+```
+
+### Stricter comparison warnings
+
+The linter warns when equality compares values that cannot cast to each other, including string/number
+mismatches.
+
+```gml
+// If get_type() returns int, this warns:
+if (location.get_type() == "") {
+	show_debug_message("bad comparison");
+}
+```
+
+### Stable arrow-function sugar
+
+GMEdit should preserve the short anonymous-function sugar when reopening code instead of exposing the
+expanded form around identifiers that merely contain `function`.
+
+```gml
+base_tavern_filter = base_tavern_filter.anon_function(
+	(_building:o_building) => _building.get_warehouse().is_has_alcohol()
+);
+```
+
+### Instance variable declaration warnings
+
+The linter can warn when a non-local, non-global instance variable is first declared outside the class
+body/Create event. The setting is available under linter preferences as
+`Warn about declaring instance variables outside the class body`.
+
+```gml
+function Battle() constructor {
+	static is_duel2 = function()->bool {
+		if (__cached_duel_type == NO_CACHE) {
+			// Warns if __cached_is_duel was not declared in the class body/Create event:
+			__cached_is_duel = !array_is_empty(get_teams_by_tags(BATTLE_TEAM_TAG.DUEL));
+		}
+		return __cached_is_duel;
+	}
+}
+```
+
+### Constructor/static method self typing
+
+Static methods declared inside constructor-style classes keep the class self type, so local variables
+can infer return types from class methods and continue to offer member completion.
+
+```gml
+function GlobalMapObjectAction() constructor {
+	static get_generic_action = function()->GenericAction {
+		return __generic_action;
+	}
+
+	static get_gui_data_struct = function()->GlobalMapObjectActiveActionGuiDataStruct {
+		var generic_action = get_generic_action();
+
+		// GMEdit knows generic_action is GenericAction here:
+		return generic_action.get_gui_data_struct();
+	}
+}
+```
+
+### Template propagation for methods
+
+Template arguments on constructor instances are propagated into method return types and method
+argument checks.
+
+```gml
+/// @template T
+function WeightedRandom(_array_of_elements:any[]? = undefined) constructor {
+	static init = function(_array_of_elements:(T|number)[])->void {
+	}
+
+	static get_random = function()->T? {
+	}
+}
+
+__events_random = new WeightedRandom(); /// @is {WeightedRandom<SoulCharacter>}
+
+var event = __events_random.get_random();
+// event is SoulCharacter?
+
+__phase_random = new WeightedRandom(); /// @is {WeightedRandom<int<GAME_DIRECTOR_PHASE>>}
+__phase_random.init(__generic.get_base_tickets());
+// accepts (int<GAME_DIRECTOR_PHASE>|number)[]
+```
+
+### Open a variable's type declaration
+
+Press `F1`/`F12` or middle-click a variable/field to open the declaration of its complex type when the
+normal "open definition" target is not the useful one. This works for enums, objects/classes,
+constructors, typedef-backed custom types, and nested container types.
+
+```gml
+var phase:int<GAME_DIRECTOR_PHASE> = get_phase();
+var lord:SoulCharacter = get_lord();
+var queue:Array<SoulCharacter> = [];
+
+// F1 or middle-click:
+// - phase -> opens GAME_DIRECTOR_PHASE
+// - lord -> opens SoulCharacter
+// - queue -> opens SoulCharacter
+```
