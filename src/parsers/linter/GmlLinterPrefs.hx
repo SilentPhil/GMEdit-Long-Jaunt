@@ -28,6 +28,7 @@ package parsers.linter;
 		specTypeInstSubTopLevel: false,
 		
 		requireFields: false,
+		warnInstanceVarDeclarations: true,
 		implicitNullableCasts: false,
 		undefinedCastsTo: Nullable,
 		implicitBoolIntCasts: true,
@@ -85,6 +86,9 @@ typedef GmlLinterPrefsImpl = {
 	/** warn about missing fields */
 	?requireFields:Bool,
 	
+	/** warn about declaring instance variables outside class body/Create */
+	?warnInstanceVarDeclarations:Bool,
+
 	/** Whether to allow implicit T?->T casts */
 	?implicitNullableCasts:Bool,
 	

@@ -154,6 +154,7 @@ class PrefLinter {
 		
 		out = addGroup(orig, "Misc.");
 		addf(aBool, "Warn about missing fields on `a.b` access", opt.requireFields);
+		addf(aBool, "Warn about declaring instance variables outside the class body", opt.warnInstanceVarDeclarations);
 		addf(aBool, "Allow implicitly casting `Type?` to `Type`", opt.implicitNullableCasts);
 		addLinterDropdown(out, project, "Allow implicitly casting `undefined` to...",
 			q -> q.undefinedCastsTo,

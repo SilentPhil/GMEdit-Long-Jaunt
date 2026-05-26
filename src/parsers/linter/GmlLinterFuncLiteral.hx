@@ -23,6 +23,8 @@ class GmlLinterFuncLiteral extends GmlLinterHelper {
 	static var defaultOptions:GmlLinterFuncLiteralOptions = {};
 	public function read(oldDepth:Int, isFunc:Bool, isStat:Bool, ?options:GmlLinterFuncLiteralOptions):FoundError {
 		var name = "function";
+		var oldSelfOverride = selfOverride;
+		var nextSelfOverride = oldSelfOverride;
 		var isTopLevel = isFunc && isStat && oldDepth == 2 && linter.functionsAreGlobal;
 		if (options == null) options = defaultOptions;
 		var arrowOpts = options.arrowFunc;
@@ -173,7 +175,7 @@ class GmlLinterFuncLiteral extends GmlLinterHelper {
 					nextFuncRetStatus = WantNoReturnConstructor;
 					if (!hasName) {
 						// An anonymous constructor! Good luck with that
-						selfOverride = GmlTypeDef.any;
+						nextSelfOverride = GmlTypeDef.any;
 					}
 				}
 			}
@@ -184,12 +186,19 @@ class GmlLinterFuncLiteral extends GmlLinterHelper {
 		var oldFuncDoc = linter.currFuncDoc;
 		var oldFuncRetStatus = linter.currFuncRetStatus;
 		var oldLocalTokenType = linter.localVarTokenType;
+		var oldFuncLiteralDepth = linter.funcLiteralDepth;
+		var oldConstructorInstVars = linter.constructorInstVars;
 		
 		linter.localNamesPerDepth = [];
 		linter.localKinds = new Dictionary();
 		linter.currFuncDoc = doc;
 		linter.currFuncRetStatus = nextFuncRetStatus;
 		linter.localVarTokenType = nextLocalType;
+		linter.funcLiteralDepth = oldFuncLiteralDepth + 1;
+		if (doc.isConstructor) {
+			linter.constructorInstVars = new Dictionary();
+		}
+		selfOverride = null;
 		
 		inline function readFuncBody():FoundError {
 			if (arrowOpts == null || skipIfPeek(LKSemico) || peek() == LKCubOpen) {
@@ -200,17 +209,28 @@ class GmlLinterFuncLiteral extends GmlLinterHelper {
 				return trouble;
 			}
 		}
-		if (selfOverride != null) {
+		if (nextSelfOverride != null) {
 			var self0z = linter.__selfType_set;
 			var self0t = linter.__selfType_type;
 			linter.__selfType_set = true;
-			linter.__selfType_type = selfOverride;
+			linter.__selfType_type = nextSelfOverride;
 			var foundError = readFuncBody();
 			linter.__selfType_set = self0z;
 			linter.__selfType_type = self0t;
-			rc(foundError);
+			if (foundError) {
+				linter.funcLiteralDepth = oldFuncLiteralDepth;
+				linter.constructorInstVars = oldConstructorInstVars;
+				selfOverride = oldSelfOverride;
+				return true;
+			}
 		} else {
-			rc(readFuncBody());
+			var foundError = readFuncBody();
+			if (foundError) {
+				linter.funcLiteralDepth = oldFuncLiteralDepth;
+				linter.constructorInstVars = oldConstructorInstVars;
+				selfOverride = oldSelfOverride;
+				return true;
+			}
 		}
 		
 		switch (linter.currFuncRetStatus) {
@@ -228,6 +248,9 @@ class GmlLinterFuncLiteral extends GmlLinterHelper {
 		linter.currFuncDoc = oldFuncDoc;
 		linter.currFuncRetStatus = oldFuncRetStatus;
 		linter.localVarTokenType = oldLocalTokenType;
+		linter.funcLiteralDepth = oldFuncLiteralDepth;
+		linter.constructorInstVars = oldConstructorInstVars;
+		selfOverride = oldSelfOverride;
 		
 		this.doc = doc;
 		return false;

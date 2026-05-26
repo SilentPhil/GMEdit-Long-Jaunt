@@ -105,6 +105,7 @@ class GmlLinterExpr extends GmlLinterHelper {
 		var currValue:GmlLinterValue = null;
 		var nullSafety:GmlLinterLocalNullSafetyItems = [];
 		var hasParens:Bool = false;
+		var missingInstanceFieldName:String = null;
 		//
 		inline function checkConst():Void {
 			this.checkConst(currName, currKind);
@@ -355,6 +356,11 @@ class GmlLinterExpr extends GmlLinterHelper {
 			switch (nk) {
 				case LKSet: {
 					if (isStat()) {
+						if (currKind == LKIdent) {
+							self.checkInstanceVarDeclaration(currName, oldDepth, isLocalIdent);
+						} else if (currKind == LKField && missingInstanceFieldName != null) {
+							self.checkInstanceVarDeclaration(missingInstanceFieldName, oldDepth, false);
+						}
 						checkConst();
 						self.skip();
 						flags.remove(AsStat);
@@ -433,6 +439,7 @@ class GmlLinterExpr extends GmlLinterHelper {
 						scriptName = null;
 					}
 					
+					var isSelfField = currKind == LKIdent && currName == "self" && nk == LKDot;
 					currKind = nk == LKDot ? LKField : LKNullField;
 					var isStatic:Bool, nsType:GmlType = null;
 					if (enumType != null) {
@@ -508,6 +515,9 @@ class GmlLinterExpr extends GmlLinterHelper {
 								return ns.getInstKind(field) != null;
 							}
 						});
+						if (isSelfField && !isStatic) {
+							missingInstanceFieldName = field;
+						}
 						
 						if (found) {
 							if (currType != null) switch (selfType) {

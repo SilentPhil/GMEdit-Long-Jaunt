@@ -98,6 +98,8 @@ class GmlLinter {
 		return ctx;
 	}
 	var localVarTokenType:AceTokenType = "local";
+	var funcLiteralDepth:Int = 0;
+	var constructorInstVars:Dictionary<Bool> = null;
 	
 	function getImports(?force:Bool):GmlImports {
 		var imp = editor.imports[context];
@@ -133,7 +135,73 @@ class GmlLinter {
 		if (__otherType_set) return __otherType_type;
 		return AceGmlTools.getOtherType({ session: editor.session, scope: context });
 	}
-	
+
+	function isInstanceVarDeclarationBody(oldDepth:Int):Bool {
+		if (currFuncDoc != null && currFuncDoc.isConstructor) {
+			if (funcLiteralDepth != 1) return false;
+			return prefs.specTypeInstSubTopLevel ? oldDepth >= 2 : oldDepth == 2;
+		}
+		if ((editor.kind is file.kind.gml.KGmlEvents)) {
+			if (context != "create" || funcLiteralDepth != 0) return false;
+			return prefs.specTypeInstSubTopLevel ? oldDepth >= 1 : oldDepth == 1;
+		}
+		return false;
+	}
+
+	function isKnownNonInstanceIdentifier(name:String):Bool {
+		if (name == "global" || name == "self" || name == "other") return true;
+		if (GmlAPI.gmlKind[name] != null) return true;
+		if (GmlAPI.extKind.exists(name)) return true;
+		return GmlAPI.stdKind.exists(name);
+	}
+
+	function isMissingInstanceField(name:String):Bool {
+		var t = getSelfType();
+		if (t == null) return false;
+		return switch (t) {
+			case TInst(_, _, KAny): false;
+			case TInst(nsName, _, _): {
+				var foundNamespace = false;
+				var imp = getImports();
+				if (imp != null) {
+					var ns = imp.namespaces[nsName];
+					if (ns != null) {
+						foundNamespace = true;
+						if (ns.getInstKind(name) != null) return false;
+					}
+				}
+				var ns = GmlAPI.gmlNamespaces[nsName];
+				if (ns != null) {
+					foundNamespace = true;
+					if (ns.getInstKind(name) != null) return false;
+				}
+				foundNamespace;
+			};
+			case TAnon(inf): inf.fields[name] == null;
+			default: false;
+		}
+	}
+
+	function checkInstanceVarDeclaration(name:String, oldDepth:Int, isLocal:Bool):Void {
+		if (!prefs.warnInstanceVarDeclarations || isLocal || name == null) return;
+		if (isInstanceVarDeclarationBody(oldDepth)) {
+			if (constructorInstVars != null) {
+				constructorInstVars[name] = true;
+			}
+			return;
+		}
+		if (isKnownNonInstanceIdentifier(name)) return;
+		if (constructorInstVars != null) {
+			if (!constructorInstVars.exists(name)) {
+				addWarning('Instance variable `$name` is declared outside the class body');
+			}
+			return;
+		}
+		if (isMissingInstanceField(name)) {
+			addWarning('Instance variable `$name` is declared outside the class body');
+		}
+	}
+
 	/** depth -> null<variables that should be freed after this depth> */
 	var localNamesPerDepth:Array<Array<String>> = [];
 	var localKinds:Dictionary<GmlLinterKind> = new Dictionary();
