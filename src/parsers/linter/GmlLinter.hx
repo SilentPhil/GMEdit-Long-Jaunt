@@ -385,18 +385,16 @@ class GmlLinter {
 		}
 		return ownNs != null ? namespaceHasOwnOrParentField(ownNs, field, isInst) : false;
 	}
-	function checkCurrentInterfaceFields(
+	function checkInterfaceFieldMap(
 		ownName:String,
 		ownNs:GmlNamespace,
 		interfaceName:String,
-		interfaceImpl:GmlLinterInterfaceImplementation,
-		isInst:Bool,
+		fields:Dictionary<Dynamic>,
 		pos:AcePos,
 		impl:GmlLinterInterfaceImplementation,
-		seen:Dictionary<Bool>
+		seen:Dictionary<Bool>,
+		isInst:Bool
 	):Void {
-		if (interfaceImpl == null) return;
-		var fields = isInst ? interfaceImpl.instFields : interfaceImpl.staticFields;
 		for (field => _ in fields) {
 			if (field == "") continue;
 			if (seen[field]) continue;
@@ -408,6 +406,21 @@ class GmlLinter {
 				));
 			}
 		}
+	}
+	function checkCurrentInterfaceFields(
+		ownName:String,
+		ownNs:GmlNamespace,
+		interfaceName:String,
+		interfaceImpl:GmlLinterInterfaceImplementation,
+		isInst:Bool,
+		pos:AcePos,
+		impl:GmlLinterInterfaceImplementation,
+		seen:Dictionary<Bool>
+	):Void {
+		if (interfaceImpl == null) return;
+		checkInterfaceFieldMap(ownName, ownNs, interfaceName,
+			isInst ? cast interfaceImpl.instFields : cast interfaceImpl.staticFields,
+			pos, impl, seen, isInst);
 	}
 	function checkInterfaceMembers(
 		ownName:String,
@@ -426,18 +439,9 @@ class GmlLinter {
 		if (visited[visitKey]) return;
 		visited[visitKey] = true;
 
-		var kindMap = isInst ? interfaceNs.instKind : interfaceNs.staticKind;
-		for (field => _ in kindMap) {
-			if (field == "") continue;
-			if (seen[field]) continue;
-			seen[field] = true;
-			if (!implementationHasField(impl, ownNs, field, isInst)) {
-				warnings.push(new GmlLinterProblem(
-					'$ownName implements $interfaceName but is missing member `$field`',
-					pos
-				));
-			}
-		}
+		checkInterfaceFieldMap(ownName, ownNs, interfaceName,
+			isInst ? cast interfaceNs.instKind : cast interfaceNs.staticKind,
+			pos, impl, seen, isInst);
 		checkInterfaceMembers(ownName, ownNs, interfaceName, interfaceNs.parent,
 			isInst, pos, impl, seen, visited, depth + 1);
 		for (nextInterface in interfaceNs.interfaces) {
