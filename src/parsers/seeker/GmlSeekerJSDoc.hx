@@ -31,6 +31,7 @@ class GmlSeekerJSDoc {
 	public var implementsNames:Array<String> = null;
 	public var templateItems:Array<GmlTypeTemplateItem> = null;
 	public var isStatic:Bool = false;
+	public var isPrivate:Bool = false;
 	public var redirectCount = 0;
 	
 	public function reset(resetInterf = true):Void {
@@ -40,6 +41,7 @@ class GmlSeekerJSDoc {
 		self = null;
 		returns = null;
 		isStatic = false;
+		isPrivate = false;
 		if (resetInterf) resetInterface();
 	}
 	public function resetInterface() {
@@ -68,6 +70,7 @@ class GmlSeekerJSDoc {
 		r.implementsNames = copyArray(implementsNames);
 		r.templateItems = copyArray(templateItems);
 		r.isStatic = isStatic;
+		r.isPrivate = isPrivate;
 		r.redirectCount = redirectCount;
 		return r;
 	}
@@ -99,6 +102,7 @@ class GmlSeekerJSDoc {
 		if (q.isInterface) isInterface = true;
 		if (q.interfaceName != null) interfaceName = q.interfaceName;
 		if (q.isStatic) isStatic = true;
+		if (q.isPrivate) isPrivate = true;
 		implementsNames = concatArrays(implementsNames, q.implementsNames);
 		templateItems = concatArrays(templateItems, q.templateItems);
 	}
@@ -415,6 +419,12 @@ class GmlSeekerJSDoc {
 		mt = jsDoc_static.exec(s);
 		if (mt != null) {
 			isStatic = true;
+			return;
+		}
+		
+		mt = jsDoc_private.exec(s);
+		if (mt != null) {
+			isPrivate = true;
 			return;
 		}
 		

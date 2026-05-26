@@ -318,7 +318,7 @@ class GmlAPI {
 		for (hint in stdFieldHints) {
 			var ns = GmlAPI.ensureNamespace(hint.namespace);
 			ns.noTypeRef = true;
-			ns.addFieldHint(hint.field, hint.isInst, hint.comp, hint.doc, hint.type);
+			ns.addFieldHint(hint.field, hint.isInst, hint.comp, hint.doc, hint.type, hint.isPrivate);
 		}
 		for (pair in stdNamespaceDefs) {
 			var name = pair.name;

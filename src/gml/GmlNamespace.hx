@@ -228,6 +228,7 @@ class GmlNamespace {
 	}
 	
 	public var docInstMap:Dictionary<GmlFuncDoc> = new Dictionary();
+	public var privateInst:Dictionary<Bool> = new Dictionary();
 	public function getInstDoc(field:String, depth:Int = 0):GmlFuncDoc {
 		var q = this, n = depth;
 		while (q != null && ++n <= maxDepth) {
@@ -241,14 +242,26 @@ class GmlNamespace {
 		}
 		return null;
 	}
+	public function isInstPrivate(field:String, depth:Int = 0):Bool {
+		var q = this, n = depth;
+		while (q != null && ++n <= maxDepth) {
+			if (q.privateInst.exists(field)) return q.privateInst[field];
+			for (qi in q.interfaces.array) {
+				if (qi.isInstPrivate(field, n)) return true;
+			}
+			q = q.parent;
+		}
+		return false;
+	}
 	
 	public function new(name:String) {
 		this.name = name;
 	}
 	
-	public function addFieldHint(field:String, isInst:Bool, comp:AceAutoCompleteItem, doc:GmlFuncDoc, type:GmlType) {
+	public function addFieldHint(field:String, isInst:Bool, comp:AceAutoCompleteItem, doc:GmlFuncDoc, type:GmlType, isPrivate:Bool = false) {
 		var kind = isInst ? instKind : staticKind;
 		kind[field] = doc != null ? "asset.script" : "field";
+		if (isInst && isPrivate) privateInst[field] = true;
 		
 		var types = isInst ? instTypes : staticTypes;
 		if (doc != null && (type == null || type.getKind() == KFunction || type.getKind() == KConstructor)) {
@@ -273,6 +286,7 @@ class GmlNamespace {
 		kind.remove(field);
 		var docs = isInst ? docInstMap : docStaticMap;
 		docs.remove(field);
+		if (isInst) privateInst.remove(field);
 		var types = isInst ? instTypes : staticTypes;
 		types.remove(field);
 		var comps:ArrayMap<AceAutoCompleteItem> = isInst ? compInst : compStatic;

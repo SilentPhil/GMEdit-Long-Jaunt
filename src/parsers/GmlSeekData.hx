@@ -278,7 +278,7 @@ class GmlSeekData {
 			if (hint.parentSpace != null && (ns.parent == null || ns.parent.name != hint.parentSpace)) {
 				ns.parent = GmlAPI.ensureNamespace(hint.parentSpace);
 			}
-			ns.addFieldHint(hint.field, hint.isInst, hint.comp, hint.doc, hint.type);
+			ns.addFieldHint(hint.field, hint.isInst, hint.comp, hint.doc, hint.type, hint.isPrivate);
 		}
 		
 		if (prev.hasGMLive || next.hasGMLive) {
@@ -320,8 +320,9 @@ class GmlSeekDataHint {
 	public var comp:AceAutoCompleteItem;
 	public var doc:GmlFuncDoc;
 	public var type:GmlType;
+	public var isPrivate:Bool;
 	public function new(namespace:String, isInst:Bool, field:String,
-		comp:AceAutoCompleteItem, doc:GmlFuncDoc, parentSpace:String, type:GmlType
+		comp:AceAutoCompleteItem, doc:GmlFuncDoc, parentSpace:String, type:GmlType, isPrivate:Bool = false
 	) {
 		this.namespace = namespace;
 		this.parentSpace = parentSpace;
@@ -330,10 +331,13 @@ class GmlSeekDataHint {
 		this.doc = doc;
 		this.comp = comp;
 		this.type = type;
+		this.isPrivate = isPrivate;
 		this.key = namespace + (isInst ? ":" : ".") + field;
 	}
 	public function merge(hint:GmlSeekDataHint, ?preferExisting:Bool) {
-		var cd1:String = JsTools.ncf(hint.comp.doc);
+		if (hint.isPrivate) isPrivate = true;
+		if (!isPrivate && comp == null && hint.comp != null) comp = hint.comp;
+		var cd1:String = comp != null && hint.comp != null ? JsTools.ncf(hint.comp.doc) : null;
 		if (cd1 != null) {
 			var cd0 = JsTools.ncf(comp.doc);
 			var cdp = field + "(";
@@ -367,7 +371,7 @@ class GmlSeekDataHint {
 						case null:
 							if (t2 == null) break;
 							type = hint.type;
-							comp.setDocTag("type", type.toString());
+							if (comp != null) comp.setDocTag("type", type.toString());
 							break;
 						case TInst(_, p, KArray):
 							t1 = p[0];

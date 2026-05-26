@@ -512,6 +512,9 @@ class GmlLinterExpr extends GmlLinterHelper {
 							} else {
 								currType = ns.getInstType(field);
 								currFunc = ns.getInstDoc(field);
+								if (ns.isInstPrivate(field)) {
+									self.addWarning('Trying to access private field `$field` of $ctn');
+								}
 								return ns.getInstKind(field) != null;
 							}
 						});

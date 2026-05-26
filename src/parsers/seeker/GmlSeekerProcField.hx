@@ -27,7 +27,8 @@ class GmlSeekerProcField {
 		type:GmlType,
 		argTypes:Array<GmlType>,
 		isAuto:Bool,
-		?templateItems:Array<GmlTypeTemplateItem>
+		?templateItems:Array<GmlTypeTemplateItem>,
+		isPrivate:Bool = false
 	) {
 		var parentSpace:String = null;
 		if (namespace == null) {
@@ -70,9 +71,9 @@ class GmlSeekerProcField {
 		var isFunc = args != null || GmlTypeCanCastTo.canCastTo(type, GmlTypeDef.anyFunction);
 		var compMeta = isField ? (isFunc ? "function" : "variable") : "namespace";
 		var privateFieldRegex = seeker.privateFieldRegex;
-		var comp = privateFieldRegex == null || !privateFieldRegex.test(name)
+		var comp = (privateFieldRegex == null || !privateFieldRegex.test(name)) && !(isInst && isPrivate)
 			? new AceAutoCompleteItem(name, compMeta, info) : null;
-		var hint = new GmlSeekDataHint(namespace, isInst, field, comp, hintDoc, parentSpace, type);
+		var hint = new GmlSeekDataHint(namespace, isInst, field, comp, hintDoc, parentSpace, type, isPrivate);
 		
 		var out = seeker.out;
 		var lastHint = out.fieldHints[hint.key];

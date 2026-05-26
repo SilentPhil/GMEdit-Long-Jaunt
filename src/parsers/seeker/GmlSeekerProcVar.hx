@@ -207,7 +207,7 @@ class GmlSeekerProcVar {
 				function addFieldHint(asInst:Bool) {
 					// related: GmlSeekerProcIdent
 					GmlSeekerProcField.addFieldHint(seeker, exprIsConstructor, seeker.jsDoc.interfaceName,
-					asInst, name, args, null, fieldType, argTypes, true, templateItems);
+					asInst, name, args, null, fieldType, argTypes, true, templateItems, jsDocBeforeFunc != null && jsDocBeforeFunc.isPrivate);
 					
 					var addFieldHint_doc = GmlSeekerProcField.addFieldHint_doc;
 					if (addFieldHint_doc != null) {
