@@ -194,7 +194,18 @@ class GmlNamespace {
 		if (maxID == compInstCacheID && !forceUpdate) return compInstCache;
 		
 		//Console.log('Updating $name...');
-		var list = compInst.array.copy();
+		var ownItems = compInst.array;
+		var ownItemsByName = new Dictionary<AceAutoCompleteItem>();
+		var inheritedNames = new Dictionary<Bool>();
+		if (parItems != null) for (c in parItems) inheritedNames[c.name] = true;
+		if (itfItems != null) for (items in itfItems) for (c in items) inheritedNames[c.name] = true;
+		for (c in ownItems) ownItemsByName[c.name] = c;
+		
+		var list:AceAutoCompleteItems = [];
+		for (c in ownItems) {
+			if (inheritedNames[c.name]) continue;
+			list.push(c);
+		}
 		compInstCacheID = maxID;
 		compInstCache = list;
 		
@@ -206,17 +217,15 @@ class GmlNamespace {
 		if (itfItems != null) for (items in itfItems) for (c in items) {
 			if (found[c.name]) continue;
 			found[c.name] = true;
-			list.push(c);
+			list.push(ownItemsByName[c.name] ?? c);
 		}
 		
-		// add inherited items before own items:
+		// add inherited items after own items:
 		if (parItems != null) {
-			var i = parItems.length;
-			while (--i >= 0) {
-				var c = parItems[i];
+			for (c in parItems) {
 				if (found[c.name]) continue;
 				found[c.name] = true;
-				list.unshift(c);
+				list.push(ownItemsByName[c.name] ?? c);
 			}
 		}
 		
