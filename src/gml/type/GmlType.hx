@@ -93,7 +93,6 @@ enum abstract GmlTypeKind(Int) {
 	var KNumber = 0x11;
 	var KBool = 0x12;
 	var KString = 0x13;
-	var KEnumValue = 0x14;
 	
 	// ref types
 	var KArray = 0x20;

@@ -95,8 +95,6 @@ class GmlTypeCanCastTo {
 			default:
 		}
 		
-		if (kfrom == KEnumValue && canCastTo(to, GmlTypeDef.number, tpl, imp)) return true;
-		
 		if (tpl != null) {
 			to = GmlTypeTools.mapTemplateTypes(to, tpl);
 			if (to == null) return false;
