@@ -88,6 +88,7 @@ class GmlSeekerJSDocRegex {
 	public static var jsDoc_private = new RegExp("^///\\s*"
 		+ "@private\\b\\s*"
 	);
+	public static var jsDoc_private_tag = new RegExp("(?:^|\\s+)@private\\b\\s*", "g");
 	
 	public static var jsDoc_index_redirect = new RegExp("^///\\s*"
 		+ "@index_redirect\\b\\s*"

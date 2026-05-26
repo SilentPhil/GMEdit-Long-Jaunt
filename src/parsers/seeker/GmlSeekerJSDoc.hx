@@ -121,10 +121,16 @@ class GmlSeekerJSDoc {
 		return rt;
 	}
 	
-	function procIs(seeker:GmlSeekerImpl, full:String, typeStr:String, doc:String) {
+	function procIs(seeker:GmlSeekerImpl, full:String, typeStr:String, doc:String):Bool {
 		var out = seeker.out;
 		var q = seeker.reader;
 		var hasType = typeStr != null;
+		var isPrivate = false;
+		if (doc != null) {
+			var publicDoc = doc.replaceExt(jsDoc_private_tag, "").trimBoth();
+			isPrivate = publicDoc != doc.trimBoth();
+			doc = publicDoc;
+		}
 		//
 		inline function procComp(comp:AceAutoCompleteItem):Void {
 			if (comp != null) {
@@ -135,7 +141,7 @@ class GmlSeekerJSDoc {
 		var lineStart = q.source.lastIndexOf("\n", q.pos - 1) + 1;
 		var lineText = q.source.substring(lineStart, q.pos);
 		var lineMatch = jsDoc_is_line.exec(lineText);
-		if (lineMatch == null) return;
+		if (lineMatch == null) return false;
 		var kind = lineMatch[1];
 		var name:String;
 		var type = GmlTypeDef.parse(typeStr, full);
@@ -159,14 +165,19 @@ class GmlSeekerJSDoc {
 				namespace = seeker.getObjectName();
 			} else if (seeker.doc != null) {
 				namespace = seeker.doc.name;
-				if (namespace == null) return;
-			} else return;
+				if (namespace == null) return false;
+			} else return false;
 			var hint = out.fieldHints[namespace + ":" + name];
 			if (hint != null) {
 				if (hasType) hint.type = type;
+				if (isPrivate) {
+					hint.isPrivate = true;
+					hint.comp = null;
+				}
 				procComp(hint.comp);
 			}
 		}
+		return true;
 	}
 	public function proc(seeker:GmlSeekerImpl, s:String) {
 		/*
@@ -424,6 +435,7 @@ class GmlSeekerJSDoc {
 		
 		mt = jsDoc_private.exec(s);
 		if (mt != null) {
+			if (procIs(seeker, s, null, s.substring(3).trimBoth())) return;
 			isPrivate = true;
 			return;
 		}
