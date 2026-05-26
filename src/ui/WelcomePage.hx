@@ -27,7 +27,10 @@ class WelcomePage {
 			session = file.codeEditor.session;
 			var rel = Electron != null ? "misc/welcome.txt" : "misc/welcome-web.txt";
 			FileSystem.readTextFile(Main.relPath(rel), function(err, text) {
-				text = tools.NativeString.replaceExt(text, "%%VERSION%%", ace.AceMacro.timestamp());
+				var buildDate = ace.AceMacro.timestamp();
+				var buildHash = ace.AceMacro.gitHash();
+				var buildInfo = buildHash != "" ? '$buildDate ($buildHash)' : buildDate;
+				text = tools.NativeString.replaceExt(text, "%%VERSION%%", buildInfo);
 				session.setValue(text);
 			});
 		#end

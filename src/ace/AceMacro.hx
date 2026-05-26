@@ -22,6 +22,16 @@ class AceMacro {
 		sys.io.File.saveContent('$path/builddate.txt', pretty);
 		return macro $v{pretty};
 	}
+
+	public static macro function gitHash() {
+		var hash = "";
+		try {
+			var proc = new sys.io.Process("git", ["rev-parse", "--short", "HEAD"]);
+			hash = StringTools.trim(proc.stdout.readAll().toString());
+			proc.close();
+		} catch (_:Dynamic) {}
+		return macro $v{hash};
+	}
 	
 	public static macro function rxRule(tk:ExprOf<Dynamic>, rx:ExprOf<EitherType<EReg, Array<EReg>>>, ?nx:Expr) {
 		switch (rx.expr) {
