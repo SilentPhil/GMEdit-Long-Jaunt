@@ -14,9 +14,11 @@ import gml.type.GmlTypeCanCastTo;
 import gml.type.GmlTypeDef;
 import gml.type.GmlTypeTools;
 import haxe.ds.ReadOnlyArray;
+import js.lib.RegExp;
 import parsers.linter.GmlLinterInit;
 import parsers.linter.GmlLinterReadFlags;
 import parsers.linter.misc.GmlLinterPrefsState;
+import parsers.GmlSeekData;
 import tools.Aliases;
 import tools.Dictionary;
 import editors.EditCode;
@@ -199,6 +201,296 @@ class GmlLinter {
 		}
 		if (isMissingInstanceField(name)) {
 			addWarning('Instance variable `$name` is declared outside the class body');
+		}
+	}
+
+	static var implementsLineRx = new RegExp("\\b@implement(?:s)?(?:\\b\\s*\\{(\\w+)\\}|\\b\\s+(\\w+))?");
+	static var interfaceLineRx = new RegExp("\\b@interface(?:\\b\\s*\\{(\\w+)\\})?");
+	static var nextFunctionRx = new RegExp("\\bfunction\\s+(\\w+)\\b");
+	static var functionDeclLineRx = new RegExp("^\\s*function\\s+(\\w+)\\b");
+	static var staticFieldLineRx = new RegExp("^\\s*static\\s+(\\w+)\\b\\s*=");
+	function findImplementsWarningPos(source:String, ownName:String, interfaceName:String, ?preferred:AcePos):AcePos {
+		var lines = source.split("\n");
+		var fallback:AcePos = null;
+		var functionFallback:AcePos = null;
+		inline function makePos(row:Int, line:String):AcePos {
+			var col = line.indexOf("@implement");
+			return { row: row, column: col >= 0 ? col : 0 };
+		}
+		function nextFunctionName(row:Int):String {
+			for (i in row ... lines.length) {
+				var line = lines[i].trimBoth();
+				if (line == "" || line.startsWith("///")) continue;
+				var mt = nextFunctionRx.exec(line);
+				return mt != null ? mt[1] : null;
+			}
+			return null;
+		}
+		function implementsNameAt(row:Int):String {
+			if (row < 0 || row >= lines.length) return null;
+			var mt = implementsLineRx.exec(lines[row]);
+			if (mt == null) return null;
+			return mt[1] != null ? mt[1] : mt[2];
+		}
+		if (preferred != null
+			&& implementsNameAt(preferred.row) == interfaceName
+			&& nextFunctionName(preferred.row + 1) == ownName) {
+			return preferred;
+		}
+		for (i in 0 ... lines.length) {
+			var line = lines[i];
+			var fnMatch = functionDeclLineRx.exec(line);
+			if (fnMatch != null && fnMatch[1] == ownName) {
+				var col = line.indexOf("function");
+				functionFallback = { row: i, column: col >= 0 ? col : 0 };
+				var j = i - 1;
+				while (j >= 0) {
+					var prevLine = lines[j];
+					var trimmed = prevLine.trimBoth();
+					if (trimmed == "" || trimmed.startsWith("///")) {
+						if (implementsNameAt(j) == interfaceName) return makePos(j, prevLine);
+						j -= 1;
+						continue;
+					}
+					break;
+				}
+			}
+			var mt = implementsLineRx.exec(line);
+			if (mt == null) continue;
+			var foundName = mt[1] != null ? mt[1] : mt[2];
+			if (foundName != interfaceName) continue;
+			var pos = makePos(i, line);
+			if (fallback == null) fallback = pos;
+			if (nextFunctionName(i + 1) == ownName) return pos;
+		}
+		if (functionFallback != null) return functionFallback;
+		return fallback != null ? fallback : { row: 0, column: 0 };
+	}
+	function updateBraceDepth(line:String, state:{ depth:Int, started:Bool }):Void {
+		var i = 0, n = line.length;
+		while (i < n) {
+			var c = line.fastCodeAt(i++);
+			switch (c) {
+				case "/".code if (i < n && line.fastCodeAt(i) == "/".code):
+					return;
+				case '"'.code, "'".code, "`".code:
+					while (i < n) {
+						var c1 = line.fastCodeAt(i++);
+						if (c1 == "\\".code) {
+							i += 1;
+						} else if (c1 == c) break;
+					}
+				case "{".code:
+					state.depth += 1;
+					state.started = true;
+				case "}".code:
+					state.depth -= 1;
+				default:
+			}
+		}
+	}
+	function getCurrentInterfaceImplementations(source:String):Dictionary<GmlLinterInterfaceImplementation> {
+		var out = new Dictionary<GmlLinterInterfaceImplementation>();
+		var pendingNames:Array<String> = null;
+		var pendingPositions:Array<AcePos> = null;
+		var pendingInterfaceName:String = null;
+		var current:GmlLinterInterfaceImplementation = null;
+		var currentBrace = { depth: 0, started: false };
+		var lines = source.split("\n");
+		inline function getImpl(name:String):GmlLinterInterfaceImplementation {
+			var impl = out[name];
+			if (impl == null) {
+				impl = new GmlLinterInterfaceImplementation(name);
+				out[name] = impl;
+			}
+			return impl;
+		}
+		inline function clearPending():Void {
+			pendingNames = null;
+			pendingPositions = null;
+			pendingInterfaceName = null;
+		}
+		for (row in 0 ... lines.length) {
+			var line = lines[row];
+			var trimmed = line.trimBoth();
+			if (trimmed.startsWith("///")) {
+				var mtInterface = interfaceLineRx.exec(line);
+				if (mtInterface != null) {
+					pendingInterfaceName = mtInterface[1];
+					continue;
+				}
+				var mt = implementsLineRx.exec(line);
+				if (mt == null) continue;
+				var interfaceName = mt[1] != null ? mt[1] : mt[2];
+				if (interfaceName != null) {
+					if (pendingNames == null) {
+						pendingNames = [];
+						pendingPositions = [];
+					}
+					pendingNames.push(interfaceName);
+					var col = line.indexOf("@implement");
+					pendingPositions.push({ row: row, column: col >= 0 ? col : 0 });
+				}
+				continue;
+			}
+			if (pendingNames != null || pendingInterfaceName != null) {
+				if (trimmed == "" || trimmed.startsWith("///")) continue;
+				var fnMatch = functionDeclLineRx.exec(line);
+				if (fnMatch != null) {
+					var ownName = pendingInterfaceName != null ? pendingInterfaceName : fnMatch[1];
+					current = getImpl(ownName);
+					if (pendingNames != null) for (i in 0 ... pendingNames.length) {
+						current.addInterface(pendingNames[i], pendingPositions[i]);
+					}
+					currentBrace = { depth: 0, started: false };
+				}
+				clearPending();
+			}
+			if (current != null) {
+				var staticMatch = staticFieldLineRx.exec(line);
+				if (staticMatch != null) {
+					current.instFields[staticMatch[1]] = true;
+					current.staticFields[staticMatch[1]] = true;
+				}
+				updateBraceDepth(line, currentBrace);
+				if (currentBrace.started && currentBrace.depth <= 0) {
+					current = null;
+				}
+			}
+		}
+		return out;
+	}
+	function namespaceHasOwnOrParentField(ns:GmlNamespace, field:String, isInst:Bool, includeSelf:Bool = true, depth:Int = 0):Bool {
+		var q = ns, n = depth;
+		while (q != null && ++n <= GmlNamespace.maxDepth) {
+			if (includeSelf) {
+				var kind = isInst ? q.instKind[field] : q.staticKind[field];
+				if (kind != null) return true;
+			}
+			includeSelf = true;
+			q = q.parent;
+		}
+		return false;
+	}
+	function implementationHasField(
+		impl:GmlLinterInterfaceImplementation,
+		ownNs:GmlNamespace,
+		field:String,
+		isInst:Bool
+	):Bool {
+		if (impl != null) {
+			var fields = isInst ? impl.instFields : impl.staticFields;
+			if (fields.exists(field)) return true;
+			return ownNs != null ? namespaceHasOwnOrParentField(ownNs.parent, field, isInst) : false;
+		}
+		return ownNs != null ? namespaceHasOwnOrParentField(ownNs, field, isInst) : false;
+	}
+	function checkCurrentInterfaceFields(
+		ownName:String,
+		ownNs:GmlNamespace,
+		interfaceName:String,
+		interfaceImpl:GmlLinterInterfaceImplementation,
+		isInst:Bool,
+		pos:AcePos,
+		impl:GmlLinterInterfaceImplementation,
+		seen:Dictionary<Bool>
+	):Void {
+		if (interfaceImpl == null) return;
+		var fields = isInst ? interfaceImpl.instFields : interfaceImpl.staticFields;
+		for (field => _ in fields) {
+			if (field == "") continue;
+			if (seen[field]) continue;
+			seen[field] = true;
+			if (!implementationHasField(impl, ownNs, field, isInst)) {
+				warnings.push(new GmlLinterProblem(
+					'$ownName implements $interfaceName but is missing member `$field`',
+					pos
+				));
+			}
+		}
+	}
+	function checkInterfaceMembers(
+		ownName:String,
+		ownNs:GmlNamespace,
+		interfaceName:String,
+		interfaceNs:GmlNamespace,
+		isInst:Bool,
+		pos:AcePos,
+		impl:GmlLinterInterfaceImplementation,
+		seen:Dictionary<Bool>,
+		visited:Dictionary<Bool>,
+		depth:Int = 0
+	):Void {
+		if (interfaceNs == null || depth >= GmlNamespace.maxDepth) return;
+		var visitKey = (isInst ? "i:" : "s:") + interfaceNs.name;
+		if (visited[visitKey]) return;
+		visited[visitKey] = true;
+
+		var kindMap = isInst ? interfaceNs.instKind : interfaceNs.staticKind;
+		for (field => _ in kindMap) {
+			if (field == "") continue;
+			if (seen[field]) continue;
+			seen[field] = true;
+			if (!implementationHasField(impl, ownNs, field, isInst)) {
+				warnings.push(new GmlLinterProblem(
+					'$ownName implements $interfaceName but is missing member `$field`',
+					pos
+				));
+			}
+		}
+		checkInterfaceMembers(ownName, ownNs, interfaceName, interfaceNs.parent,
+			isInst, pos, impl, seen, visited, depth + 1);
+		for (nextInterface in interfaceNs.interfaces) {
+			checkInterfaceMembers(ownName, ownNs, interfaceName, nextInterface,
+				isInst, pos, impl, seen, visited, depth + 1);
+		}
+	}
+	function checkInterfaceImplementation(ownName:String, interfaceName:String, pos:AcePos,
+		?impl:GmlLinterInterfaceImplementation,
+		?currentImpls:Dictionary<GmlLinterInterfaceImplementation>
+	):Void {
+		var ownNs = GmlAPI.gmlNamespaces[ownName];
+		if (ownNs == null && impl == null) return;
+		var interfaceNs = GmlAPI.gmlNamespaces[interfaceName];
+		var interfaceImpl = currentImpls != null ? currentImpls[interfaceName] : null;
+		if (interfaceNs == null && interfaceImpl == null) return;
+		var seen = new Dictionary();
+		checkCurrentInterfaceFields(ownName, ownNs, interfaceName, interfaceImpl,
+			true, pos, impl, seen);
+		if (interfaceNs != null) {
+			checkInterfaceMembers(ownName, ownNs, interfaceName, interfaceNs,
+				true, pos, impl, seen, new Dictionary());
+		}
+		checkCurrentInterfaceFields(ownName, ownNs, interfaceName, interfaceImpl,
+			false, pos, impl, seen);
+		if (interfaceNs != null) {
+			checkInterfaceMembers(ownName, ownNs, interfaceName, interfaceNs,
+				false, pos, impl, seen, new Dictionary());
+		}
+	}
+	function checkInterfaceImplementations(source:String):Void {
+		if (prefs.suppressAll || isProperties) return;
+		var currentImpls = getCurrentInterfaceImplementations(source);
+		if (!currentImpls.isEmpty()) {
+			var checked = false;
+			for (ownName => impl in currentImpls) {
+				for (interfaceName in impl.interfaces) {
+					checked = true;
+					var pos = findImplementsWarningPos(source, ownName, interfaceName, impl.positions[interfaceName]);
+					checkInterfaceImplementation(ownName, interfaceName, pos, impl, currentImpls);
+				}
+			}
+			if (checked) return;
+		}
+		var path = editor.file.path;
+		if (path == null) return;
+		var data = GmlSeekData.map[path];
+		if (data == null) return;
+		for (ownName => interfaceNames in data.namespaceImplements) {
+			for (interfaceName in interfaceNames) {
+				var pos = findImplementsWarningPos(source, ownName, interfaceName);
+				checkInterfaceImplementation(ownName, interfaceName, pos);
+			}
 		}
 	}
 
@@ -1017,6 +1309,7 @@ class GmlLinter {
 				break;
 			}
 		}
+		if (!ohno) checkInterfaceImplementations(q.source);
 		runPost();
 		return ohno;
 	}
@@ -1141,6 +1434,22 @@ class GmlLinterProblem {
 	public function new(text:String, pos:AcePos) {
 		this.text = text;
 		this.pos = pos;
+	}
+}
+class GmlLinterInterfaceImplementation {
+	public var name:String;
+	public var interfaces:Array<String> = [];
+	public var positions:Dictionary<AcePos> = new Dictionary();
+	public var instFields:Dictionary<Bool> = new Dictionary();
+	public var staticFields:Dictionary<Bool> = new Dictionary();
+	public function new(name:String) {
+		this.name = name;
+	}
+	public function addInterface(interfaceName:String, pos:AcePos):Void {
+		if (!positions.exists(interfaceName)) {
+			interfaces.push(interfaceName);
+			positions[interfaceName] = pos;
+		}
 	}
 }
 
