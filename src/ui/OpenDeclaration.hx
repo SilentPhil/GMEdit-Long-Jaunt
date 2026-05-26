@@ -15,11 +15,13 @@ import electron.Shell;
 import haxe.io.Path;
 import gml.GmlAPI;
 import gml.GmlImports;
+import gml.type.GmlType;
 import ui.ColorPicker;
 import ui.treeview.TreeView;
 using tools.NativeString;
 using tools.HtmlTools;
 using StringTools;
+using gml.type.GmlTypeTools;
 import Main.aceEditor;
 import gml.Project;
 
@@ -127,6 +129,103 @@ class OpenDeclaration {
 		}
 		//
 		return false;
+	}
+
+	static function openTypeName(name:String, pos:AcePos, imports:GmlImports):Bool {
+		if (name == null) return false;
+		var ns = GmlAPI.gmlNamespaces[name];
+		if (ns != null && ns.noTypeRef
+			&& !GmlAPI.gmlLookup.exists(name)
+			&& !GmlAPI.gmlEnums.exists(name)
+		) return false;
+		if (openLocal(name, pos, null)) return true;
+		if (imports != null) {
+			var long = imports.longenEnum[name];
+			if (long != null && openLocal(long, pos, null)) return true;
+			long = imports.longen[name];
+			if (long != null && openLocal(long, pos, null)) return true;
+		}
+		return false;
+	}
+
+	static function openType(type:GmlType, pos:AcePos, imports:GmlImports, depth:Int = 0):Bool {
+		if (type == null || depth >= 64) return false;
+		type = type.unwrapNullable();
+		switch (type) {
+			case THint(_, next):
+				return openType(next, pos, imports, depth + 1);
+			case TEither(types):
+				for (next in types) if (openType(next, pos, imports, depth + 1)) return true;
+				return false;
+			case TTemplate(_, _, constraint):
+				return openType(constraint, pos, imports, depth + 1);
+			case TEnumTuple(name):
+				return openTypeName(name, pos, imports);
+			case TInst(name, params, kind):
+				switch (kind) {
+					case KCustom, KObject, KStruct, KAsset:
+						if (openTypeName(name, pos, imports)) return true;
+						var td = GmlAPI.gmlTypedefs[name] ?? GmlAPI.stdTypedefs[name];
+						if (td != null && openType(td.mapTemplateTypes(params), pos, imports, depth + 1)) return true;
+					case KType, KRest, KNullable:
+						//
+					case KConstructor:
+						if (params.length > 0) {
+							return openType(params[params.length - 1], pos, imports, depth + 1);
+						}
+					case KFunction:
+						return false;
+					default:
+				}
+				if (params != null) for (next in params) {
+					if (openType(next, pos, imports, depth + 1)) return true;
+				}
+				return false;
+			default:
+				return false;
+		}
+	}
+
+	static function getTypeAt(session:AceSession, pos:AcePos, token:AceToken):GmlType {
+		var scope = session.gmlScopes.get(pos.row);
+		var codeEditor = session.gmlEditor;
+		if (codeEditor == null) return null;
+		var iter = new AceTokenIterator(session, pos.row, pos.column);
+		var endIter = new AceTokenIterator(session, pos.row, pos.column);
+		var funcEnd = endIter.stepForward() == null
+			? session.getEOF()
+			: endIter.getCurrentTokenPosition();
+		var ctx:AceStatusBarDocSearch = {
+			session: session,
+			scope: scope,
+			imports: codeEditor.imports[scope],
+			lambdas: codeEditor.lambdas[scope],
+			tk: token,
+			doc: null,
+			docs: null,
+			iter: iter,
+			exprStart: iter.getCurrentTokenPosition(),
+			funcEnd: funcEnd,
+		};
+		if (!AceStatusBar.getDocData(ctx)) return null;
+		if (ctx.type == null) AceStatusBar.procDocImport(ctx);
+		return ctx.type;
+	}
+
+	static function canOpenTypeAt(token:AceToken):Bool {
+		return switch (token.type) {
+			case "local", "sublocal", "field", "localfield", "globalfield", "globalvar": true;
+			default: false;
+		}
+	}
+
+	static function openTypeAt(session:AceSession, pos:AcePos, token:AceToken):Bool {
+		if (!canOpenTypeAt(token)) return false;
+		var type = getTypeAt(session, pos, token);
+		if (type == null) return false;
+		var scope = session.gmlScopes.get(pos.row);
+		var imports = session.gmlEditor != null ? session.gmlEditor.imports[scope] : null;
+		return openType(type, pos, imports);
 	}
 	
 	public static function openImportFile(rel:String) {
@@ -236,6 +335,7 @@ class OpenDeclaration {
 		if (doc != null && doc.lookup != null) {
 			return openLookup(doc.lookup, doc.nav);
 		}
+		if (openTypeAt(session, pos, token)) return true;
 		//
 		var helpURL = GmlAPI.helpURL;
 		if (helpURL != null) {
