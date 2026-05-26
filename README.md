@@ -175,6 +175,31 @@ __phase_random.init(__generic.get_base_tickets());
 // accepts (int<GAME_DIRECTOR_PHASE>|number)[]
 ```
 
+### Interface implementation errors
+
+The linter checks `/// @implements {InterfaceName}` constructors against members declared in
+`/// @interface {InterfaceName}` constructors. Missing interface members are reported as red errors
+on the relevant `@implements` declaration.
+
+```gml
+/// @interface {IPathFinder}
+function IPathFinder() constructor {
+	static force_end = function()->void {}
+
+	static get_result = function()->PathFindResult {
+		return noone;
+	}
+}
+
+/// @implements {IPathFinder}
+function PathFinderAroundAnchorDllAsync() constructor {
+	static force_end = function()->void {
+	}
+
+	// Error: missing member `get_result`
+}
+```
+
 ### Open a variable's type declaration
 
 Press `F1`/`F12` or middle-click a variable/field to open the declaration of its complex type when the

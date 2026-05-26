@@ -400,7 +400,7 @@ class GmlLinter {
 			if (seen[field]) continue;
 			seen[field] = true;
 			if (!implementationHasField(impl, ownNs, field, isInst)) {
-				warnings.push(new GmlLinterProblem(
+				errors.push(new GmlLinterProblem(
 					'$ownName implements $interfaceName but is missing member `$field`',
 					pos
 				));
