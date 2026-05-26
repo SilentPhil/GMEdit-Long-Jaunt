@@ -80,6 +80,7 @@ class AceStatusBarImports {
 		}
 		//
 		if (objType != null) {
+			objType = objType.unwrapNullable();
 			var tn = objType.getNamespace();
 			var fieldType:GmlType = null;
 			var fieldTypeText:String = null;

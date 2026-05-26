@@ -256,7 +256,7 @@ using tools.NativeString;
 					} else type = dkSmart_type;
 					
 					if (type == null) continue;
-					
+					type = type.unwrapNullable();
 					var isStatic = type.isType();
 					if (isStatic) type = type.unwrapParam();
 					

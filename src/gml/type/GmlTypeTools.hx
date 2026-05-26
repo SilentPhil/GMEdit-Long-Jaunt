@@ -36,6 +36,7 @@ import ace.extern.AceTokenType;
 	
 	/** If this might be a namespace, returns the name */
 	public static function getNamespace(t:GmlType):String {
+		t = unwrapNullable(t);
 		return switch (t) {
 			case null: null;
 			case TInst(name, _, _): name;
@@ -82,6 +83,13 @@ import ace.extern.AceTokenType;
 		}
 	}
 	
+	public static function unwrapNullable(t:GmlType):GmlType {
+		while (t != null && t.getKind() == KNullable) {
+			t = t.unwrapParam();
+		}
+		return t;
+	}
+
 	public static function unwrapParams(t:GmlType):ReadOnlyArray<GmlType> {
 		return switch (t) {
 			case null: null;

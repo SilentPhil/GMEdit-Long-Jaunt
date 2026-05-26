@@ -421,8 +421,8 @@ class GmlLinterExpr extends GmlLinterHelper {
 					rc(self.readCheckSkip(LKIdent, "field name after `.`"));
 					var field = self.nextVal;
 					
-					// extract `Type` from `Type?` when doing `v?.field`
-					if (nk == LKNullDot && currType.isNullable()) currType = currType.unwrapParam();
+					// extract `Type` from `Type?` when doing `v.field`/`v?.field`
+					if (currType.isNullable()) currType = currType.unwrapNullable();
 					
 					var enumType:GmlEnum, scriptName:String;
 					if (currKind == LKIdent) {
