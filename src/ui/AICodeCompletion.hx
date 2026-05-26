@@ -2,6 +2,7 @@ package ui;
 
 import ace.AceWrap;
 import ace.extern.AcePos;
+import ace.extern.AceRange;
 import electron.Dialog;
 import haxe.Json;
 import js.Syntax;
@@ -18,6 +19,19 @@ typedef AICompletionConfig = {
 	maxOutputTokens:Int,
 	inlineContextChars:Int,
 	inlineMaxOutputTokens:Int,
+	inlineEagerness:String,
+}
+
+typedef AICompletionRequestHandle = {
+	var cancel:Void->Void;
+}
+
+typedef AIInlineSuggestion = {
+	var replaceStart:AcePos;
+	var replaceEnd:AcePos;
+	var insertText:String;
+	var displayText:String;
+	var session:Dynamic;
 }
 
 class AICodeCompletion {
@@ -37,6 +51,11 @@ class AICodeCompletion {
 		var state = getState(editor, false);
 		return state != null && state.accept();
 	}
+
+	public static function acceptInlinePart(editor:AceWrap, mode:String):Bool {
+		var state = getState(editor, false);
+		return state != null && state.acceptPart(mode);
+	}
 	
 	public static function hideInline(editor:AceWrap):Bool {
 		var state = getState(editor, false);
@@ -52,14 +71,15 @@ class AICodeCompletion {
 		}
 		pending = true;
 		setStatus(editor, "AI completion: requesting...");
-		if (!requestCompletion(editor, false, true, function(completion) {
+		var handle = requestCompletion(editor, false, true, function(completion) {
 			pending = false;
 			editor.insert(completion);
 			setStatus(editor, "AI completion inserted");
 		}, function(errorText) {
 			pending = false;
 			setStatus(editor, "AI completion failed");
-		})) {
+		});
+		if (handle == null) {
 			pending = false;
 		}
 	}
@@ -71,9 +91,9 @@ class AICodeCompletion {
 		onSuccess:String->Void,
 		onError:String->Void,
 		?onDelta:String->Void
-	):Bool {
+	):Null<AICompletionRequestHandle> {
 		var cfg = readConfig(showErrors);
-		if (cfg == null) return false;
+		if (cfg == null) return null;
 		var requestLinePrefix = getCurrentLinePrefix(editor);
 		var requestContextChars = inlineSuggestion ? cfg.inlineContextChars : cfg.maxContextChars;
 		var requestMaxOutputTokens = inlineSuggestion ? cfg.inlineMaxOutputTokens : cfg.maxOutputTokens;
@@ -82,7 +102,7 @@ class AICodeCompletion {
 		if (isStreaming) Reflect.setField(request, "stream", true);
 		var onText = function(rawText:String, isFinal:Bool) {
 			var completion = cleanupCompletion(rawText);
-			completion = removeDuplicatedLinePrefix(completion, requestLinePrefix);
+			if (!inlineSuggestion) completion = removeDuplicatedLinePrefix(completion, requestLinePrefix);
 			if (isFinal) {
 				if (completion == "") {
 					var message = "AI completion returned empty text.";
@@ -113,15 +133,14 @@ class AICodeCompletion {
 			onError(message);
 		};
 		if (isStreaming) {
-			postJsonStream(endpointUrl(cfg.baseUrl), cfg.apiKey, Json.stringify(request), function(text) {
+			return postJsonStream(endpointUrl(cfg.baseUrl), cfg.apiKey, Json.stringify(request), function(text) {
 				onText(text, false);
 			}, function(text) {
 				onText(text, true);
 			}, onRequestError);
 		} else {
-			postJson(endpointUrl(cfg.baseUrl), cfg.apiKey, Json.stringify(request), onResponse, onRequestError);
+			return postJson(endpointUrl(cfg.baseUrl), cfg.apiKey, Json.stringify(request), onResponse, onRequestError);
 		}
-		return true;
 	}
 	
 	static function getState(editor:AceWrap, create:Bool):AICodeCompletionState {
@@ -152,14 +171,35 @@ class AICodeCompletion {
 		var maxOutputTokens = prefs.maxOutputTokens;
 		if (maxOutputTokens <= 0) maxOutputTokens = 256;
 		if (maxOutputTokens < 16) maxOutputTokens = 16;
+		var inlineEagerness = sanitizeEagerness(Reflect.field(prefs, "inlineEagerness"));
+		var inlineContextChars = sanitizeContextChars(prefs.inlineContextChars, 3000);
+		var inlineMaxOutputTokens = sanitizeMaxOutputTokens(prefs.inlineMaxOutputTokens, 96);
+		switch (inlineEagerness) {
+			case "low":
+				if (inlineContextChars > 2500) inlineContextChars = 2500;
+				if (inlineMaxOutputTokens > 64) inlineMaxOutputTokens = 64;
+			case "high":
+				if (inlineContextChars < 5000) inlineContextChars = 5000;
+				if (inlineMaxOutputTokens < 128) inlineMaxOutputTokens = 128;
+			default:
+		}
 		return {
 			apiKey: apiKey,
 			baseUrl: baseUrl,
 			model: model,
 			maxContextChars: prefs.maxContextChars,
 			maxOutputTokens: maxOutputTokens,
-			inlineContextChars: sanitizeContextChars(prefs.inlineContextChars, 3000),
-			inlineMaxOutputTokens: sanitizeMaxOutputTokens(prefs.inlineMaxOutputTokens, 96),
+			inlineContextChars: inlineContextChars,
+			inlineMaxOutputTokens: inlineMaxOutputTokens,
+			inlineEagerness: inlineEagerness,
+		};
+	}
+
+	public static function sanitizeEagerness(value:Dynamic):String {
+		var text = value != null ? Std.string(value).toLowerCase().trim() : "";
+		return switch (text) {
+			case "low" | "high": text;
+			default: "medium";
 		};
 	}
 
@@ -216,20 +256,28 @@ class AICodeCompletion {
 		};
 	}
 	
-	static function postJson(url:String, apiKey:String, body:String, onSuccess:String->Void, onError:String->Void):Void {
+	static function postJson(url:String, apiKey:String, body:String, onSuccess:String->Void, onError:String->Void):AICompletionRequestHandle {
+		var req:Dynamic = null;
+		var done = false;
+		function cancel():Void {
+			if (done) return;
+			done = true;
+			if (req != null) try { req.destroy(); } catch (x:Dynamic) {}
+		}
 		try {
 			var reqFn:Dynamic = Syntax.code("require");
 			if (reqFn == null) {
+				done = true;
 				onError("Node require() is unavailable in this GMEdit window.");
-				return;
+				return { cancel: cancel };
 			}
 			var parsed:Dynamic = Syntax.code("new URL({0})", url);
 			var protocol = Std.string(Reflect.field(parsed, "protocol"));
 			var client:Dynamic = reqFn(protocol == "http:" ? "http" : "https");
-		var headers:Dynamic = {};
-		Reflect.setField(headers, "Content-Type", "application/json");
-		Reflect.setField(headers, "Accept", "application/json");
-		Reflect.setField(headers, "Authorization", "Bearer " + apiKey);
+			var headers:Dynamic = {};
+			Reflect.setField(headers, "Content-Type", "application/json");
+			Reflect.setField(headers, "Accept", "application/json");
+			Reflect.setField(headers, "Authorization", "Bearer " + apiKey);
 			Reflect.setField(headers, "Content-Length", Syntax.code("Buffer.byteLength({0})", body));
 			var options:Dynamic = {};
 			Reflect.setField(options, "method", "POST");
@@ -239,10 +287,12 @@ class AICodeCompletion {
 			Reflect.setField(options, "path", Std.string(Reflect.field(parsed, "pathname")) + Std.string(Reflect.field(parsed, "search")));
 			Reflect.setField(options, "headers", headers);
 			var chunks:Array<String> = [];
-			var req:Dynamic = client.request(options, function(res:Dynamic) {
+			req = client.request(options, function(res:Dynamic) {
 				res.setEncoding("utf8");
 				res.on("data", function(chunk:String) chunks.push(chunk));
 				res.on("end", function() {
+					if (done) return;
+					done = true;
 					var status:Null<Int> = Reflect.field(res, "statusCode");
 					if (status == null) status = 0;
 					var responseText = chunks.join("");
@@ -253,20 +303,36 @@ class AICodeCompletion {
 					}
 				});
 			});
-			req.on("error", function(err:Dynamic) onError(Std.string(err)));
+			req.on("error", function(err:Dynamic) {
+				if (done) return;
+				done = true;
+				onError(Std.string(err));
+			});
 			req.write(body);
 			req.end();
 		} catch (x:Dynamic) {
-			onError(Std.string(x));
+			if (!done) {
+				done = true;
+				onError(Std.string(x));
+			}
 		}
+		return { cancel: cancel };
 	}
 
-	static function postJsonStream(url:String, apiKey:String, body:String, onDelta:String->Void, onSuccess:String->Void, onError:String->Void):Void {
+	static function postJsonStream(url:String, apiKey:String, body:String, onDelta:String->Void, onSuccess:String->Void, onError:String->Void):AICompletionRequestHandle {
+		var req:Dynamic = null;
+		var done = false;
+		function cancel():Void {
+			if (done) return;
+			done = true;
+			if (req != null) try { req.destroy(); } catch (x:Dynamic) {}
+		}
 		try {
 			var reqFn:Dynamic = Syntax.code("require");
 			if (reqFn == null) {
+				done = true;
 				onError("Node require() is unavailable in this GMEdit window.");
-				return;
+				return { cancel: cancel };
 			}
 			var parsed:Dynamic = Syntax.code("new URL({0})", url);
 			var protocol = Std.string(Reflect.field(parsed, "protocol"));
@@ -283,7 +349,6 @@ class AICodeCompletion {
 			if (port != "") Reflect.setField(options, "port", port);
 			Reflect.setField(options, "path", Std.string(Reflect.field(parsed, "pathname")) + Std.string(Reflect.field(parsed, "search")));
 			Reflect.setField(options, "headers", headers);
-			var done = false;
 			var streamedText = "";
 			var eventBuffer = "";
 			var errorChunks:Array<String> = [];
@@ -348,7 +413,7 @@ class AICodeCompletion {
 					sep = eventBuffer.indexOf("\n\n");
 				}
 			}
-			var req:Dynamic = client.request(options, function(res:Dynamic) {
+			req = client.request(options, function(res:Dynamic) {
 				res.setEncoding("utf8");
 				var status:Null<Int> = Reflect.field(res, "statusCode");
 				if (status == null) status = 0;
@@ -372,8 +437,12 @@ class AICodeCompletion {
 			req.write(body);
 			req.end();
 		} catch (x:Dynamic) {
-			onError(Std.string(x));
+			if (!done) {
+				done = true;
+				onError(Std.string(x));
+			}
 		}
+		return { cancel: cancel };
 	}
 	
 	static function extractText(response:Dynamic):String {
@@ -427,7 +496,7 @@ class AICodeCompletion {
 		return line.substring(0, column);
 	}
 
-	static function removeDuplicatedLinePrefix(completion:String, linePrefix:String):String {
+	public static function removeDuplicatedLinePrefix(completion:String, linePrefix:String):String {
 		if (completion == null || completion == "") return "";
 		if (linePrefix == null || linePrefix == "") return completion;
 		if (linePrefix.startsWith(completion)) return "";
@@ -452,7 +521,7 @@ class AICodeCompletion {
 		return start == 0 || !isIdentChar(linePrefix.charCodeAt(start - 1));
 	}
 
-	static function isIdentChar(c:Int):Bool {
+	public static function isIdentChar(c:Int):Bool {
 		return (c >= "A".code && c <= "Z".code)
 			|| (c >= "a".code && c <= "z".code)
 			|| (c >= "0".code && c <= "9".code)
@@ -504,12 +573,12 @@ class AICodeCompletionState {
 	var bound:Bool = false;
 	var timerId:Null<Int> = null;
 	var requestId:Int = 0;
+	var activeRequest:AICompletionRequestHandle = null;
 	var ghost:DivElement = null;
-	var suggestion:String = null;
-	var suggestionPos:AcePos = null;
-	var suggestionSession:Dynamic = null;
+	var suggestion:AIInlineSuggestion = null;
 	var widget:Dynamic = null;
 	var widgetSession:Dynamic = null;
+	var suppressSelectionHide:Bool = false;
 	
 	public function new(editor:AceWrap) {
 		this.editor = editor;
@@ -520,7 +589,12 @@ class AICodeCompletionState {
 		bound = true;
 		editor.commands.on("afterExec", onAfterExec);
 		editor.on("changeSelection", function(_) {
-			if (hasSuggestion() && !samePos(editor.getCursorPosition(), suggestionPos)) hide();
+			if (suppressSelectionHide) return;
+			if (suggestion != null) {
+				if (!samePos(editor.getCursorPosition(), suggestion.replaceEnd)) hide();
+			} else if (activeRequest != null) {
+				hide();
+			}
 		});
 		editor.on("changeSession", function(_) hide());
 		editor.on("blur", function(_) hide());
@@ -528,19 +602,51 @@ class AICodeCompletionState {
 	}
 	
 	public function hasSuggestion():Bool {
-		return suggestion != null && suggestion != "";
+		return suggestion != null && suggestion.displayText != "";
 	}
 	
 	public function accept():Bool {
-		if (!hasSuggestion()) return false;
-		if (editor.session != suggestionSession || !samePos(editor.getCursorPosition(), suggestionPos)) {
+		if (!isSuggestionCurrent()) {
 			hide();
 			return false;
 		}
-		var text = suggestion;
+		var current = suggestion;
 		hide(false);
-		editor.insert(text);
+		replaceRange(current.replaceStart, current.replaceEnd, current.insertText);
 		AICodeCompletion.setStatus(editor, "AI inline completion accepted");
+		return true;
+	}
+
+	public function acceptPart(mode:String):Bool {
+		if (!isSuggestionCurrent()) {
+			hide();
+			return false;
+		}
+		var part = mode == "line" ? nextLinePart(suggestion.displayText) : nextWordPart(suggestion.displayText);
+		if (part == "") return false;
+		var current = suggestion;
+		var currentRange = AceRange.fromPair(current.replaceStart, current.replaceEnd);
+		var typedText = editor.session.getTextRange(currentRange);
+		if (!current.insertText.startsWith(typedText)) {
+			hide();
+			return false;
+		}
+		var replacement = typedText + part;
+		if (!current.insertText.startsWith(replacement)) replacement = current.insertText;
+		var newEnd = endPosAfterInsert(current.replaceStart, replacement);
+		suppressSelectionHide = true;
+		editor.session.doc.replace(currentRange, replacement);
+		editor.gotoPos(newEnd);
+		suppressSelectionHide = false;
+		current.replaceEnd = copyPos(newEnd);
+		current.displayText = current.insertText.substring(replacement.length);
+		if (current.displayText == "") {
+			hide(false);
+		} else {
+			suggestion = current;
+			renderSuggestion();
+		}
+		AICodeCompletion.setStatus(editor, "AI inline completion partially accepted");
 		return true;
 	}
 	
@@ -555,31 +661,48 @@ class AICodeCompletionState {
 		var id = ++requestId;
 		if (!explicit) AICodeCompletion.setStatus(editor, "AI inline completion: requesting...");
 		function isCurrent():Bool {
-			return id == requestId && editor.session == session && samePos(editor.getCursorPosition(), pos);
+			if (id != requestId || editor.session != session) return false;
+			if (samePos(editor.getCursorPosition(), pos)) return true;
+			return suggestion != null && suggestion.session == session && samePos(editor.getCursorPosition(), suggestion.replaceEnd);
 		}
-		if (!AICodeCompletion.requestCompletion(editor, true, explicit, function(completion) {
+		var handle = AICodeCompletion.requestCompletion(editor, true, explicit, function(completion) {
 			if (!isCurrent()) return;
-			show(completion, pos, session);
-			AICodeCompletion.setStatus(editor, "AI inline completion ready");
+			activeRequest = null;
+			if (show(completion, pos, session)) AICodeCompletion.setStatus(editor, "AI inline completion ready");
 		}, function(errorText) {
 			if (id != requestId) return;
+			activeRequest = null;
 			AICodeCompletion.setStatus(editor, "AI inline completion failed");
 			if (!explicit) untyped console.warn(errorText);
 		}, function(completion) {
 			if (!isCurrent()) return;
-			show(completion, pos, session);
-			AICodeCompletion.setStatus(editor, "AI inline completion streaming...");
-		})) {
+			if (show(completion, pos, session)) AICodeCompletion.setStatus(editor, "AI inline completion streaming...");
+		});
+		if (handle == null) {
 			if (!explicit) AICodeCompletion.setStatus(editor, "");
+		} else {
+			activeRequest = handle;
 		}
 	}
 	
 	public function hide(invalidate:Bool = true):Void {
 		clearTimer();
-		if (invalidate) requestId++;
+		if (invalidate) {
+			requestId++;
+			cancelActiveRequest();
+		}
 		suggestion = null;
-		suggestionPos = null;
-		suggestionSession = null;
+		clearRender();
+	}
+
+	function cancelActiveRequest():Void {
+		var req = activeRequest;
+		if (req == null) return;
+		activeRequest = null;
+		req.cancel();
+	}
+
+	function clearRender():Void {
 		if (ghost != null) {
 			if (ghost.parentElement != null) ghost.parentElement.removeChild(ghost);
 			ghost = null;
@@ -589,8 +712,13 @@ class AICodeCompletionState {
 	
 	function onAfterExec(e:Dynamic):Void {
 		var name = e.command != null ? e.command.name : "";
-		if (name == "acceptAICompletion" || name == "hideAICompletion") return;
-		if (name == "insertstring" || name == "backspace" || name == "del" || name == "indent") {
+		if (name == "acceptAICompletion" || name == "acceptAICompletionWord" || name == "acceptAICompletionLine" || name == "hideAICompletion") return;
+		if (name == "insertstring") {
+			var text = e.args != null ? Std.string(e.args) : "";
+			if (advanceSuggestion(text)) return;
+			hide();
+			schedule();
+		} else if (name == "backspace" || name == "del" || name == "indent") {
 			hide();
 			schedule();
 		} else if (hasSuggestion()) {
@@ -601,8 +729,7 @@ class AICodeCompletionState {
 	function schedule():Void {
 		clearTimer();
 		if (!canAutoRequest()) return;
-		var delay = Preferences.current.aiCompletion.inlineDelayMs;
-		if (delay < 250) delay = 250;
+		var delay = inlineDelay();
 		timerId = Main.window.setTimeout(function() {
 			timerId = null;
 			request(false);
@@ -624,13 +751,46 @@ class AICodeCompletionState {
 		if (editor.completer != null && Reflect.field(editor.completer, "activated") == true) return false;
 		return true;
 	}
+
+	function inlineDelay():Int {
+		var prefs = Preferences.current.aiCompletion;
+		var delay = prefs.inlineDelayMs;
+		var eagerness = AICodeCompletion.sanitizeEagerness(Reflect.field(prefs, "inlineEagerness"));
+		switch (eagerness) {
+			case "low":
+				if (delay < 1200) delay = 1200;
+			case "high":
+				if (delay > 400) delay = 400;
+				if (delay < 150) delay = 150;
+			default:
+				if (delay < 250) delay = 250;
+		}
+		return delay;
+	}
 	
-	function show(text:String, pos:AcePos, session:Dynamic):Void {
-		if (text == null || text == "") return;
-		hide(false);
-		suggestion = text;
-		suggestionPos = copyPos(pos);
-		suggestionSession = session;
+	function show(text:String, pos:AcePos, session:Dynamic):Bool {
+		var next = makeSuggestion(text, pos, session);
+		if (next == null) return false;
+		if (!rebaseSuggestionToCursor(next)) return false;
+		suggestion = next;
+		renderSuggestion();
+		return true;
+	}
+
+	function rebaseSuggestionToCursor(next:AIInlineSuggestion):Bool {
+		if (editor.session != next.session) return false;
+		var cursor = editor.getCursorPosition();
+		if (samePos(cursor, next.replaceEnd)) return true;
+		var typedText = editor.session.getTextRange(AceRange.fromPair(next.replaceStart, cursor));
+		if (!next.insertText.startsWith(typedText)) return false;
+		next.replaceEnd = copyPos(cursor);
+		next.displayText = next.insertText.substring(typedText.length);
+		return true;
+	}
+
+	function renderSuggestion():Void {
+		clearRender();
+		if (!hasSuggestion()) return;
 		ghost = Main.document.createDivElement();
 		ghost.className = "ai-code-ghost";
 		ghost.style.position = "fixed";
@@ -648,8 +808,140 @@ class AICodeCompletionState {
 		ghost.style.fontWeight = style.fontWeight;
 		ghost.style.letterSpacing = style.letterSpacing;
 		Main.document.body.appendChild(ghost);
-		showWidget(text, pos, session, style);
+		showWidget(suggestion.displayText, suggestion.replaceEnd, suggestion.session, style);
 		syncGhostPosition();
+	}
+
+	function makeSuggestion(text:String, pos:AcePos, session:Dynamic):AIInlineSuggestion {
+		text = normalizeNewlines(text);
+		if (text == null || text == "") return null;
+		var line = session.getLine(pos.row);
+		var column = pos.column;
+		if (column < 0) column = 0;
+		if (column > line.length) column = line.length;
+		var linePrefix = line.substring(0, column);
+		var candidates = replacementCandidates(linePrefix);
+		for (candidate in candidates) {
+			if (candidate.prefix == "") continue;
+			if (!text.startsWith(candidate.prefix)) continue;
+			var displayText = text.substring(candidate.prefix.length);
+			if (displayText == "") return null;
+			return {
+				replaceStart: new AcePos(candidate.start, pos.row),
+				replaceEnd: copyPos(pos),
+				insertText: text,
+				displayText: displayText,
+				session: session,
+			};
+		}
+		var suffix = AICodeCompletion.removeDuplicatedLinePrefix(text, linePrefix);
+		if (suffix == "") return null;
+		return {
+			replaceStart: copyPos(pos),
+			replaceEnd: copyPos(pos),
+			insertText: suffix,
+			displayText: suffix,
+			session: session,
+		};
+	}
+
+	function replacementCandidates(linePrefix:String):Array<{ start:Int, prefix:String }> {
+		var out:Array<{ start:Int, prefix:String }> = [];
+		function add(start:Int):Void {
+			if (start < 0) start = 0;
+			if (start > linePrefix.length) start = linePrefix.length;
+			var prefix = linePrefix.substring(start);
+			if (prefix == "") return;
+			for (candidate in out) if (candidate.start == start || candidate.prefix == prefix) return;
+			out.push({ start: start, prefix: prefix });
+		}
+		add(statementStart(linePrefix));
+		add(tokenStart(linePrefix));
+		return out;
+	}
+
+	function statementStart(linePrefix:String):Int {
+		var start = 0;
+		var i = 0;
+		while (i < linePrefix.length) {
+			var c = linePrefix.charCodeAt(i);
+			if (c == ";".code || c == "{".code || c == "}".code) start = i + 1;
+			i++;
+		}
+		while (start < linePrefix.length) {
+			var c = linePrefix.charCodeAt(start);
+			if (c != " ".code && c != "\t".code) break;
+			start++;
+		}
+		return start;
+	}
+
+	function tokenStart(linePrefix:String):Int {
+		var start = linePrefix.length;
+		while (start > 0 && AICodeCompletion.isIdentChar(linePrefix.charCodeAt(start - 1))) start--;
+		return start;
+	}
+
+	function advanceSuggestion(text:String):Bool {
+		if (!isSuggestionAtCursor()) return false;
+		text = normalizeNewlines(text);
+		if (text == "" || !suggestion.displayText.startsWith(text)) return false;
+		suggestion.replaceEnd = copyPos(editor.getCursorPosition());
+		suggestion.displayText = suggestion.displayText.substring(text.length);
+		if (suggestion.displayText == "") {
+			clearRender();
+		} else {
+			renderSuggestion();
+		}
+		return true;
+	}
+
+	function isSuggestionAtCursor():Bool {
+		return suggestion != null && editor.session == suggestion.session && samePos(editor.getCursorPosition(), suggestion.replaceEnd);
+	}
+
+	function isSuggestionCurrent():Bool {
+		return hasSuggestion() && isSuggestionAtCursor();
+	}
+
+	function replaceRange(start:AcePos, end:AcePos, text:String):Void {
+		editor.session.doc.replace(AceRange.fromPair(start, end), text);
+		editor.gotoPos(endPosAfterInsert(start, text));
+	}
+
+	function endPosAfterInsert(start:AcePos, text:String):AcePos {
+		text = normalizeNewlines(text);
+		var lines = text.split("\n");
+		if (lines.length <= 1) return new AcePos(start.column + text.length, start.row);
+		return new AcePos(lines[lines.length - 1].length, start.row + lines.length - 1);
+	}
+
+	function nextLinePart(text:String):String {
+		var index = text.indexOf("\n");
+		return index >= 0 ? text.substring(0, index + 1) : text;
+	}
+
+	function nextWordPart(text:String):String {
+		if (text == "") return "";
+		var i = 0;
+		while (i < text.length) {
+			var c = text.charCodeAt(i);
+			if (c == "\n".code) return i == 0 ? "\n" : text.substring(0, i);
+			if (c != " ".code && c != "\t".code) break;
+			i++;
+		}
+		if (i >= text.length) return text;
+		var c = text.charCodeAt(i);
+		if (AICodeCompletion.isIdentChar(c)) {
+			while (i < text.length && AICodeCompletion.isIdentChar(text.charCodeAt(i))) i++;
+		} else {
+			i++;
+		}
+		return text.substring(0, i);
+	}
+
+	function normalizeNewlines(text:String):String {
+		return text != null ? text.replace("\r\n", "\n").replace("\r", "\n") : "";
 	}
 
 	function showWidget(text:String, pos:AcePos, session:Dynamic, style:Dynamic):Void {
@@ -719,13 +1011,13 @@ class AICodeCompletionState {
 	
 	function syncGhostPosition():Void {
 		if (!hasSuggestion() || ghost == null) return;
-		if (editor.session != suggestionSession || !samePos(editor.getCursorPosition(), suggestionPos)) {
+		if (editor.session != suggestion.session || !samePos(editor.getCursorPosition(), suggestion.replaceEnd)) {
 			hide();
 			return;
 		}
 		while (ghost.firstChild != null) ghost.removeChild(ghost.firstChild);
-		var line = firstGhostLine(suggestion);
-		var cursor = editor.renderer.textToScreenCoordinates(suggestionPos.row, suggestionPos.column);
+		var line = firstGhostLine(suggestion.displayText);
+		var cursor = editor.renderer.textToScreenCoordinates(suggestion.replaceEnd.row, suggestion.replaceEnd.column);
 		var rect = editor.container.getBoundingClientRect();
 		var lineHeight = editor.renderer.lineHeight;
 		var top = cursor.pageY;

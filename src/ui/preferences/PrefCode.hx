@@ -101,6 +101,13 @@ class PrefCode {
 			current.aiCompletion.inlineEnabled = z;
 			save();
 		});
+		var inlineEagernessLabels = ["Low", "Medium", "High"];
+		var inlineEagernessValues = ["low", "medium", "high"];
+		var inlineEagerness = ui.AICodeCompletion.sanitizeEagerness(Reflect.field(current.aiCompletion, "inlineEagerness"));
+		addDropdown(out, "AI inline eagerness", inlineEagernessLabels[inlineEagernessValues.indexOf(inlineEagerness)], inlineEagernessLabels, function(s) {
+			current.aiCompletion.inlineEagerness = inlineEagernessValues[inlineEagernessLabels.indexOf(s)];
+			save();
+		}).title = "Low waits longer and asks for less; High reacts faster and allows longer suggestions.";
 		addIntInput(out, "AI inline suggestion delay (ms)", current.aiCompletion.inlineDelayMs, function(v) {
 			current.aiCompletion.inlineDelayMs = v;
 			save();

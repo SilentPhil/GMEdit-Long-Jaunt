@@ -165,6 +165,20 @@ using StringTools;
 			}
 		});
 		add(cast {
+			name: "acceptAICompletionWord",
+			bindKey: wm("Ctrl-Alt-Right", "Command-Alt-Right"),
+			exec: function(editor:AceWrap):Bool {
+				return AICodeCompletion.acceptInlinePart(editor, "word");
+			}
+		}, "AI: Accept next completion word");
+		add(cast {
+			name: "acceptAICompletionLine",
+			bindKey: wm("Ctrl-Alt-Down", "Command-Alt-Down"),
+			exec: function(editor:AceWrap):Bool {
+				return AICodeCompletion.acceptInlinePart(editor, "line");
+			}
+		}, "AI: Accept next completion line");
+		add(cast {
 			name: "hideAICompletion",
 			bindKey: "Esc",
 			exec: function(editor:AceWrap):Bool {

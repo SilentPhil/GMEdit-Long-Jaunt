@@ -53,6 +53,7 @@ import haxe.DynamicAccess;
 		aiCompletion: {
 			enabled: false,
 			inlineEnabled: true,
+			inlineEagerness: "medium",
 			inlineDelayMs: 900,
 			inlineContextChars: 3000,
 			inlineMaxOutputTokens: 96,
@@ -222,6 +223,7 @@ typedef PrefDataImpl = {
 typedef PrefAiCompletion = {
 	enabled:Bool,
 	inlineEnabled:Bool,
+	inlineEagerness:String,
 	inlineDelayMs:Int,
 	inlineContextChars:Int,
 	inlineMaxOutputTokens:Int,
