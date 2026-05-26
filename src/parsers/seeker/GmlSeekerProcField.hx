@@ -6,6 +6,7 @@ import gml.GmlFuncDoc;
 import gml.type.GmlType;
 import gml.type.GmlTypeCanCastTo;
 import gml.type.GmlTypeDef;
+import gml.type.GmlTypeTemplateItem;
 import parsers.GmlSeekData.GmlSeekDataHint;
 import tools.JsTools;
 import tools.NativeString;
@@ -25,7 +26,8 @@ class GmlSeekerProcField {
 		info:String,
 		type:GmlType,
 		argTypes:Array<GmlType>,
-		isAuto:Bool
+		isAuto:Bool,
+		?templateItems:Array<GmlTypeTemplateItem>
 	) {
 		var parentSpace:String = null;
 		if (namespace == null) {
@@ -46,6 +48,9 @@ class GmlSeekerProcField {
 		var hintDoc:GmlFuncDoc = null;
 		if (args != null) {
 			var fa = name;
+			if (templateItems != null) {
+				fa += GmlTypeTemplateItem.joinTemplateString(templateItems, true);
+			}
 			if (field == "" && isInst) {
 				// self-call, we check for this in GmlLinterFuncArgs
 				fa += ":";

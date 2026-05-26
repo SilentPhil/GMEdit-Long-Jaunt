@@ -202,7 +202,7 @@ class GmlSeekerProcIdent {
 					default:
 				}
 			}
-			GmlSeekerProcField.addFieldHint(seeker, isConstructor, seeker.jsDoc.interfaceName, true, s, args, null, fieldType, argTypes, true);
+			GmlSeekerProcField.addFieldHint(seeker, isConstructor, seeker.jsDoc.interfaceName, true, s, args, null, fieldType, argTypes, true, templateItems);
 			var addFieldHint_doc = GmlSeekerProcField.addFieldHint_doc;
 			if (addFieldHint_doc != null) {
 				// related: GmlSeekerProcVar
