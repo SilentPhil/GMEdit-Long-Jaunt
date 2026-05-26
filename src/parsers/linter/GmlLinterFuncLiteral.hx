@@ -209,15 +209,22 @@ class GmlLinterFuncLiteral extends GmlLinterHelper {
 				return trouble;
 			}
 		}
+		var self0z = linter.__selfType_set;
+		var self0t = linter.__selfType_type;
 		if (nextSelfOverride != null) {
-			var self0z = linter.__selfType_set;
-			var self0t = linter.__selfType_type;
 			linter.__selfType_set = true;
 			linter.__selfType_type = nextSelfOverride;
+		} else if (oldFuncLiteralDepth > 0 && oldFuncDoc != null && oldFuncDoc.isConstructor
+			&& self0z && self0t == GmlTypeDef.any
+		) {
+			linter.__selfType_set = false;
+			linter.__selfType_type = null;
+		}
+		if (nextSelfOverride != null) {
 			var foundError = readFuncBody();
-			linter.__selfType_set = self0z;
-			linter.__selfType_type = self0t;
 			if (foundError) {
+				linter.__selfType_set = self0z;
+				linter.__selfType_type = self0t;
 				linter.funcLiteralDepth = oldFuncLiteralDepth;
 				linter.constructorInstVars = oldConstructorInstVars;
 				selfOverride = oldSelfOverride;
@@ -226,12 +233,16 @@ class GmlLinterFuncLiteral extends GmlLinterHelper {
 		} else {
 			var foundError = readFuncBody();
 			if (foundError) {
+				linter.__selfType_set = self0z;
+				linter.__selfType_type = self0t;
 				linter.funcLiteralDepth = oldFuncLiteralDepth;
 				linter.constructorInstVars = oldConstructorInstVars;
 				selfOverride = oldSelfOverride;
 				return true;
 			}
 		}
+		linter.__selfType_set = self0z;
+		linter.__selfType_type = self0t;
 		
 		switch (linter.currFuncRetStatus) {
 			case HasReturn:
