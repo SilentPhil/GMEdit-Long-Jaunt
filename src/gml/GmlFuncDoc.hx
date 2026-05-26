@@ -107,7 +107,9 @@ class GmlFuncDoc {
 	/** Return type based on `->type` or `@return` for post-string */
 	public var returnType(get, never):GmlType;
 	private function get_returnType():GmlType {
-		if (post == __returnType_cache_post) return __returnType_cache_type;
+		if (post == __returnType_cache_post && templateItems == __returnType_cache_templateItems) {
+			return __returnType_cache_type;
+		}
 		var str = inline get_returnTypeString();
 		var type:GmlType;
 		if (str != null) {
@@ -117,10 +119,12 @@ class GmlFuncDoc {
 			type = GmlTypeDef.parse(str, name);
 		} else type = null;
 		__returnType_cache_post = post;
+		__returnType_cache_templateItems = templateItems;
 		__returnType_cache_type = type;
 		return type;
 	}
 	var __returnType_cache_post:String;
+	var __returnType_cache_templateItems:Array<GmlTypeTemplateItem>;
 	var __returnType_cache_type:GmlType;
 	static var __returnType_rx:RegExp = new RegExp('^\\)(?:$retArrow(\\S+)?)?');
 	

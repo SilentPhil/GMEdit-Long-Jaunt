@@ -40,6 +40,9 @@ class GmlLinterFuncArgs extends GmlLinterHelper {
 			argTypeClamp = doc.rest && argTypes != null ? argTypesLen - 1 : 0x7fffffff;
 			if (doc.templateItems != null) {
 				templateTypes = NativeArray.create(doc.templateItems.length);
+				if (fnType != null) {
+					GmlTypeTools.equals(fnType, doc.getFunctionType(), templateTypes);
+				}
 			}
 			if (doc.templateSelf != null) {
 				if (doc.pre.endsWith(":(")) {

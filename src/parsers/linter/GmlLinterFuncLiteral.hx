@@ -173,10 +173,9 @@ class GmlLinterFuncLiteral extends GmlLinterHelper {
 					doc.hasReturn = true;
 					doc.returnTypeString = "any";
 					nextFuncRetStatus = WantNoReturnConstructor;
-					if (!hasName) {
-						// An anonymous constructor! Good luck with that
-						nextSelfOverride = GmlTypeDef.any;
-					}
+					nextSelfOverride = globalDoc != null && globalDoc.isConstructor
+						? globalDoc.returnType
+						: name != "function" ? GmlTypeDef.simple(name) : GmlTypeDef.any;
 				}
 			}
 		}

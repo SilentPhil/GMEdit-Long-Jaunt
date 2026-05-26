@@ -2,6 +2,7 @@ package gml;
 import gml.GmlAPI;
 import gml.GmlFuncDoc;
 import gml.type.GmlType;
+import gml.type.GmlTypeTools;
 import tools.ArrayMap;
 import tools.ArrayMapSync;
 import tools.Dictionary;
@@ -250,10 +251,10 @@ class GmlNamespace {
 		kind[field] = doc != null ? "asset.script" : "field";
 		
 		var types = isInst ? instTypes : staticTypes;
-		if (type != null) {
-			types[field] = type;
-		} else if (doc != null) {
+		if (doc != null && (type == null || type.getKind() == KFunction || type.getKind() == KConstructor)) {
 			types[field] = doc.getFunctionType();
+		} else if (type != null) {
+			types[field] = type;
 		}
 		
 		if (doc != null) {
