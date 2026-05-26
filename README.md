@@ -150,26 +150,6 @@ function Battle() constructor {
 }
 ```
 
-### Constructor/static method self typing
-
-Static methods declared inside constructor-style classes keep the class self type, so local variables
-can infer return types from class methods and continue to offer member completion.
-
-```gml
-function GlobalMapObjectAction() constructor {
-	static get_generic_action = function()->GenericAction {
-		return __generic_action;
-	}
-
-	static get_gui_data_struct = function()->GlobalMapObjectActiveActionGuiDataStruct {
-		var generic_action = get_generic_action();
-
-		// GMEdit knows generic_action is GenericAction here:
-		return generic_action.get_gui_data_struct();
-	}
-}
-```
-
 ### Template propagation for methods
 
 Template arguments on constructor instances are propagated into method return types and method
