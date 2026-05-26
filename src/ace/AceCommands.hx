@@ -154,9 +154,30 @@ using StringTools;
 			name: "aiCompleteCode",
 			bindKey: wm("Ctrl-Alt-Space", "Command-Alt-Space"),
 			exec: function(editor:AceWrap) {
+				AICodeCompletion.showInline(editor, true);
+			}
+		}, "AI: Show inline completion");
+		add(cast {
+			name: "acceptAICompletion",
+			bindKey: "Tab",
+			exec: function(editor:AceWrap):Bool {
+				return AICodeCompletion.acceptInline(editor);
+			}
+		});
+		add(cast {
+			name: "hideAICompletion",
+			bindKey: "Esc",
+			exec: function(editor:AceWrap):Bool {
+				return AICodeCompletion.hideInline(editor);
+			}
+		});
+		add({
+			name: "aiInsertCompletion",
+			exec: function(editor:AceWrap) {
 				AICodeCompletion.complete(editor);
 			}
-		}, "AI: Complete code");
+		}, "AI: Insert completion");
+		AICodeCompletion.bind(editor);
 		add({
 			name: "showKeyboardShortcuts",
 			bindKey: wm("Ctrl-Alt-h", "Command-Alt-h"),

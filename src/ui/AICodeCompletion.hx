@@ -5,28 +5,119 @@ import ace.extern.AcePos;
 import electron.Dialog;
 import haxe.Json;
 import js.Syntax;
+import js.html.DivElement;
+import js.html.Element;
 import ui.Preferences;
 using StringTools;
+
+typedef AICompletionConfig = {
+	apiKey:String,
+	baseUrl:String,
+	model:String,
+	maxContextChars:Int,
+	maxOutputTokens:Int,
+}
 
 class AICodeCompletion {
 	static var pending:Bool = false;
 	static inline var DEFAULT_BASE_URL:String = "https://api.openai.com/v1";
 	static inline var DEFAULT_MODEL:String = "gpt-5.4-mini";
 	
+	public static function bind(editor:AceWrap):Void {
+		getState(editor, true).bind();
+	}
+	
+	public static function showInline(editor:AceWrap, explicit:Bool = true):Void {
+		getState(editor, true).request(explicit);
+	}
+	
+	public static function acceptInline(editor:AceWrap):Bool {
+		var state = getState(editor, false);
+		return state != null && state.accept();
+	}
+	
+	public static function hideInline(editor:AceWrap):Bool {
+		var state = getState(editor, false);
+		if (state == null || !state.hasSuggestion()) return false;
+		state.hide();
+		return true;
+	}
+	
 	public static function complete(editor:AceWrap):Void {
-		var prefs = Preferences.current.aiCompletion;
-		if (prefs == null || !prefs.enabled) {
-			Dialog.showWarning("AI code completion is disabled. Enable it in Preferences > Code editor > AI completion.");
-			return;
-		}
 		if (pending) {
 			Dialog.showWarning("AI code completion request is already running.");
 			return;
 		}
+		pending = true;
+		setStatus(editor, "AI completion: requesting...");
+		if (!requestCompletion(editor, false, true, function(completion) {
+			pending = false;
+			editor.insert(completion);
+			setStatus(editor, "AI completion inserted");
+		}, function(errorText) {
+			pending = false;
+			setStatus(editor, "AI completion failed");
+		})) {
+			pending = false;
+		}
+	}
+	
+	public static function requestCompletion(
+		editor:AceWrap,
+		inlineSuggestion:Bool,
+		showErrors:Bool,
+		onSuccess:String->Void,
+		onError:String->Void
+	):Bool {
+		var cfg = readConfig(showErrors);
+		if (cfg == null) return false;
+		var request = buildRequest(editor, cfg.model, cfg.maxContextChars, cfg.maxOutputTokens, inlineSuggestion);
+		postJson(endpointUrl(cfg.baseUrl), cfg.apiKey, Json.stringify(request), function(responseText) {
+			var response:Dynamic;
+			try {
+				response = Json.parse(responseText);
+			} catch (x:Dynamic) {
+				var message = "AI completion returned invalid JSON:\n" + shorten(responseText, 1200);
+				if (showErrors) Dialog.showError(message);
+				onError(message);
+				return;
+			}
+			var completion = cleanupCompletion(extractText(response));
+			if (completion == "") {
+				var message = "AI completion returned empty text.";
+				if (showErrors) Dialog.showWarning(message);
+				onError(message);
+				return;
+			}
+			onSuccess(completion);
+		}, function(errorText) {
+			var message = "AI completion failed:\n" + errorText;
+			if (showErrors) Dialog.showError(message);
+			onError(message);
+		});
+		return true;
+	}
+	
+	static function getState(editor:AceWrap, create:Bool):AICodeCompletionState {
+		var dyn:Dynamic = cast editor;
+		var state:AICodeCompletionState = dyn.__aiCodeCompletion;
+		if (state == null && create) {
+			state = new AICodeCompletionState(editor);
+			dyn.__aiCodeCompletion = state;
+		}
+		return state;
+	}
+	
+	static function readConfig(showErrors:Bool):Null<AICompletionConfig> {
+		var prefs = Preferences.current.aiCompletion;
+		if (prefs == null || !prefs.enabled) {
+			if (showErrors) Dialog.showWarning("AI code completion is disabled. Enable it in Preferences > Code editor > AI completion.");
+			return null;
+		}
 		var apiKey = prefs.apiKey != null ? prefs.apiKey.trim() : "";
 		if (apiKey == "") {
-			Dialog.showWarning("Set an AI API key in Preferences > Code editor > AI completion.");
-			return;
+			if (showErrors) Dialog.showWarning("Set an AI API key in Preferences > Code editor > AI completion.");
+			return null;
 		}
 		var baseUrl = prefs.baseUrl != null ? prefs.baseUrl.trim() : "";
 		if (baseUrl == "") baseUrl = DEFAULT_BASE_URL;
@@ -35,36 +126,16 @@ class AICodeCompletion {
 		var maxOutputTokens = prefs.maxOutputTokens;
 		if (maxOutputTokens <= 0) maxOutputTokens = 256;
 		if (maxOutputTokens < 16) maxOutputTokens = 16;
-		
-		var request = buildRequest(editor, model, prefs.maxContextChars, maxOutputTokens);
-		pending = true;
-		setStatus(editor, "AI completion: requesting...");
-		postJson(endpointUrl(baseUrl), apiKey, Json.stringify(request), function(responseText) {
-			pending = false;
-			var response:Dynamic;
-			try {
-				response = Json.parse(responseText);
-			} catch (x:Dynamic) {
-				setStatus(editor, "AI completion failed");
-				Dialog.showError("AI completion returned invalid JSON:\n" + shorten(responseText, 1200));
-				return;
-			}
-			var completion = cleanupCompletion(extractText(response));
-			if (completion == "") {
-				setStatus(editor, "AI completion returned empty text");
-				Dialog.showWarning("AI completion returned empty text.");
-				return;
-			}
-			editor.insert(completion);
-			setStatus(editor, "AI completion inserted");
-		}, function(errorText) {
-			pending = false;
-			setStatus(editor, "AI completion failed");
-			Dialog.showError("AI completion failed:\n" + errorText);
-		});
+		return {
+			apiKey: apiKey,
+			baseUrl: baseUrl,
+			model: model,
+			maxContextChars: prefs.maxContextChars,
+			maxOutputTokens: maxOutputTokens,
+		};
 	}
 	
-	static function buildRequest(editor:AceWrap, model:String, maxContextChars:Int, maxOutputTokens:Int):Dynamic {
+	static function buildRequest(editor:AceWrap, model:String, maxContextChars:Int, maxOutputTokens:Int, inlineSuggestion:Bool):Dynamic {
 		if (maxContextChars <= 0) maxContextChars = 12000;
 		if (maxContextChars < 1000) maxContextChars = 1000;
 		var code = editor.session.getValue();
@@ -84,6 +155,9 @@ class AICodeCompletion {
 		var prompt = "Complete GameMaker Language code at the cursor.\n"
 			+ "File: " + fileName + "\n"
 			+ "Return only the code to insert at the cursor. Do not repeat code from BEFORE or AFTER.\n";
+		if (inlineSuggestion) {
+			prompt += "This will be shown as an inline ghost suggestion. Prefer the shortest useful continuation; one line is best unless a small block is clearly needed.\n";
+		}
 		if (selected != null && selected != "") {
 			prompt += "The editor currently has selected text; return replacement text for that selection if appropriate.\n";
 		}
@@ -176,14 +250,22 @@ class AICodeCompletion {
 	
 	static function cleanupCompletion(text:String):String {
 		if (text == null) return "";
-		var out = text.trim();
+		var out = text.replace("\r\n", "\n").replace("\r", "\n");
+		out = trimBlankLines(out);
 		if (out.startsWith("```")) {
 			var firstLine = out.indexOf("\n");
 			if (firstLine >= 0) out = out.substring(firstLine + 1);
 			var fence = out.lastIndexOf("```");
 			if (fence >= 0) out = out.substring(0, fence);
 		}
-		return out.trim();
+		return trimBlankLines(out);
+	}
+	
+	static function trimBlankLines(text:String):String {
+		var lines = text.split("\n");
+		while (lines.length > 0 && lines[0].trim() == "") lines.shift();
+		while (lines.length > 0 && lines[lines.length - 1].trim() == "") lines.pop();
+		return lines.join("\n");
 	}
 	
 	static function endpointUrl(baseUrl:String):String {
@@ -206,15 +288,271 @@ class AICodeCompletion {
 		return offset + col;
 	}
 	
-	static function setStatus(editor:AceWrap, message:String):Void {
+	public static function setStatus(editor:AceWrap, message:String):Void {
 		if (editor.statusBar == null) return;
 		editor.statusBar.setText(message);
 		editor.statusBar.ignoreUntil = Main.window.performance.now() + 3000;
 	}
 	
-	static function shorten(text:String, maxLen:Int):String {
+	public static function shorten(text:String, maxLen:Int):String {
 		if (text == null) return "";
 		if (text.length <= maxLen) return text;
 		return text.substring(0, maxLen) + "...";
+	}
+}
+
+class AICodeCompletionState {
+	var editor:AceWrap;
+	var bound:Bool = false;
+	var timerId:Null<Int> = null;
+	var requestId:Int = 0;
+	var ghost:DivElement = null;
+	var suggestion:String = null;
+	var suggestionPos:AcePos = null;
+	var suggestionSession:Dynamic = null;
+	var widget:Dynamic = null;
+	var widgetSession:Dynamic = null;
+	
+	public function new(editor:AceWrap) {
+		this.editor = editor;
+	}
+	
+	public function bind():Void {
+		if (bound) return;
+		bound = true;
+		editor.commands.on("afterExec", onAfterExec);
+		editor.on("changeSelection", function(_) {
+			if (hasSuggestion() && !samePos(editor.getCursorPosition(), suggestionPos)) hide();
+		});
+		editor.on("changeSession", function(_) hide());
+		editor.on("blur", function(_) hide());
+		untyped editor.renderer.on("afterRender", function() syncGhostPosition());
+	}
+	
+	public function hasSuggestion():Bool {
+		return suggestion != null && suggestion != "";
+	}
+	
+	public function accept():Bool {
+		if (!hasSuggestion()) return false;
+		if (editor.session != suggestionSession || !samePos(editor.getCursorPosition(), suggestionPos)) {
+			hide();
+			return false;
+		}
+		var text = suggestion;
+		hide(false);
+		editor.insert(text);
+		AICodeCompletion.setStatus(editor, "AI inline completion accepted");
+		return true;
+	}
+	
+	public function request(explicit:Bool):Void {
+		clearTimer();
+		hide();
+		if (!explicit && !canAutoRequest()) return;
+		if (explicit && editor.completer != null && Reflect.field(editor.completer, "activated") == true) return;
+		if (!editor.selection.isEmpty()) return;
+		var session = editor.session;
+		var pos = copyPos(editor.getCursorPosition());
+		var id = ++requestId;
+		if (!explicit) AICodeCompletion.setStatus(editor, "AI inline completion: requesting...");
+		if (!AICodeCompletion.requestCompletion(editor, true, explicit, function(completion) {
+			if (id != requestId || editor.session != session || !samePos(editor.getCursorPosition(), pos)) return;
+			show(completion, pos, session);
+			AICodeCompletion.setStatus(editor, "AI inline completion ready");
+		}, function(errorText) {
+			if (id != requestId) return;
+			AICodeCompletion.setStatus(editor, "AI inline completion failed");
+			if (!explicit) untyped console.warn(errorText);
+		})) {
+			if (!explicit) AICodeCompletion.setStatus(editor, "");
+		}
+	}
+	
+	public function hide(invalidate:Bool = true):Void {
+		clearTimer();
+		if (invalidate) requestId++;
+		suggestion = null;
+		suggestionPos = null;
+		suggestionSession = null;
+		if (ghost != null) {
+			if (ghost.parentElement != null) ghost.parentElement.removeChild(ghost);
+			ghost = null;
+		}
+		removeWidget();
+	}
+	
+	function onAfterExec(e:Dynamic):Void {
+		var name = e.command != null ? e.command.name : "";
+		if (name == "acceptAICompletion" || name == "hideAICompletion") return;
+		if (name == "insertstring" || name == "backspace" || name == "del" || name == "indent") {
+			hide();
+			schedule();
+		} else if (hasSuggestion()) {
+			hide();
+		}
+	}
+	
+	function schedule():Void {
+		clearTimer();
+		if (!canAutoRequest()) return;
+		var delay = Preferences.current.aiCompletion.inlineDelayMs;
+		if (delay < 250) delay = 250;
+		timerId = Main.window.setTimeout(function() {
+			timerId = null;
+			request(false);
+		}, delay);
+	}
+	
+	function clearTimer():Void {
+		if (timerId != null) {
+			Main.window.clearTimeout(timerId);
+			timerId = null;
+		}
+	}
+	
+	function canAutoRequest():Bool {
+		var prefs = Preferences.current.aiCompletion;
+		if (prefs == null || !prefs.enabled || !prefs.inlineEnabled) return false;
+		if (prefs.apiKey == null || prefs.apiKey.trim() == "") return false;
+		if (!editor.selection.isEmpty()) return false;
+		if (editor.completer != null && Reflect.field(editor.completer, "activated") == true) return false;
+		return true;
+	}
+	
+	function show(text:String, pos:AcePos, session:Dynamic):Void {
+		if (text == null || text == "") return;
+		hide(false);
+		suggestion = text;
+		suggestionPos = copyPos(pos);
+		suggestionSession = session;
+		ghost = Main.document.createDivElement();
+		ghost.className = "ai-code-ghost";
+		ghost.style.position = "fixed";
+		ghost.style.left = "0";
+		ghost.style.top = "0";
+		ghost.style.zIndex = "1000";
+		ghost.style.pointerEvents = "none";
+		ghost.style.color = "rgba(128, 128, 128, 0.72)";
+		ghost.style.whiteSpace = "pre";
+		ghost.style.overflow = "hidden";
+		var content:Element = editor.container.querySelector(".ace_content");
+		var style:Dynamic = Main.window.getComputedStyle(content != null ? content : editor.container);
+		ghost.style.fontFamily = style.fontFamily;
+		ghost.style.fontSize = style.fontSize;
+		ghost.style.fontWeight = style.fontWeight;
+		ghost.style.letterSpacing = style.letterSpacing;
+		Main.document.body.appendChild(ghost);
+		showWidget(text, pos, session, style);
+		syncGhostPosition();
+	}
+
+	function showWidget(text:String, pos:AcePos, session:Dynamic, style:Dynamic):Void {
+		var tail = tailGhostLines(text);
+		if (tail.length == 0) return;
+		var lineHeight = editor.renderer.lineHeight;
+		var padding:Dynamic = Reflect.field(Reflect.field(editor.renderer, "layerConfig"), "padding");
+		if (padding == null) padding = 0;
+		var el = Main.document.createDivElement();
+		el.className = "ai-code-ghost-widget";
+		el.style.pointerEvents = "none";
+		el.style.color = "rgba(128, 128, 128, 0.72)";
+		el.style.whiteSpace = "pre";
+		el.style.overflow = "hidden";
+		el.style.fontFamily = style.fontFamily;
+		el.style.fontSize = style.fontSize;
+		el.style.fontWeight = style.fontWeight;
+		el.style.letterSpacing = style.letterSpacing;
+		el.style.height = (tail.length * lineHeight) + "px";
+		el.style.lineHeight = lineHeight + "px";
+		el.style.paddingLeft = padding + "px";
+		for (line in tail) {
+			var lineEl = Main.document.createDivElement();
+			lineEl.className = "ai-code-ghost-widget-line";
+			lineEl.style.height = lineHeight + "px";
+			lineEl.style.lineHeight = lineHeight + "px";
+			lineEl.style.whiteSpace = "pre";
+			lineEl.textContent = line == "" ? " " : line;
+			el.appendChild(lineEl);
+		}
+		var manager = ensureWidgetManager(session);
+		if (manager == null) return;
+		widgetSession = session;
+		widget = {
+			row: pos.row,
+			fixedWidth: false,
+			coverGutter: false,
+			el: el,
+			type: "aiCodeGhost",
+			pixelHeight: tail.length * lineHeight,
+			rowCount: tail.length,
+		};
+		manager.addLineWidget(widget);
+	}
+
+	function removeWidget():Void {
+		if (widget == null) return;
+		var manager:Dynamic = widgetSession != null ? Reflect.field(widgetSession, "widgetManager") : null;
+		if (manager != null) manager.removeLineWidget(widget);
+		widget = null;
+		widgetSession = null;
+	}
+
+	function ensureWidgetManager(session:Dynamic):Dynamic {
+		var manager:Dynamic = Reflect.field(session, "widgetManager");
+		if (manager != null) {
+			manager.attach(editor);
+			return manager;
+		}
+		var module:Dynamic = AceWrap.require("ace/line_widgets");
+		var lineWidgets:Dynamic = Reflect.field(module, "LineWidgets");
+		if (lineWidgets == null) return null;
+		manager = Syntax.code("new {0}({1})", lineWidgets, session);
+		manager.attach(editor);
+		return manager;
+	}
+	
+	function syncGhostPosition():Void {
+		if (!hasSuggestion() || ghost == null) return;
+		if (editor.session != suggestionSession || !samePos(editor.getCursorPosition(), suggestionPos)) {
+			hide();
+			return;
+		}
+		while (ghost.firstChild != null) ghost.removeChild(ghost.firstChild);
+		var line = firstGhostLine(suggestion);
+		var cursor = editor.renderer.textToScreenCoordinates(suggestionPos.row, suggestionPos.column);
+		var rect = editor.container.getBoundingClientRect();
+		var lineHeight = editor.renderer.lineHeight;
+		var top = cursor.pageY;
+		if (top + lineHeight < rect.top || top > rect.bottom) return;
+		var lineEl = Main.document.createDivElement();
+		lineEl.className = "ai-code-ghost-line";
+		lineEl.style.position = "fixed";
+		lineEl.style.left = cursor.pageX + "px";
+		lineEl.style.top = top + "px";
+		lineEl.style.height = lineHeight + "px";
+		lineEl.style.lineHeight = lineHeight + "px";
+		lineEl.style.whiteSpace = "pre";
+		lineEl.textContent = line == "" ? " " : line;
+		ghost.appendChild(lineEl);
+	}
+
+	function firstGhostLine(text:String):String {
+		var first = text.split("\n")[0];
+		return first != null ? first : "";
+	}
+
+	function tailGhostLines(text:String):Array<String> {
+		var lines = text.split("\n");
+		if (lines.length <= 1) return [];
+		return lines.slice(1);
+	}
+	
+	function copyPos(pos:AcePos):AcePos {
+		return new AcePos(pos.column, pos.row);
+	}
+	
+	function samePos(a:AcePos, b:AcePos):Bool {
+		return a != null && b != null && a.row == b.row && a.column == b.column;
 	}
 }

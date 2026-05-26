@@ -52,6 +52,8 @@ import haxe.DynamicAccess;
 		showArgTypesInStatusBar: false,
 		aiCompletion: {
 			enabled: false,
+			inlineEnabled: true,
+			inlineDelayMs: 900,
 			baseUrl: "https://api.openai.com/v1",
 			apiKey: "",
 			model: "gpt-5.4-mini",
@@ -217,6 +219,8 @@ typedef PrefDataImpl = {
 }
 typedef PrefAiCompletion = {
 	enabled:Bool,
+	inlineEnabled:Bool,
+	inlineDelayMs:Int,
 	baseUrl:String,
 	apiKey:String,
 	model:String,

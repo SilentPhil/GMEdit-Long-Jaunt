@@ -97,6 +97,14 @@ class PrefCode {
 			current.aiCompletion.enabled = z;
 			save();
 		});
+		addCheckbox(out, "Show AI inline suggestions while typing", current.aiCompletion.inlineEnabled, function(z) {
+			current.aiCompletion.inlineEnabled = z;
+			save();
+		});
+		addIntInput(out, "AI inline suggestion delay (ms)", current.aiCompletion.inlineDelayMs, function(v) {
+			current.aiCompletion.inlineDelayMs = v;
+			save();
+		});
 		addInput(out, "AI API base URL", current.aiCompletion.baseUrl, function(s) {
 			current.aiCompletion.baseUrl = tools.NativeString.trimBoth(s);
 			save();
