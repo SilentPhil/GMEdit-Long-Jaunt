@@ -439,6 +439,8 @@ typedef GlobalSearchOpt = {
 	?variableTypeInvert:Bool,
 	/** If set, only includes method references whose receiver expression has this type. */
 	?receiverType:String,
+	/** If true, direct self-field references are matched even when not followed by a call. */
+	?receiverAllowSelfField:Bool,
 	?replaceBy:EitherType<String, Function>,
 	/** If `true`, shows pairs of before-after replacement lines but does not modify files. */
 	?previewReplace:Bool,

@@ -100,7 +100,7 @@ class GlobalSearchImpl {
 		var saveCtxItems:Array<GlobalSearchItem>;
 		var typeFilter = opt.variableType != null
 			? new GlobalSearchTypeFilter(opt.variableType)
-			: opt.receiverType != null ? new GlobalSearchTypeFilter(opt.receiverType, true) : null;
+			: opt.receiverType != null ? new GlobalSearchTypeFilter(opt.receiverType, true, opt.receiverAllowSelfField == true) : null;
 		if (typeFilter != null && !typeFilter.isValid()) return;
 		var typeSearch = typeFilter != null;
 		var typeSearchInvert = typeSearch && opt.variableTypeInvert == true;

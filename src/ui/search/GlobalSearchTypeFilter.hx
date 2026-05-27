@@ -37,6 +37,7 @@ using tools.NativeString;
 class GlobalSearchTypeFilter {
 	var target:GmlType;
 	var receiverMode:Bool;
+	var receiverAllowSelfField:Bool;
 	var code:String;
 	var displayCode:String;
 	var originalLines:Array<String>;
@@ -45,9 +46,10 @@ class GlobalSearchTypeFilter {
 	var session:AceSession;
 	var editor:EditCode;
 	
-	public function new(typeName:String, receiverMode:Bool = false) {
+	public function new(typeName:String, receiverMode:Bool = false, receiverAllowSelfField:Bool = false) {
 		target = GmlTypeDef.parse(typeName, "global search");
 		this.receiverMode = receiverMode;
+		this.receiverAllowSelfField = receiverAllowSelfField;
 	}
 	
 	public inline function isValid():Bool {
@@ -180,6 +182,9 @@ class GlobalSearchTypeFilter {
 			return inf != null ? inf.type : null;
 		}
 		if (tokenInfo.token.type == "localfield") {
+			if (receiverAllowSelfField) {
+				return AceGmlTools.getSelfType({ session: session, scope: scope });
+			}
 			var nextIter = new AceTokenIterator(session, tokenInfo.pos.row, tokenInfo.pos.column);
 			var next = nextIter.stepForwardNonText();
 			return next != null && next.value == "("

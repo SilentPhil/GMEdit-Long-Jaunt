@@ -190,19 +190,43 @@ class OpenDeclaration {
 		return AceTooltips.getTypeAt(session, pos, token);
 	}
 
-	static function getStaticMethodOwnerType(session:AceSession, pos:AcePos, token:AceToken):String {
-		if (token == null) return null;
-		var line = session.getLine(pos.row);
-		var rx = new RegExp("^\\s*static\\s+" + tools.NativeString.escapeRx(token.value) + "\\s*=\\s*function\\b");
-		if (!rx.test(line)) return null;
+	static function getConstructorOwnerType(session:AceSession, pos:AcePos):String {
 		var ctorRx = new RegExp("^\\s*function\\s+([A-Za-z_][A-Za-z0-9_]*)\\b[\\s\\S]*\\bconstructor\\b");
 		var row = pos.row + 1;
 		while (--row >= 0) {
 			var mt = ctorRx.exec(session.getLine(row));
 			if (mt != null) return mt[1];
 		}
+		return null;
+	}
+
+	static function getStaticMethodOwnerType(session:AceSession, pos:AcePos, token:AceToken):String {
+		if (token == null) return null;
+		var line = session.getLine(pos.row);
+		var rx = new RegExp("^\\s*static\\s+" + tools.NativeString.escapeRx(token.value) + "\\s*=\\s*function\\b");
+		if (!rx.test(line)) return null;
+		var owner = getConstructorOwnerType(session, pos);
+		if (owner != null) return owner;
 		var file = session.gmlFile;
 		return file != null ? file.name : null;
+	}
+
+	static function isDirectClassField(session:AceSession, pos:AcePos, token:AceToken):Bool {
+		if (token == null) return false;
+		switch (token.type) {
+			case "localfield", "field": {}
+			default: return false;
+		}
+		var iter = new AceTokenIterator(session, pos.row, pos.column);
+		var tokenPos = iter.getCurrentTokenPosition();
+		var line = session.getLine(tokenPos.row);
+		var p = tokenPos.column;
+		while (--p >= 0) {
+			var c = line.fastCodeAt(p);
+			if (c == " ".code || c == "\t".code) continue;
+			return c != ".".code;
+		}
+		return true;
 	}
 
 	public static function findReferences(session:AceSession, pos:AcePos, token:AceToken):Bool {
@@ -213,6 +237,17 @@ class OpenDeclaration {
 				find: token.value,
 				receiverType: ownerType,
 			});
+		} else if (isDirectClassField(session, pos, token)) {
+			ownerType = getConstructorOwnerType(session, pos);
+			if (ownerType != null) {
+				GlobalSearch.findReferences(token.value, {
+					find: token.value,
+					receiverType: ownerType,
+					receiverAllowSelfField: true,
+				});
+			} else {
+				GlobalSearch.findReferences(token.value);
+			}
 		} else {
 			GlobalSearch.findReferences(token.value);
 		}
