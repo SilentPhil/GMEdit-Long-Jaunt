@@ -52,6 +52,12 @@ class PrefCode {
 			save();
 		});
 		addWiki(el, "https://github.com/GameMakerDiscord/GMEdit/wiki/Preferences#auto-completion-mode");
+
+		addIntInput(out, "Auto-completion popup width (px)", current.compPopupWidth, function(v) {
+			current.compPopupWidth = clampAutocompletePopupWidth(v);
+			applyAutocompletePopupWidth();
+			save();
+		}).title = "Width of the suggestions popup. Allowed range: 160..1600px.";
 		
 		//
 		var optSnippets_0 = ["gml", "gml_search", "shader"];

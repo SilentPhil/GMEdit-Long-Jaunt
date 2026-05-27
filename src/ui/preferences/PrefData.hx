@@ -15,6 +15,7 @@ import haxe.DynamicAccess;
 		compMatchMode: PrefMatchMode.AceSmart,
 		compKeywords: true,
 		compFilterSnippets: true,
+		compPopupWidth: 300,
 		
 		argsMagic: true,
 		argsFormat: "",
@@ -135,6 +136,7 @@ typedef PrefDataImpl = {
 	compMatchMode:PrefMatchMode,
 	compKeywords:Bool,
 	compFilterSnippets:Bool,
+	compPopupWidth:Int,
 	apiFeatureFlags:Array<String>,
 	
 	detectTab:Bool,
