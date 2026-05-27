@@ -181,15 +181,17 @@ class GlobalSearchTypeFilter {
 			var inf = GmlLinter.getType(expr, editor, scope, dotPos);
 			return inf != null ? inf.type : null;
 		}
-		if (tokenInfo.token.type == "localfield") {
-			if (receiverAllowSelfField) {
-				return AceGmlTools.getSelfType({ session: session, scope: scope });
+		var nextIter = new AceTokenIterator(session, tokenInfo.pos.row, tokenInfo.pos.column);
+		var next = nextIter.stepForwardNonText();
+		if (next != null && next.value == "(") {
+			return AceGmlTools.getSelfType({ session: session, scope: scope });
+		}
+		if (receiverAllowSelfField) {
+			switch (tokenInfo.token.type) {
+				case "localfield", "field":
+					return AceGmlTools.getSelfType({ session: session, scope: scope });
+				default:
 			}
-			var nextIter = new AceTokenIterator(session, tokenInfo.pos.row, tokenInfo.pos.column);
-			var next = nextIter.stepForwardNonText();
-			return next != null && next.value == "("
-				? AceGmlTools.getSelfType({ session: session, scope: scope })
-				: null;
 		}
 		return null;
 	}
