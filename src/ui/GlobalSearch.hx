@@ -437,6 +437,8 @@ typedef GlobalSearchOpt = {
 	?variableType:String,
 	/** If true, includes typed references that do not match variableType and enabled non-code text segments. */
 	?variableTypeInvert:Bool,
+	/** If set, only includes method references whose receiver expression has this type. */
+	?receiverType:String,
 	?replaceBy:EitherType<String, Function>,
 	/** If `true`, shows pairs of before-after replacement lines but does not modify files. */
 	?previewReplace:Bool,

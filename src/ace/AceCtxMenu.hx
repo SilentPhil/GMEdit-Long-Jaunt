@@ -120,7 +120,7 @@ class AceCtxMenu {
 			accelerator: "Shift+F1",
 			click: function() {
 				autofixToken();
-				if (tk != null) GlobalSearch.findReferences(tk.value);
+				if (tk != null) OpenDeclaration.findReferences(editor.session, pos, tk);
 			}
 		});
 		//

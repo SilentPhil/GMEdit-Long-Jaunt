@@ -190,6 +190,35 @@ class OpenDeclaration {
 		return AceTooltips.getTypeAt(session, pos, token);
 	}
 
+	static function getStaticMethodOwnerType(session:AceSession, pos:AcePos, token:AceToken):String {
+		if (token == null) return null;
+		var line = session.getLine(pos.row);
+		var rx = new RegExp("^\\s*static\\s+" + tools.NativeString.escapeRx(token.value) + "\\s*=\\s*function\\b");
+		if (!rx.test(line)) return null;
+		var ctorRx = new RegExp("^\\s*function\\s+([A-Za-z_][A-Za-z0-9_]*)\\b[\\s\\S]*\\bconstructor\\b");
+		var row = pos.row + 1;
+		while (--row >= 0) {
+			var mt = ctorRx.exec(session.getLine(row));
+			if (mt != null) return mt[1];
+		}
+		var file = session.gmlFile;
+		return file != null ? file.name : null;
+	}
+
+	public static function findReferences(session:AceSession, pos:AcePos, token:AceToken):Bool {
+		if (token == null) return false;
+		var ownerType = getStaticMethodOwnerType(session, pos, token);
+		if (ownerType != null) {
+			GlobalSearch.findReferences(token.value, {
+				find: token.value,
+				receiverType: ownerType,
+			});
+		} else {
+			GlobalSearch.findReferences(token.value);
+		}
+		return true;
+	}
+
 	static function canOpenTypeAt(token:AceToken):Bool {
 		return switch (token.type) {
 			case "local", "sublocal", "field", "localfield", "globalfield", "globalvar": true;

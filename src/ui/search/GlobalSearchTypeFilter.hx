@@ -1,9 +1,12 @@
 package ui.search;
+import ace.AceGmlTools;
 import ace.AceTools;
 import ace.AceTooltips;
 import ace.extern.AcePos;
+import ace.extern.AceRange;
 import ace.extern.AceSession;
 import ace.extern.AceToken;
+import ace.extern.AceTokenIterator;
 import editors.EditCode;
 import file.FileKind;
 import file.kind.KGml;
@@ -33,6 +36,7 @@ using tools.NativeString;
  */
 class GlobalSearchTypeFilter {
 	var target:GmlType;
+	var receiverMode:Bool;
 	var code:String;
 	var displayCode:String;
 	var originalLines:Array<String>;
@@ -41,8 +45,9 @@ class GlobalSearchTypeFilter {
 	var session:AceSession;
 	var editor:EditCode;
 	
-	public function new(typeName:String) {
+	public function new(typeName:String, receiverMode:Bool = false) {
 		target = GmlTypeDef.parse(typeName, "global search");
+		this.receiverMode = receiverMode;
 	}
 	
 	public inline function isValid():Bool {
@@ -104,7 +109,9 @@ class GlobalSearchTypeFilter {
 	
 	public function accepts(ctxName:String, offset:Int, text:String, matchCase:Bool, invert:Bool = false):Bool {
 		if (!isIdentAt(offset, text.length)) return false;
-		var actual = getTypeAt(offset, text, matchCase, ctxName);
+		var actual = receiverMode
+			? getReceiverTypeAt(offset, text, matchCase, ctxName)
+			: getTypeAt(offset, text, matchCase, ctxName);
 		if (actual == null) return false;
 		var matches = typeMatches(actual);
 		return invert ? !matches : matches;
@@ -148,6 +155,36 @@ class GlobalSearchTypeFilter {
 				t = getLocalType(ctxScope, text, matchCase);
 				if (t != null) return t;
 			}
+		}
+		return null;
+	}
+
+	function getReceiverTypeAt(offset:Int, text:String, matchCase:Bool, ctxName:String):GmlType {
+		var ctxScope = getScopeFromContextName(ctxName);
+		var originalPos = offsetToPos(offset);
+		var row = originalPos.row;
+		if (row < 0 || row >= displayLines.length) return null;
+		var displayColumn = mapColumn(row, originalPos.column, text, matchCase);
+		var tokenInfo = getMatchingToken(row, displayColumn, text, matchCase);
+		if (tokenInfo == null) return null;
+		var scope = session.gmlScopes.get(row);
+		if (scope == null) scope = ctxScope;
+		var iter = new AceTokenIterator(session, tokenInfo.pos.row, tokenInfo.pos.column);
+		var prev = iter.stepBackwardNonText();
+		if (prev != null && prev.value == ".") {
+			var dotPos = iter.getCurrentTokenPosition();
+			var from = AceGmlTools.skipDotExprBackwards(session, dotPos);
+			var expr = session.getTextRange(AceRange.fromPair(from, dotPos));
+			if (StringTools.trim(expr) == "") return null;
+			var inf = GmlLinter.getType(expr, editor, scope, dotPos);
+			return inf != null ? inf.type : null;
+		}
+		if (tokenInfo.token.type == "localfield") {
+			var nextIter = new AceTokenIterator(session, tokenInfo.pos.row, tokenInfo.pos.column);
+			var next = nextIter.stepForwardNonText();
+			return next != null && next.value == "("
+				? AceGmlTools.getSelfType({ session: session, scope: scope })
+				: null;
 		}
 		return null;
 	}

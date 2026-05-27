@@ -98,7 +98,9 @@ class GlobalSearchImpl {
 		var saveItems = saveData.list;
 		var saveItem:GlobalSearchItem;
 		var saveCtxItems:Array<GlobalSearchItem>;
-		var typeFilter = opt.variableType != null ? new GlobalSearchTypeFilter(opt.variableType) : null;
+		var typeFilter = opt.variableType != null
+			? new GlobalSearchTypeFilter(opt.variableType)
+			: opt.receiverType != null ? new GlobalSearchTypeFilter(opt.receiverType, true) : null;
 		if (typeFilter != null && !typeFilter.isValid()) return;
 		var typeSearch = typeFilter != null;
 		var typeSearchInvert = typeSearch && opt.variableTypeInvert == true;
@@ -352,6 +354,8 @@ class GlobalSearchImpl {
 				head += opt.variableTypeInvert == true
 					? ' for type != ${opt.variableType}'
 					: ' for type ${opt.variableType}';
+			} else if (opt.receiverType != null) {
+				head += ' for receiver type ${opt.receiverType}';
 			}
 			if (isRepl) {
 				if (isPrev) {
