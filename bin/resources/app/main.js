@@ -37,6 +37,12 @@ const fs = require('fs')
 let activeWindows = []
 const isWindows = process.platform == "win32"
 const isMac = process.platform == "darwin"
+const appId = "cc.yal.gmedit"
+const appIconPath = path.join(__dirname, "icons", "icon." + (isWindows ? "ico" : "png"))
+
+if (isWindows) {
+	app.setAppUserModelId(appId)
+}
 app.on("browser-window-created", (e, wnd) => {
 	if (!isMac) {
 		wnd.removeMenu();
@@ -123,7 +129,7 @@ function createWindow(first) {
 			contextIsolation: false,
 		},
 		show: !showOnceReady,
-		icon: __dirname + '/favicon.' + (isWindows ? "ico" : "png")
+		icon: appIconPath
 	})
 
 	wnd.webContents.on('did-create-window', (childWnd) => {
