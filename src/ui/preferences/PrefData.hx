@@ -52,6 +52,7 @@ import haxe.DynamicAccess;
 		showArgTypesInStatusBar: false,
 		aiCompletion: {
 			enabled: false,
+			provider: "openai",
 			inlineEnabled: true,
 			inlineEagerness: "medium",
 			inlineDelayMs: 900,
@@ -223,6 +224,7 @@ typedef PrefDataImpl = {
 }
 typedef PrefAiCompletion = {
 	enabled:Bool,
+	provider:String,
 	inlineEnabled:Bool,
 	inlineEagerness:String,
 	inlineDelayMs:Int,

@@ -197,6 +197,18 @@ using StringTools;
 				AICodeCompletion.copyLastDebug(editor);
 			}
 		}, "AI: Copy last completion debug");
+		add({
+			name: "aiCopilotSignIn",
+			exec: function(editor:AceWrap) {
+				ui.CopilotLanguageServer.signIn(editor);
+			}
+		}, "AI: GitHub Copilot sign in");
+		add({
+			name: "aiCopilotSignOut",
+			exec: function(editor:AceWrap) {
+				ui.CopilotLanguageServer.signOut(editor);
+			}
+		}, "AI: GitHub Copilot sign out");
 		AICodeCompletion.bind(editor);
 		add({
 			name: "showKeyboardShortcuts",

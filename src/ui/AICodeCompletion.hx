@@ -13,6 +13,7 @@ import ui.Preferences;
 using StringTools;
 
 typedef AICompletionConfig = {
+	provider:String,
 	apiKey:String,
 	baseUrl:String,
 	model:String,
@@ -120,6 +121,9 @@ class AICodeCompletion {
 	):Null<AICompletionRequestHandle> {
 		var cfg = readConfig(showErrors);
 		if (cfg == null) return null;
+		if (cfg.provider == "copilot") {
+			return CopilotLanguageServer.requestCompletion(editor, inlineSuggestion, showErrors, onSuccess, onError);
+		}
 		var requestContextChars = inlineSuggestion ? cfg.inlineContextChars : cfg.maxContextChars;
 		var requestMaxOutputTokens = inlineSuggestion ? cfg.inlineMaxOutputTokens : cfg.maxOutputTokens;
 		var requestData = buildRequest(editor, cfg.model, requestContextChars, requestMaxOutputTokens, inlineSuggestion);
@@ -203,8 +207,9 @@ class AICodeCompletion {
 			if (showErrors) Dialog.showWarning("AI code completion is disabled. Enable it in Preferences > Code editor > AI completion.");
 			return null;
 		}
+		var provider = sanitizeProvider(Reflect.field(prefs, "provider"));
 		var apiKey = prefs.apiKey != null ? prefs.apiKey.trim() : "";
-		if (apiKey == "") {
+		if (provider != "copilot" && apiKey == "") {
 			if (showErrors) Dialog.showWarning("Set an AI API key in Preferences > Code editor > AI completion.");
 			return null;
 		}
@@ -228,6 +233,7 @@ class AICodeCompletion {
 			default:
 		}
 		return {
+			provider: provider,
 			apiKey: apiKey,
 			baseUrl: baseUrl,
 			model: model,
@@ -237,6 +243,14 @@ class AICodeCompletion {
 			inlineMaxOutputTokens: inlineMaxOutputTokens,
 			inlineEagerness: inlineEagerness,
 			debugEnabled: Reflect.field(prefs, "debugEnabled") == true,
+		};
+	}
+
+	public static function sanitizeProvider(value:Dynamic):String {
+		var text = value != null ? Std.string(value).toLowerCase().trim() : "";
+		return switch (text) {
+			case "copilot": "copilot";
+			default: "openai";
 		};
 	}
 
@@ -1067,7 +1081,7 @@ class AICodeCompletionState {
 	function canAutoRequest():Bool {
 		var prefs = Preferences.current.aiCompletion;
 		if (prefs == null || !prefs.enabled || !prefs.inlineEnabled) return false;
-		if (prefs.apiKey == null || prefs.apiKey.trim() == "") return false;
+		if (AICodeCompletion.sanitizeProvider(Reflect.field(prefs, "provider")) != "copilot" && (prefs.apiKey == null || prefs.apiKey.trim() == "")) return false;
 		if (!editor.selection.isEmpty()) return false;
 		if (editor.completer != null && Reflect.field(editor.completer, "activated") == true) return false;
 		return true;
