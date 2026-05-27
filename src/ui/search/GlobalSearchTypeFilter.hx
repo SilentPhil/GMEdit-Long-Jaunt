@@ -166,11 +166,16 @@ class GlobalSearchTypeFilter {
 		var originalPos = offsetToPos(offset);
 		var row = originalPos.row;
 		if (row < 0 || row >= displayLines.length) return null;
-		var displayColumn = mapColumn(row, originalPos.column, text, matchCase);
-		var tokenInfo = getMatchingToken(row, displayColumn, text, matchCase);
-		if (tokenInfo == null) return null;
 		var scope = session.gmlScopes.get(row);
 		if (scope == null) scope = ctxScope;
+		var displayColumn = mapColumn(row, originalPos.column, text, matchCase);
+		var tokenInfo = getMatchingToken(row, displayColumn, text, matchCase);
+		if (tokenInfo == null) {
+			if (!isDotAccess(offset) && isOriginalDirectCall(row, originalPos.column, text)) {
+				return getSelfReceiverType(scope, ctxScope);
+			}
+			return null;
+		}
 		var iter = new AceTokenIterator(session, tokenInfo.pos.row, tokenInfo.pos.column);
 		var prev = iter.stepBackwardNonText();
 		if (prev != null && prev.value == ".") {
@@ -184,14 +189,24 @@ class GlobalSearchTypeFilter {
 		var nextIter = new AceTokenIterator(session, tokenInfo.pos.row, tokenInfo.pos.column);
 		var next = nextIter.stepForwardNonText();
 		if (next != null && next.value == "(") {
-			return AceGmlTools.getSelfType({ session: session, scope: scope });
+			return getSelfReceiverType(scope, ctxScope);
 		}
 		if (receiverAllowSelfField) {
 			switch (tokenInfo.token.type) {
 				case "localfield", "field":
-					return AceGmlTools.getSelfType({ session: session, scope: scope });
+					return getSelfReceiverType(scope, ctxScope);
 				default:
 			}
+		}
+		return null;
+	}
+
+	function getSelfReceiverType(scope:String, ctxScope:String):GmlType {
+		var t = AceGmlTools.getSelfType({ session: session, scope: scope });
+		if (t != null) return t;
+		var targetName = target.getNamespace();
+		if (targetName != null && (scope == targetName || ctxScope == targetName)) {
+			return target;
 		}
 		return null;
 	}
@@ -308,6 +323,21 @@ class GlobalSearchTypeFilter {
 			var c = code.fastCodeAt(p);
 			if (c.isSpace1()) continue;
 			return c == ".".code;
+		}
+		return false;
+	}
+
+	function isOriginalDirectCall(row:Int, column:Int, text:String):Bool {
+		if (row < 0 || row >= originalLines.length || column < 0) return false;
+		var line = originalLines[row];
+		var p = column + text.length;
+		while (p < line.length) {
+			var c = line.fastCodeAt(p);
+			if (c == " ".code || c == "\t".code) {
+				p += 1;
+				continue;
+			}
+			return c == "(".code;
 		}
 		return false;
 	}
