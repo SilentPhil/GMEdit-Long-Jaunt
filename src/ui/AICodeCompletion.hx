@@ -239,7 +239,8 @@ class AICodeCompletion {
 		var prompt = "Complete GameMaker Language code at the cursor.\n"
 			+ "File: " + fileName + "\n"
 			+ "Return only the code to insert at the cursor. Do not repeat code from BEFORE or AFTER.\n"
-			+ "If BEFORE ends with a partially typed declaration or expression, return only the missing suffix after the cursor.\n";
+			+ "If BEFORE ends with a partially typed declaration or expression, return only the missing suffix after the cursor.\n"
+			+ "Follow the surrounding code style. Do not put a statement on the same line after if/for/while. Use braces and put the statement on its own indented line, for example `if (condition) {\\n\\treturn value;\\n}` instead of `if (condition) return value;`.\n";
 		if (inlineSuggestion) {
 			prompt += "This will be shown as an inline ghost suggestion. Prefer the shortest useful continuation; one line is best unless a small block is clearly needed.\n"
 				+ "Complete only the current expression, statement, or function body. Never include a following top-level/static member, function, enum, macro, or code copied from AFTER.\n";
@@ -253,7 +254,7 @@ class AICodeCompletion {
 			input: [
 				{
 					role: "system",
-					content: "You are a code completion engine for GameMaker Language (GML). Return only raw code that should be inserted at the cursor. Do not include markdown fences, prose, explanations, or surrounding unchanged code."
+					content: "You are a code completion engine for GameMaker Language (GML). Return only raw code that should be inserted at the cursor. Do not include markdown fences, prose, explanations, or surrounding unchanged code. Preserve the local code style and expand single-line control-flow bodies into braced multi-line blocks."
 				},
 				{ role: "user", content: prompt }
 			],
