@@ -49,10 +49,6 @@ function moveFile(sourceFile, targetFile) {
 	if (fs.existsSync(sourceFile)) throw lastError;
 }
 
-function pad2(value) {
-	return value.toString().padStart(2, "0");
-}
-
 if (!fs.existsSync(buildDateFile)) {
 	throw new Error("Missing bin/buildnumber.txt; run npm run compile before packaging.");
 }
@@ -62,9 +58,7 @@ if (!/^\d{4}-\d{2}-\d{2}$/.test(buildDate)) {
 	throw new Error(`Unexpected build date in bin/buildnumber.txt: ${buildDate}`);
 }
 
-const now = new Date();
-const buildTime = `${pad2(now.getHours())}-${pad2(now.getMinutes())}`;
-const outputName = `GMEdit-${buildDate}-${buildTime}`;
+const outputName = `GMEdit-${buildDate}`;
 const outputDir = path.join(distDir, outputName);
 const outputZip = path.join(distDir, `${outputName}.zip`);
 const generatedZip = path.join(distDir, `GMEdit-${appPackage.version}-win.zip`);
@@ -80,7 +74,7 @@ if (!fs.existsSync(generatedZip)) {
 if (fs.existsSync(outputDir)) {
 	const relativeOutput = path.relative(distDir, outputDir);
 	const isInsideDist = relativeOutput != "" && !relativeOutput.startsWith("..") && !path.isAbsolute(relativeOutput);
-	if (!isInsideDist || !/^GMEdit-\d{4}-\d{2}-\d{2}-\d{2}-\d{2}$/.test(path.basename(outputDir))) {
+	if (!isInsideDist || !/^GMEdit-\d{4}-\d{2}-\d{2}$/.test(path.basename(outputDir))) {
 		throw new Error(`Refusing to replace unexpected output directory: ${outputDir}`);
 	}
 	fs.rmSync(outputDir, { recursive: true, force: true });
@@ -89,7 +83,7 @@ if (fs.existsSync(outputDir)) {
 if (fs.existsSync(outputZip)) {
 	const relativeOutput = path.relative(distDir, outputZip);
 	const isInsideDist = relativeOutput != "" && !relativeOutput.startsWith("..") && !path.isAbsolute(relativeOutput);
-	if (!isInsideDist || !/^GMEdit-\d{4}-\d{2}-\d{2}-\d{2}-\d{2}\.zip$/.test(path.basename(outputZip))) {
+	if (!isInsideDist || !/^GMEdit-\d{4}-\d{2}-\d{2}\.zip$/.test(path.basename(outputZip))) {
 		throw new Error(`Refusing to replace unexpected output archive: ${outputZip}`);
 	}
 	fs.rmSync(outputZip, { force: true });

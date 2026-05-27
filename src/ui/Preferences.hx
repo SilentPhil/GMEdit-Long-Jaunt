@@ -423,6 +423,7 @@ class Preferences {
 		}
 		//
 		current = pref;
+		applyAutocompletePopupWidth();
 		if (doSave) save();
 		//
 		if (pref.theme != null) Theme.current = pref.theme;
@@ -470,6 +471,16 @@ class Preferences {
 		}
 		//
 		load();
+	}
+	public static function clampAutocompletePopupWidth(width:Int):Int {
+		if (width == null) return 300;
+		if (width < 160) return 160;
+		if (width > 1600) return 1600;
+		return width;
+	}
+	public static function applyAutocompletePopupWidth(?width:Int):Void {
+		width = clampAutocompletePopupWidth(width != null ? width : current.compPopupWidth);
+		document.documentElement.style.setProperty("--autocomplete-popup-width", width + "px");
 	}
 	public static function hookSetOption(obj:Dynamic):Void {
 		if (obj.setOption_raw != null) return;
