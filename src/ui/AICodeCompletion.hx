@@ -4,6 +4,7 @@ import ace.AceWrap;
 import ace.extern.AcePos;
 import ace.extern.AceRange;
 import electron.Dialog;
+import electron.Electron;
 import haxe.Json;
 import js.Syntax;
 import js.html.DivElement;
@@ -20,6 +21,7 @@ typedef AICompletionConfig = {
 	inlineContextChars:Int,
 	inlineMaxOutputTokens:Int,
 	inlineEagerness:String,
+	debugEnabled:Bool,
 }
 
 typedef AICompletionRequestHandle = {
@@ -34,8 +36,17 @@ typedef AIInlineSuggestion = {
 	var session:Dynamic;
 }
 
+typedef AICompletionPromptData = {
+	var request:Dynamic;
+	var context:Dynamic;
+	var linePrefix:String;
+	var protectedSuffix:String;
+}
+
 class AICodeCompletion {
 	static var pending:Bool = false;
+	static var lastDebug:Dynamic = null;
+	static var debugSeq:Int = 0;
 	static inline var DEFAULT_BASE_URL:String = "https://api.openai.com/v1";
 	static inline var DEFAULT_MODEL:String = "gpt-5.4-mini";
 	
@@ -60,8 +71,23 @@ class AICodeCompletion {
 	public static function hideInline(editor:AceWrap):Bool {
 		var state = getState(editor, false);
 		if (state == null || !state.hasSuggestion()) return false;
-		state.hide();
+		state.hide(true, "manual-hide");
 		return true;
+	}
+
+	public static function copyLastDebug(editor:AceWrap):Void {
+		if (lastDebug == null) {
+			Dialog.showWarning("No AI completion debug dump is available yet.");
+			return;
+		}
+		var text:String = Syntax.code("JSON.stringify({0}, null, 2)", lastDebug);
+		if (text == null) text = Json.stringify(lastDebug);
+		if (Electron != null && Electron.clipboard != null) {
+			Electron.clipboard.writeText(text);
+			setStatus(editor, "AI completion debug dump copied");
+		} else {
+			Dialog.showWarning("Electron clipboard is unavailable.");
+		}
 	}
 	
 	public static function complete(editor:AceWrap):Void {
@@ -94,26 +120,37 @@ class AICodeCompletion {
 	):Null<AICompletionRequestHandle> {
 		var cfg = readConfig(showErrors);
 		if (cfg == null) return null;
-		var requestLinePrefix = getCurrentLinePrefix(editor);
 		var requestContextChars = inlineSuggestion ? cfg.inlineContextChars : cfg.maxContextChars;
 		var requestMaxOutputTokens = inlineSuggestion ? cfg.inlineMaxOutputTokens : cfg.maxOutputTokens;
-		var request = buildRequest(editor, cfg.model, requestContextChars, requestMaxOutputTokens, inlineSuggestion);
+		var requestData = buildRequest(editor, cfg.model, requestContextChars, requestMaxOutputTokens, inlineSuggestion);
+		var request = requestData.request;
+		var requestLinePrefix = requestData.linePrefix;
 		var isStreaming = inlineSuggestion && onDelta != null;
 		if (isStreaming) Reflect.setField(request, "stream", true);
+		var debug = cfg.debugEnabled ? createDebugRecord(editor, cfg, inlineSuggestion, showErrors, requestLinePrefix, requestContextChars, requestMaxOutputTokens, request, isStreaming, requestData.context) : null;
+		debugEventFor(debug, "request-dispatch", null);
 		var onText = function(rawText:String, isFinal:Bool) {
-			var completion = cleanupCompletion(rawText);
+			var cleaned = cleanupCompletion(rawText);
+			var completion = cleaned;
 			if (inlineSuggestion) {
-				completion = trimInlineExtraDeclarations(completion);
+				completion = trimInlineExtraDeclarations(completion, requestLinePrefix);
 			} else {
 				completion = removeDuplicatedLinePrefix(completion, requestLinePrefix);
 			}
+			debugEventFor(debug, isFinal ? "text-final" : "text-delta", {
+				rawText: rawText,
+				cleanedText: cleaned,
+				filteredText: completion,
+			});
 			if (isFinal) {
 				if (completion == "") {
 					var message = "AI completion returned empty text.";
+					debugEventFor(debug, "error", { message: message });
 					if (showErrors) Dialog.showWarning(message);
 					onError(message);
 					return;
 				}
+				debugEventFor(debug, "success", { completion: completion });
 				onSuccess(completion);
 			} else if (completion != "" && onDelta != null) {
 				onDelta(completion);
@@ -125,14 +162,17 @@ class AICodeCompletion {
 				response = Json.parse(responseText);
 			} catch (x:Dynamic) {
 				var message = "AI completion returned invalid JSON:\n" + shorten(responseText, 1200);
+				debugEventFor(debug, "error", { message: message, responseText: responseText });
 				if (showErrors) Dialog.showError(message);
 				onError(message);
 				return;
 			}
+			debugEventFor(debug, "response-json", { response: response });
 			onText(extractText(response), true);
 		};
 		var onRequestError = function(errorText:String) {
 			var message = "AI completion failed:\n" + errorText;
+			debugEventFor(debug, "error", { message: message });
 			if (showErrors) Dialog.showError(message);
 			onError(message);
 		};
@@ -196,7 +236,101 @@ class AICodeCompletion {
 			inlineContextChars: inlineContextChars,
 			inlineMaxOutputTokens: inlineMaxOutputTokens,
 			inlineEagerness: inlineEagerness,
+			debugEnabled: Reflect.field(prefs, "debugEnabled") == true,
 		};
+	}
+
+	static function createDebugRecord(
+		editor:AceWrap,
+		cfg:AICompletionConfig,
+		inlineSuggestion:Bool,
+		showErrors:Bool,
+		requestLinePrefix:String,
+		requestContextChars:Int,
+		requestMaxOutputTokens:Int,
+		request:Dynamic,
+		isStreaming:Bool,
+		requestContext:Dynamic
+	):Dynamic {
+		var pos = editor.getCursorPosition();
+		var line = editor.session.getLine(pos.row);
+		var column = pos.column;
+		if (column < 0) column = 0;
+		if (column > line.length) column = line.length;
+		var file = editor.session.gmlFile;
+		var filePath:Dynamic = null;
+		var fileName = "untitled";
+		if (file != null) {
+			fileName = file.name;
+			filePath = Reflect.field(file, "path");
+		}
+		var debug:Dynamic = {
+			id: ++debugSeq,
+			createdAt: Date.now().toString(),
+			startMs: Main.window.performance.now(),
+			file: {
+				name: fileName,
+				path: filePath,
+			},
+			cursor: debugPos(pos),
+			line: line,
+			linePrefix: requestLinePrefix,
+			lineSuffix: line.substring(column),
+			selectedText: editor.getSelectedText(),
+			mode: inlineSuggestion ? "inline" : "insert",
+			showErrors: showErrors,
+			streaming: isStreaming,
+			config: {
+				baseUrl: cfg.baseUrl,
+				model: cfg.model,
+				maxContextChars: cfg.maxContextChars,
+				maxOutputTokens: cfg.maxOutputTokens,
+				inlineContextChars: cfg.inlineContextChars,
+				inlineMaxOutputTokens: cfg.inlineMaxOutputTokens,
+				inlineEagerness: cfg.inlineEagerness,
+				requestContextChars: requestContextChars,
+				requestMaxOutputTokens: requestMaxOutputTokens,
+				apiKey: "<redacted>",
+			},
+			requestContext: requestContext,
+			request: request,
+			events: [],
+		};
+		lastDebug = debug;
+		debugEventFor(debug, "request-created", null);
+		return debug;
+	}
+
+	static function debugEventFor(debug:Dynamic, name:String, data:Dynamic):Void {
+		if (debug == null) return;
+		var events:Dynamic = Reflect.field(debug, "events");
+		if (!Std.is(events, Array)) return;
+		var event:Dynamic = {
+			name: name,
+			elapsedMs: debugElapsed(debug),
+		};
+		if (data != null) Reflect.setField(event, "data", data);
+		(cast events:Array<Dynamic>).push(event);
+	}
+
+	public static function debugEvent(name:String, ?data:Dynamic):Void {
+		if (!isDebugEnabled() || lastDebug == null) return;
+		debugEventFor(lastDebug, name, data);
+	}
+
+	static function isDebugEnabled():Bool {
+		var prefs = Preferences.current.aiCompletion;
+		return prefs != null && Reflect.field(prefs, "debugEnabled") == true;
+	}
+
+	static function debugElapsed(debug:Dynamic):Float {
+		var start = Std.parseFloat(Std.string(Reflect.field(debug, "startMs")));
+		if (Math.isNaN(start)) return 0;
+		return Main.window.performance.now() - start;
+	}
+
+	public static function debugPos(pos:AcePos):Dynamic {
+		return pos != null ? { row: pos.row, column: pos.column } : null;
 	}
 
 	public static function sanitizeEagerness(value:Dynamic):String {
@@ -219,13 +353,13 @@ class AICodeCompletion {
 		return value;
 	}
 	
-	static function buildRequest(editor:AceWrap, model:String, maxContextChars:Int, maxOutputTokens:Int, inlineSuggestion:Bool):Dynamic {
+	static function buildRequest(editor:AceWrap, model:String, maxContextChars:Int, maxOutputTokens:Int, inlineSuggestion:Bool):AICompletionPromptData {
 		if (maxContextChars <= 0) maxContextChars = 12000;
 		if (maxContextChars < 1000) maxContextChars = 1000;
 		var code = editor.session.getValue();
 		var pos = editor.getCursorPosition();
 		var offset = posToOffset(code, pos);
-		var beforeLen = Std.int(maxContextChars * 0.7);
+		var beforeLen = Std.int(maxContextChars * (inlineSuggestion ? 0.82 : 0.7));
 		var afterLen = maxContextChars - beforeLen;
 		var beforeStart = offset - beforeLen;
 		if (beforeStart < 0) beforeStart = 0;
@@ -233,32 +367,53 @@ class AICodeCompletion {
 		if (afterEnd > code.length) afterEnd = code.length;
 		var before = code.substring(beforeStart, offset);
 		var after = code.substring(offset, afterEnd);
+		var linePrefix = getCurrentLinePrefix(editor);
+		var protectedSuffix = leadingNonEmptyLines(after, inlineSuggestion ? 8 : 4, inlineSuggestion ? 1200 : 600);
 		var file = editor.session.gmlFile;
 		var fileName = file != null ? file.name : "untitled";
 		var selected = editor.getSelectedText();
-		var prompt = "Complete GameMaker Language code at the cursor.\n"
+		var prompt = "Complete GameMaker Language code at <CURSOR/>.\n"
 			+ "File: " + fileName + "\n"
-			+ "Return only the code to insert at the cursor. Do not repeat code from BEFORE or AFTER.\n"
-			+ "If BEFORE ends with a partially typed declaration or expression, return only the missing suffix after the cursor.\n"
+			+ "Think of this as fill-in-the-middle: PREFIX is already before the cursor, PROTECTED_SUFFIX is already after the cursor.\n"
+			+ "Return only the missing code to insert at <CURSOR/>. Never return PREFIX or PROTECTED_SUFFIX text.\n"
+			+ "If PREFIX ends with a partially typed declaration or expression, return only the missing suffix after the cursor.\n"
 			+ "Follow the surrounding code style. Do not put a statement on the same line after if/for/while. Use braces and put the statement on its own indented line, for example `if (condition) {\\n\\treturn value;\\n}` instead of `if (condition) return value;`.\n";
 		if (inlineSuggestion) {
 			prompt += "This will be shown as an inline ghost suggestion. Prefer the shortest useful continuation; one line is best unless a small block is clearly needed.\n"
-				+ "Complete only the current expression, statement, or function body. Never include a following top-level/static member, function, enum, macro, or code copied from AFTER.\n";
+				+ "Complete only the current expression, statement, branch body, or function body. Never include following top-level/static members, functions, enums, macros, or code copied from PROTECTED_SUFFIX.\n"
+				+ "If the cursor is in an `else` branch, fill only the branch-specific body. Do not move shared code from after the if/else into the branch.\n"
+				+ "Do not close parent blocks or continue after the current block unless the user has just opened that block and the closing brace is part of the smallest useful completion.\n";
+			if (protectedSuffix != "") {
+				prompt += "The following lines already exist after the cursor and are forbidden to output verbatim:\n<FORBIDDEN_SUFFIX_LINES>\n" + protectedSuffix + "\n</FORBIDDEN_SUFFIX_LINES>\n";
+			}
 		}
 		if (selected != null && selected != "") {
 			prompt += "The editor currently has selected text; return replacement text for that selection if appropriate.\n";
 		}
-		prompt += "\n<BEFORE>\n" + before + "\n</BEFORE>\n<CURSOR/>\n<AFTER>\n" + after + "\n</AFTER>";
-		return {
+		prompt += "\n<CURRENT_FILE>\n<PREFIX>\n" + before + "\n</PREFIX>\n<CURSOR/>\n<PROTECTED_SUFFIX>\n" + after + "\n</PROTECTED_SUFFIX>\n</CURRENT_FILE>";
+		var request:Dynamic = {
 			model: model,
 			input: [
 				{
 					role: "system",
-					content: "You are a code completion engine for GameMaker Language (GML). Return only raw code that should be inserted at the cursor. Do not include markdown fences, prose, explanations, or surrounding unchanged code. Preserve the local code style and expand single-line control-flow bodies into braced multi-line blocks."
+					content: "You are a fill-in-the-middle code completion engine for GameMaker Language (GML). Return only raw code that should be inserted at the cursor. Do not include markdown fences, prose, explanations, prefix text, suffix text, or surrounding unchanged code. Preserve the local code style and expand single-line control-flow bodies into braced multi-line blocks."
 				},
 				{ role: "user", content: prompt }
 			],
 			max_output_tokens: maxOutputTokens
+		};
+		return {
+			request: request,
+			context: {
+				prefixChars: before.length,
+				suffixChars: after.length,
+				linePrefix: linePrefix,
+				protectedSuffix: protectedSuffix,
+				prefixTruncated: beforeStart > 0,
+				suffixTruncated: afterEnd < code.length,
+			},
+			linePrefix: linePrefix,
+			protectedSuffix: protectedSuffix,
 		};
 	}
 	
@@ -519,9 +674,11 @@ class AICodeCompletion {
 		return completion;
 	}
 
-	static function trimInlineExtraDeclarations(completion:String):String {
+	static function trimInlineExtraDeclarations(completion:String, linePrefix:String):String {
 		if (completion == null || completion == "") return "";
 		var text = completion.replace("\r\n", "\n").replace("\r", "\n");
+		var block = trimToFirstControlBlock(text, linePrefix);
+		if (block != null) return block;
 		var depth = 0;
 		var closedTopLevelBlock = false;
 		var lineStart = 0;
@@ -549,6 +706,65 @@ class AICodeCompletion {
 			lineIndex++;
 		}
 		return text;
+	}
+
+	static function trimToFirstControlBlock(text:String, linePrefix:String):String {
+		if (!isControlBlockPrefix(linePrefix)) return null;
+		var start = firstNonWhitespace(text);
+		if (start < 0 || text.charCodeAt(start) != "{".code) return null;
+		var end = findBalancedBlockEnd(text, start);
+		if (end < 0) return null;
+		return trimBlankLines(text.substring(0, end + 1));
+	}
+
+	static function isControlBlockPrefix(linePrefix:String):Bool {
+		if (linePrefix == null) return false;
+		var text = linePrefix.trim();
+		if (text == "") return false;
+		if (text == "else" || text.endsWith(" else")) return true;
+		var rx = ~/^(if|for|while|switch|with)\s*\(.*\)$/;
+		if (rx.match(text)) return true;
+		return ~/^else\s+if\s*\(.*\)$/.match(text);
+	}
+
+	static function firstNonWhitespace(text:String):Int {
+		var i = 0;
+		while (i < text.length) {
+			var c = text.charCodeAt(i);
+			if (c != " ".code && c != "\t".code && c != "\n".code) return i;
+			i++;
+		}
+		return -1;
+	}
+
+	static function findBalancedBlockEnd(text:String, start:Int):Int {
+		var depth = 0;
+		var inString = false;
+		var stringQuote = 0;
+		var escaped = false;
+		var i = start;
+		while (i < text.length) {
+			var c = text.charCodeAt(i);
+			if (inString) {
+				if (escaped) {
+					escaped = false;
+				} else if (c == "\\".code) {
+					escaped = true;
+				} else if (c == stringQuote) {
+					inString = false;
+				}
+			} else if (c == "\"".code || c == "'".code) {
+				inString = true;
+				stringQuote = c;
+			} else if (c == "{".code) {
+				depth++;
+			} else if (c == "}".code) {
+				depth--;
+				if (depth <= 0) return i;
+			}
+			i++;
+		}
+		return -1;
 	}
 
 	static function isTopLevelDeclarationLine(line:String):Bool {
@@ -583,6 +799,21 @@ class AICodeCompletion {
 		while (lines.length > 0 && lines[0].trim() == "") lines.shift();
 		while (lines.length > 0 && lines[lines.length - 1].trim() == "") lines.pop();
 		return lines.join("\n");
+	}
+
+	static function leadingNonEmptyLines(text:String, maxLines:Int, maxChars:Int):String {
+		if (text == null || text == "" || maxLines <= 0 || maxChars <= 0) return "";
+		var out:Array<String> = [];
+		var chars = 0;
+		for (line in text.replace("\r\n", "\n").replace("\r", "\n").split("\n")) {
+			if (line.trim() == "") continue;
+			var nextChars = chars + line.length + (out.length > 0 ? 1 : 0);
+			if (nextChars > maxChars) break;
+			out.push(line);
+			chars = nextChars;
+			if (out.length >= maxLines) break;
+		}
+		return out.join("\n");
 	}
 	
 	static function endpointUrl(baseUrl:String):String {
@@ -646,15 +877,15 @@ class AICodeCompletionState {
 					if (rebaseCurrentSuggestionToCursor()) {
 						skipNextInsertAdvance = true;
 					} else {
-						hide();
+						hide(true, "cursor-moved");
 					}
 				}
 			} else if (activeRequest != null) {
-				hide();
+				hide(true, "cursor-moved-before-response");
 			}
 		});
-		editor.on("changeSession", function(_) hide());
-		editor.on("blur", function(_) hide());
+		editor.on("changeSession", function(_) hide(true, "session-changed"));
+		editor.on("blur", function(_) hide(true, "blur"));
 		untyped editor.renderer.on("afterRender", function() syncGhostPosition());
 	}
 	
@@ -664,11 +895,17 @@ class AICodeCompletionState {
 	
 	public function accept():Bool {
 		if (!isSuggestionCurrent()) {
-			hide();
+			hide(true, "accept-stale");
 			return false;
 		}
 		var current = suggestion;
-		hide(false);
+		AICodeCompletion.debugEvent("inline-accept", {
+			replaceStart: AICodeCompletion.debugPos(current.replaceStart),
+			replaceEnd: AICodeCompletion.debugPos(current.replaceEnd),
+			insertText: current.insertText,
+			displayText: current.displayText,
+		});
+		hide(false, "accept");
 		replaceRange(current.replaceStart, current.replaceEnd, current.insertText);
 		AICodeCompletion.setStatus(editor, "AI inline completion accepted");
 		return true;
@@ -676,7 +913,7 @@ class AICodeCompletionState {
 
 	public function acceptPart(mode:String):Bool {
 		if (!isSuggestionCurrent()) {
-			hide();
+			hide(true, "accept-part-stale");
 			return false;
 		}
 		var part = mode == "line" ? nextLinePart(suggestion.displayText) : nextWordPart(suggestion.displayText);
@@ -685,7 +922,12 @@ class AICodeCompletionState {
 		var currentRange = AceRange.fromPair(current.replaceStart, current.replaceEnd);
 		var typedText = editor.session.getTextRange(currentRange);
 		if (!current.insertText.startsWith(typedText)) {
-			hide();
+			AICodeCompletion.debugEvent("inline-accept-part-mismatch", {
+				mode: mode,
+				typedText: typedText,
+				insertText: current.insertText,
+			});
+			hide(true, "accept-part-mismatch");
 			return false;
 		}
 		var replacement = typedText + part;
@@ -697,8 +939,16 @@ class AICodeCompletionState {
 		suppressSelectionHide = false;
 		current.replaceEnd = copyPos(newEnd);
 		current.displayText = current.insertText.substring(replacement.length);
+		AICodeCompletion.debugEvent("inline-accept-part", {
+			mode: mode,
+			part: part,
+			replacement: replacement,
+			replaceStart: AICodeCompletion.debugPos(current.replaceStart),
+			replaceEnd: AICodeCompletion.debugPos(current.replaceEnd),
+			displayText: current.displayText,
+		});
 		if (current.displayText == "") {
-			hide(false);
+			hide(false, "accept-part-complete");
 		} else {
 			suggestion = current;
 			renderSuggestion();
@@ -709,7 +959,7 @@ class AICodeCompletionState {
 	
 	public function request(explicit:Bool):Void {
 		clearTimer();
-		hide();
+		hide(true, "new-request");
 		if (!explicit && !canAutoRequest()) return;
 		if (explicit && editor.completer != null && Reflect.field(editor.completer, "activated") == true) return;
 		if (!editor.selection.isEmpty()) return;
@@ -742,9 +992,18 @@ class AICodeCompletionState {
 		}
 	}
 	
-	public function hide(invalidate:Bool = true):Void {
+	public function hide(invalidate:Bool = true, reason:String = "hide"):Void {
 		clearTimer();
 		skipNextInsertAdvance = false;
+		if (suggestion != null || activeRequest != null) {
+			AICodeCompletion.debugEvent("inline-hide", {
+				reason: reason,
+				invalidate: invalidate,
+				hasSuggestion: suggestion != null,
+				cursor: AICodeCompletion.debugPos(editor.getCursorPosition()),
+				replaceEnd: suggestion != null ? AICodeCompletion.debugPos(suggestion.replaceEnd) : null,
+			});
+		}
 		if (invalidate) {
 			requestId++;
 			cancelActiveRequest();
@@ -778,13 +1037,13 @@ class AICodeCompletionState {
 			}
 			var text = e.args != null ? Std.string(e.args) : "";
 			if (advanceSuggestion(text)) return;
-			hide();
+			hide(true, "typed-mismatch");
 			schedule();
 		} else if (name == "backspace" || name == "del" || name == "indent") {
-			hide();
+			hide(true, name);
 			schedule();
 		} else if (hasSuggestion()) {
-			hide();
+			hide(true, "command-" + name);
 		}
 	}
 	
@@ -835,6 +1094,13 @@ class AICodeCompletionState {
 		if (next == null) return false;
 		if (!rebaseSuggestionToCursor(next)) return false;
 		suggestion = next;
+		AICodeCompletion.debugEvent("inline-show", {
+			rawText: text,
+			replaceStart: AICodeCompletion.debugPos(next.replaceStart),
+			replaceEnd: AICodeCompletion.debugPos(next.replaceEnd),
+			insertText: next.insertText,
+			displayText: next.displayText,
+		});
 		renderSuggestion();
 		return true;
 	}
@@ -844,7 +1110,14 @@ class AICodeCompletionState {
 		var cursor = editor.getCursorPosition();
 		if (samePos(cursor, next.replaceEnd)) return true;
 		var typedText = editor.session.getTextRange(AceRange.fromPair(next.replaceStart, cursor));
-		if (!next.insertText.startsWith(typedText)) return false;
+		if (!next.insertText.startsWith(typedText)) {
+			AICodeCompletion.debugEvent("inline-rebase-failed", {
+				typedText: typedText,
+				insertText: next.insertText,
+				cursor: AICodeCompletion.debugPos(cursor),
+			});
+			return false;
+		}
 		next.replaceEnd = copyPos(cursor);
 		next.displayText = next.insertText.substring(typedText.length);
 		return true;
@@ -858,6 +1131,11 @@ class AICodeCompletionState {
 		if (!suggestion.insertText.startsWith(typedText)) return false;
 		suggestion.replaceEnd = copyPos(cursor);
 		suggestion.displayText = suggestion.insertText.substring(typedText.length);
+		AICodeCompletion.debugEvent("inline-rebase-current", {
+			typedText: typedText,
+			cursor: AICodeCompletion.debugPos(cursor),
+			displayText: suggestion.displayText,
+		});
 		if (suggestion.displayText == "") {
 			clearRender();
 		} else {
@@ -963,9 +1241,20 @@ class AICodeCompletionState {
 	function advanceSuggestion(text:String):Bool {
 		if (!isSuggestionAtCursor()) return false;
 		text = normalizeNewlines(text);
-		if (text == "" || !suggestion.displayText.startsWith(text)) return false;
+		if (text == "" || !suggestion.displayText.startsWith(text)) {
+			AICodeCompletion.debugEvent("inline-advance-failed", {
+				text: text,
+				displayText: suggestion.displayText,
+			});
+			return false;
+		}
 		suggestion.replaceEnd = copyPos(editor.getCursorPosition());
 		suggestion.displayText = suggestion.displayText.substring(text.length);
+		AICodeCompletion.debugEvent("inline-advance", {
+			text: text,
+			replaceEnd: AICodeCompletion.debugPos(suggestion.replaceEnd),
+			displayText: suggestion.displayText,
+		});
 		if (suggestion.displayText == "") {
 			clearRender();
 		} else {

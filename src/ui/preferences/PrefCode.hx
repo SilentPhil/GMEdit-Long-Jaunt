@@ -143,6 +143,10 @@ class PrefCode {
 			current.aiCompletion.maxOutputTokens = v;
 			save();
 		});
+		addCheckbox(out, "Enable AI completion debug logging", Reflect.field(current.aiCompletion, "debugEnabled") == true, function(z) {
+			current.aiCompletion.debugEnabled = z;
+			save();
+		}).title = "Stores the last AI completion prompt, response, filtering steps, and inline lifecycle events for the command palette copy action. API keys are not included.";
 	}
 	public static function build(out:Element) {
 		out = addGroup(out, "Code editor");

@@ -191,6 +191,12 @@ using StringTools;
 				AICodeCompletion.complete(editor);
 			}
 		}, "AI: Insert completion");
+		add({
+			name: "aiCopyCompletionDebug",
+			exec: function(editor:AceWrap) {
+				AICodeCompletion.copyLastDebug(editor);
+			}
+		}, "AI: Copy last completion debug");
 		AICodeCompletion.bind(editor);
 		add({
 			name: "showKeyboardShortcuts",

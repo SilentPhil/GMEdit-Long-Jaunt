@@ -62,6 +62,7 @@ import haxe.DynamicAccess;
 			model: "gpt-5.4-mini",
 			maxContextChars: 12000,
 			maxOutputTokens: 256,
+			debugEnabled: false,
 		},
 		
 		fileChangeAction: Ask,
@@ -232,6 +233,7 @@ typedef PrefAiCompletion = {
 	model:String,
 	maxContextChars:Int,
 	maxOutputTokens:Int,
+	debugEnabled:Bool,
 }
 enum abstract PrefAssetOrder23(Int) from Int to Int {
 	var Custom = 0;
