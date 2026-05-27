@@ -526,6 +526,9 @@ class GmlLinterExpr extends GmlLinterHelper {
 								};
 								default:
 							}
+							if (currFunc == null) {
+								currFunc = currType.getSelfCallDoc(self.getImports());
+							}
 						} else {
 							var en = GmlAPI.gmlEnums[ctn];
 							if (en != null) {

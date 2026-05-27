@@ -208,7 +208,7 @@ using StringTools;
 	/** Given a "Type", returns the argument info to be used when doing `var v:Type; v(` */
 	public static function findSelfCallDoc(type:GmlType, imp:GmlImports):GmlFuncDoc {
 		if (type == null) return null;
-		type = type.resolve();
+		type = type.resolve().unwrapNullable().resolve();
 		var typeKind = type.getKind();
 		if (typeKind == KFunction || typeKind == KConstructor) {
 			var isConstructor = typeKind == KConstructor;
