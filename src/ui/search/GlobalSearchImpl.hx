@@ -122,10 +122,12 @@ class GlobalSearchImpl {
 			function matchType(ctxName:String, ofs:Int, text:String, nonCode:Bool):Bool {
 				if (typeFilter == null) return true;
 				if (nonCode && typeSearchInvert) return true;
+				if (searchCancelled()) return false;
 				if (!typeFilterPrepared) {
 					typeFilter.prepareFile(name, path, code);
 					typeFilterPrepared = true;
 				}
+				if (searchCancelled()) return false;
 				return typeFilter.accepts(ctxName, ofs, text, opt.matchCase, opt.variableTypeInvert == true);
 			}
 			GlobalSearch.currentPath = path;
