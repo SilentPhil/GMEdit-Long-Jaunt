@@ -285,7 +285,7 @@ class CopilotLanguageServer {
 		var uri = pathToUri(path);
 		var text = editor.session.getValue();
 		var state = documents.get(uri);
-		var version = state != null ? state.version + 1 : 1;
+		var version = state != null ? state.version : 1;
 		if (state == null) {
 			sendNotification("textDocument/didOpen", {
 				textDocument: {
@@ -296,6 +296,7 @@ class CopilotLanguageServer {
 				},
 			});
 		} else if (state.text != text) {
+			version = state.version + 1;
 			sendNotification("textDocument/didChange", {
 				textDocument: {
 					uri: uri,
@@ -308,6 +309,7 @@ class CopilotLanguageServer {
 		sendNotification("textDocument/didFocus", {
 			textDocument: {
 				uri: uri,
+				version: version,
 			},
 		});
 		return {
