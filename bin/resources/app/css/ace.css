@@ -259,7 +259,8 @@ textarea#source {
 .ace_editor.ace_autocomplete {
 	font-family: sans-serif;
 	overflow: visible;
-	width: 25em;
+	box-sizing: border-box;
+	width: min(var(--autocomplete-popup-width, 300px), calc(100vw - 12px)) !important;
 }
 .ace_editor.ace_autocomplete .ace_text-layer {
 	margin-left: 0!important;

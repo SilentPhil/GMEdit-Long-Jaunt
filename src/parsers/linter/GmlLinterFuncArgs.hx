@@ -60,6 +60,7 @@ class GmlLinterFuncArgs extends GmlLinterHelper {
 			}
 		} else if (fnType != null) {
 			fnType = fnType.resolve();
+			fnType = fnType.unwrapNullable().resolve();
 			var fnTypeKind = fnType.getKind();
 			if (fnTypeKind == KFunction || fnTypeKind == KConstructor) {
 				isFuncValue = true;

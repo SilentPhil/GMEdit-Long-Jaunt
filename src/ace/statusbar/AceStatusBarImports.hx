@@ -108,6 +108,9 @@ class AceStatusBarImports {
 					return false;
 				});
 			}
+			if (doc == null) {
+				doc = AceGmlTools.findSelfCallDoc(fieldType, imports);
+			}
 			ctx.type = fieldType;
 			ctx.typeText = fieldTypeText;
 		} else {
