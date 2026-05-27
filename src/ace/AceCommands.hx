@@ -7,6 +7,7 @@ import js.html.Console;
 import js.lib.RegExp;
 import tools.CharCode;
 import tools.NativeString;
+import ui.AICodeCompletion;
 import ui.CommandPalette;
 import ace.extern.AceCommand;
 import ui.ext.Bookmarks;
@@ -149,6 +150,66 @@ using StringTools;
 			},
 			bindKey: "Ctrl-Space|Ctrl-Shift-Space|Alt-Space"
 		});
+		add({
+			name: "aiCompleteCode",
+			bindKey: wm("Ctrl-Alt-Space", "Command-Alt-Space"),
+			exec: function(editor:AceWrap) {
+				AICodeCompletion.showInline(editor, true);
+			}
+		}, "AI: Show inline completion");
+		add(cast {
+			name: "acceptAICompletion",
+			bindKey: "Tab",
+			exec: function(editor:AceWrap):Bool {
+				return AICodeCompletion.acceptInline(editor);
+			}
+		});
+		add(cast {
+			name: "acceptAICompletionWord",
+			bindKey: wm("Ctrl-Alt-Right", "Command-Alt-Right"),
+			exec: function(editor:AceWrap):Bool {
+				return AICodeCompletion.acceptInlinePart(editor, "word");
+			}
+		}, "AI: Accept next completion word");
+		add(cast {
+			name: "acceptAICompletionLine",
+			bindKey: wm("Ctrl-Alt-Down", "Command-Alt-Down"),
+			exec: function(editor:AceWrap):Bool {
+				return AICodeCompletion.acceptInlinePart(editor, "line");
+			}
+		}, "AI: Accept next completion line");
+		add(cast {
+			name: "hideAICompletion",
+			bindKey: "Esc",
+			exec: function(editor:AceWrap):Bool {
+				return AICodeCompletion.hideInline(editor);
+			}
+		});
+		add({
+			name: "aiInsertCompletion",
+			exec: function(editor:AceWrap) {
+				AICodeCompletion.complete(editor);
+			}
+		}, "AI: Insert completion");
+		add({
+			name: "aiCopyCompletionDebug",
+			exec: function(editor:AceWrap) {
+				AICodeCompletion.copyLastDebug(editor);
+			}
+		}, "AI: Copy last completion debug");
+		add({
+			name: "aiCopilotSignIn",
+			exec: function(editor:AceWrap) {
+				ui.CopilotLanguageServer.signIn(editor);
+			}
+		}, "AI: GitHub Copilot sign in");
+		add({
+			name: "aiCopilotSignOut",
+			exec: function(editor:AceWrap) {
+				ui.CopilotLanguageServer.signOut(editor);
+			}
+		}, "AI: GitHub Copilot sign out");
+		AICodeCompletion.bind(editor);
 		add({
 			name: "showKeyboardShortcuts",
 			bindKey: wm("Ctrl-Alt-h", "Command-Alt-h"),

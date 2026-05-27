@@ -6,6 +6,7 @@ import gml.GmlAPI;
 import gml.file.GmlFile;
 import ui.preferences.PrefData;
 using tools.HtmlTools;
+import js.html.InputElement;
 import js.html.SelectElement;
 import file.kind.misc.KSnippets;
 
@@ -96,6 +97,81 @@ class PrefCode {
 			save();
 		});
 	}
+	static function buildAI(out:Element) {
+		addText(out, "Experimental command-palette and inline code completion.");
+		addCheckbox(out, "Enable AI code completion", current.aiCompletion.enabled, function(z) {
+			current.aiCompletion.enabled = z;
+			save();
+		});
+		var providerOptions = Main.document.createDivElement();
+		function rebuildProviderOptions():Void {
+			providerOptions.innerHTML = "";
+			if (ui.AICodeCompletion.sanitizeProvider(Reflect.field(current.aiCompletion, "provider")) == "copilot") {
+				addText(providerOptions, "GitHub Copilot uses your GitHub account. Use the command palette actions `AI: GitHub Copilot sign in` and `AI: GitHub Copilot sign out`.");
+				return;
+			}
+			addIntInput(providerOptions, "AI inline context size (characters)", current.aiCompletion.inlineContextChars, function(v) {
+				current.aiCompletion.inlineContextChars = v;
+				save();
+			});
+			addIntInput(providerOptions, "AI inline max output tokens (minimum 16)", current.aiCompletion.inlineMaxOutputTokens, function(v) {
+				current.aiCompletion.inlineMaxOutputTokens = v;
+				save();
+			});
+			addInput(providerOptions, "AI API base URL", current.aiCompletion.baseUrl, function(s) {
+				current.aiCompletion.baseUrl = tools.NativeString.trimBoth(s);
+				save();
+			}).title = "OpenAI default: https://api.openai.com/v1";
+			var keyEl = addInput(providerOptions, "AI API key", current.aiCompletion.apiKey, function(s) {
+				current.aiCompletion.apiKey = tools.NativeString.trimBoth(s);
+				save();
+			});
+			var keyInput:InputElement = keyEl.querySelectorAuto("input");
+			keyInput.type = "password";
+			keyEl.title = "Stored in GMEdit user preferences.";
+			addInput(providerOptions, "AI model", current.aiCompletion.model, function(s) {
+				current.aiCompletion.model = tools.NativeString.trimBoth(s);
+				save();
+			});
+			addIntInput(providerOptions, "AI context size (characters)", current.aiCompletion.maxContextChars, function(v) {
+				current.aiCompletion.maxContextChars = v;
+				save();
+			});
+			addIntInput(providerOptions, "AI max output tokens (minimum 16)", current.aiCompletion.maxOutputTokens, function(v) {
+				current.aiCompletion.maxOutputTokens = v;
+				save();
+			});
+		}
+		var providerLabels = ["OpenAI-compatible API", "GitHub Copilot"];
+		var providerValues = ["openai", "copilot"];
+		var provider = ui.AICodeCompletion.sanitizeProvider(Reflect.field(current.aiCompletion, "provider"));
+		addDropdown(out, "AI completion provider", providerLabels[providerValues.indexOf(provider)], providerLabels, function(s) {
+			current.aiCompletion.provider = providerValues[providerLabels.indexOf(s)];
+			save();
+			rebuildProviderOptions();
+		}).title = "GitHub Copilot uses the official Copilot Language Server and does not need the OpenAI API key.";
+		addCheckbox(out, "Show AI inline suggestions while typing", current.aiCompletion.inlineEnabled, function(z) {
+			current.aiCompletion.inlineEnabled = z;
+			save();
+		});
+		var inlineEagernessLabels = ["Low", "Medium", "High"];
+		var inlineEagernessValues = ["low", "medium", "high"];
+		var inlineEagerness = ui.AICodeCompletion.sanitizeEagerness(Reflect.field(current.aiCompletion, "inlineEagerness"));
+		addDropdown(out, "AI inline eagerness", inlineEagernessLabels[inlineEagernessValues.indexOf(inlineEagerness)], inlineEagernessLabels, function(s) {
+			current.aiCompletion.inlineEagerness = inlineEagernessValues[inlineEagernessLabels.indexOf(s)];
+			save();
+		}).title = "Low waits longer and asks for less; High reacts faster and allows longer suggestions.";
+		addIntInput(out, "AI inline suggestion delay (ms)", current.aiCompletion.inlineDelayMs, function(v) {
+			current.aiCompletion.inlineDelayMs = v;
+			save();
+		});
+		out.appendChild(providerOptions);
+		rebuildProviderOptions();
+		addCheckbox(out, "Enable AI completion debug logging", Reflect.field(current.aiCompletion, "debugEnabled") == true, function(z) {
+			current.aiCompletion.debugEnabled = z;
+			save();
+		}).title = "Stores the last AI completion prompt, response, filtering steps, and inline lifecycle events for the command palette copy action. API keys are not included.";
+	}
 	public static function build(out:Element) {
 		out = addGroup(out, "Code editor");
 		out.id = "pref-code";
@@ -112,6 +188,7 @@ class PrefCode {
 		
 		//
 		buildComp(addGroup(out, "Auto-completion"));
+		buildAI(addGroup(out, "AI completion"));
 		buildTooltips(addGroup(out, "Tooltips"));
 		
 		//

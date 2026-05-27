@@ -216,3 +216,49 @@ var queue:Array<SoulCharacter> = [];
 // - lord -> opens SoulCharacter
 // - queue -> opens SoulCharacter
 ```
+
+### AI code completion
+
+GMEdit can show AI-powered inline ghost completions while typing, and can also insert a completion
+on demand from the command palette. The settings are in `Preferences > Code editor > AI completion`.
+
+Common controls:
+
+- Enable `AI code completion`.
+- Enable `Show AI inline suggestions while typing` for Copilot-like ghost text.
+- Use `AI inline eagerness` and `AI inline suggestion delay (ms)` to tune how quickly suggestions
+  appear.
+- Press `Tab` to accept the current inline suggestion.
+- Press `Esc` to hide it.
+- Use `AI: Insert completion` from the command palette to request a manual insertion.
+- Use `AI: Copy last completion debug` when a suggestion looks wrong and you need to inspect the
+  request, response, and filtering steps.
+
+OpenAI-compatible setup:
+
+1. Set `AI completion provider` to `OpenAI-compatible API`.
+2. Fill `AI API base URL`, usually `https://api.openai.com/v1`.
+3. Fill `AI API key`.
+4. Set `AI model`, for example `gpt-5.4-mini`.
+5. Adjust context and max output token settings if needed.
+
+GitHub Copilot setup:
+
+1. Set `AI completion provider` to `GitHub Copilot`.
+2. Run `AI: GitHub Copilot sign in` from the command palette.
+3. Finish the GitHub device sign-in flow in the browser. GMEdit copies the sign-in code to the
+   clipboard when possible.
+4. Use inline completions normally. This provider uses the official GitHub Copilot Language Server,
+   so it does not need an OpenAI API key, base URL, model name, or token limit settings.
+5. Run `AI: GitHub Copilot sign out` from the command palette to disconnect the account.
+
+```gml
+static get_random_event = function()->int<GAME_DIRECTOR_EVENT>? {
+	var random_event = __events_weighted_random.get_random();
+	if (random_event != undefined) {
+		// Start typing here and wait for an inline suggestion.
+	}
+
+	return random_event;
+}
+```

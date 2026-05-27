@@ -51,6 +51,21 @@ import haxe.DynamicAccess;
 		constKeywords: false,
 		ctrlWheelFontSize: true,
 		showArgTypesInStatusBar: false,
+		aiCompletion: {
+			enabled: false,
+			provider: "openai",
+			inlineEnabled: true,
+			inlineEagerness: "medium",
+			inlineDelayMs: 900,
+			inlineContextChars: 3000,
+			inlineMaxOutputTokens: 96,
+			baseUrl: "https://api.openai.com/v1",
+			apiKey: "",
+			model: "gpt-5.4-mini",
+			maxContextChars: 12000,
+			maxOutputTokens: 256,
+			debugEnabled: false,
+		},
 		
 		fileChangeAction: Ask,
 		avoidYyChanges: false,
@@ -149,6 +164,7 @@ typedef PrefDataImpl = {
 	constKeywords:Bool,
 	ctrlWheelFontSize:Bool,
 	showArgTypesInStatusBar:Bool,
+	aiCompletion:PrefAiCompletion,
 	//
 	eventOrder:Int,
 	assetOrder23:PrefAssetOrder23,
@@ -207,6 +223,21 @@ typedef PrefDataImpl = {
 		List of plugin names which have been disabled by the user.
 	**/
 	disabledPlugins: Array<PluginDirName>
+}
+typedef PrefAiCompletion = {
+	enabled:Bool,
+	provider:String,
+	inlineEnabled:Bool,
+	inlineEagerness:String,
+	inlineDelayMs:Int,
+	inlineContextChars:Int,
+	inlineMaxOutputTokens:Int,
+	baseUrl:String,
+	apiKey:String,
+	model:String,
+	maxContextChars:Int,
+	maxOutputTokens:Int,
+	debugEnabled:Bool,
 }
 enum abstract PrefAssetOrder23(Int) from Int to Int {
 	var Custom = 0;
