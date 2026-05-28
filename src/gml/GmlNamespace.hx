@@ -1,5 +1,6 @@
 package gml;
 import gml.GmlAPI;
+import gml.GmlAPI.GmlLookup;
 import gml.GmlFuncDoc;
 import gml.type.GmlType;
 import gml.type.GmlTypeTools;
@@ -58,6 +59,7 @@ class GmlNamespace {
 	
 	public var staticKind:Dictionary<AceTokenType> = new Dictionary();
 	public var staticTypes:Dictionary<GmlType> = new Dictionary();
+	public var staticLookup:Dictionary<GmlLookup> = new Dictionary();
 	/** static (`Buffer.ptr`) completions */
 	public var compStatic:ArrayMap<AceAutoCompleteItem> = new ArrayMap();
 	public var docStaticMap:Dictionary<GmlFuncDoc> = new Dictionary();
@@ -82,6 +84,7 @@ class GmlNamespace {
 	}
 	
 	public var instTypes:Dictionary<GmlType> = new Dictionary();
+	public var instLookup:Dictionary<GmlLookup> = new Dictionary();
 	public function getInstType(field:String, depth:Int = 0):GmlType {
 		var q = this, n = depth;
 		while (q != null && ++n <= maxDepth) {
@@ -94,6 +97,19 @@ class GmlNamespace {
 			for (qi in q.interfaces.array) {
 				t = qi.getInstType(field, n);
 				if (t != null) return t;
+			}
+			q = q.parent;
+		}
+		return null;
+	}
+	public function getInstLookup(field:String, depth:Int = 0):GmlLookup {
+		var q = this, n = depth;
+		while (q != null && ++n <= maxDepth) {
+			var l = q.instLookup[field];
+			if (l != null) return l;
+			for (qi in q.interfaces.array) {
+				l = qi.getInstLookup(field, n);
+				if (l != null) return l;
 			}
 			q = q.parent;
 		}
@@ -246,7 +262,7 @@ class GmlNamespace {
 		this.name = name;
 	}
 	
-	public function addFieldHint(field:String, isInst:Bool, comp:AceAutoCompleteItem, doc:GmlFuncDoc, type:GmlType) {
+	public function addFieldHint(field:String, isInst:Bool, comp:AceAutoCompleteItem, doc:GmlFuncDoc, type:GmlType, ?lookup:GmlLookup) {
 		var kind = isInst ? instKind : staticKind;
 		kind[field] = doc != null ? "asset.script" : "field";
 		
@@ -261,6 +277,10 @@ class GmlNamespace {
 			var docs = isInst ? docInstMap : docStaticMap;
 			docs[field] = doc;
 		}
+		if (lookup != null) {
+			var lookups = isInst ? instLookup : staticLookup;
+			lookups[field] = lookup;
+		}
 		
 		if (comp != null && field != "") {
 			var comps:ArrayMap<AceAutoCompleteItem> = isInst ? compInst : compStatic;
@@ -273,6 +293,8 @@ class GmlNamespace {
 		kind.remove(field);
 		var docs = isInst ? docInstMap : docStaticMap;
 		docs.remove(field);
+		var lookups = isInst ? instLookup : staticLookup;
+		lookups.remove(field);
 		var types = isInst ? instTypes : staticTypes;
 		types.remove(field);
 		var comps:ArrayMap<AceAutoCompleteItem> = isInst ? compInst : compStatic;
