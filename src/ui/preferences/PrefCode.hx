@@ -165,6 +165,11 @@ class PrefCode {
 			current.aiCompletion.inlineDelayMs = v;
 			save();
 		});
+		addIntInput(out, "AI status badge opacity (%)", ui.AICodeCompletion.sanitizeStatusBadgeOpacity(Reflect.field(current.aiCompletion, "statusBadgeOpacityPercent")), function(v) {
+			current.aiCompletion.statusBadgeOpacityPercent = ui.AICodeCompletion.sanitizeStatusBadgeOpacity(v);
+			ui.AICodeCompletion.applyStatusBadgeOpacity(Main.aceEditor);
+			save();
+		}).title = "0 is fully transparent, 100 is fully opaque.";
 		out.appendChild(providerOptions);
 		rebuildProviderOptions();
 		addCheckbox(out, "Enable AI completion debug logging", Reflect.field(current.aiCompletion, "debugEnabled") == true, function(z) {

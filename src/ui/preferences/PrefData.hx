@@ -64,6 +64,7 @@ import haxe.DynamicAccess;
 			model: "gpt-5.4-mini",
 			maxContextChars: 12000,
 			maxOutputTokens: 256,
+			statusBadgeOpacityPercent: 80,
 			debugEnabled: false,
 		},
 		
@@ -237,6 +238,7 @@ typedef PrefAiCompletion = {
 	model:String,
 	maxContextChars:Int,
 	maxOutputTokens:Int,
+	statusBadgeOpacityPercent:Int,
 	debugEnabled:Bool,
 }
 enum abstract PrefAssetOrder23(Int) from Int to Int {

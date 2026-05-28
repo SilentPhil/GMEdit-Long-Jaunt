@@ -851,9 +851,84 @@ class AICodeCompletion {
 	}
 	
 	public static function setStatus(editor:AceWrap, message:String):Void {
-		if (editor.statusBar == null) return;
-		editor.statusBar.setText(message);
-		editor.statusBar.ignoreUntil = Main.window.performance.now() + 3000;
+		if (editor == null) return;
+		var badge = ensureStatusBadge(editor);
+		applyStatusBadgeOpacity(editor);
+		applyStatusBadgeScrollbarOffset(editor);
+		var timer:Null<Int> = Reflect.field(editor, "_aiStatusTimer");
+		if (timer != null) {
+			Main.window.clearTimeout(timer);
+			Reflect.setField(editor, "_aiStatusTimer", null);
+		}
+		if (message == null || message == "") {
+			badge.classList.remove("shown");
+			badge.textContent = "";
+			badge.title = "";
+			return;
+		}
+		badge.textContent = message;
+		badge.title = message;
+		badge.classList.add("shown");
+		Reflect.setField(editor, "_aiStatusTimer", Main.window.setTimeout(function() {
+			badge.classList.remove("shown");
+			Reflect.setField(editor, "_aiStatusTimer", null);
+		}, 2500));
+	}
+
+	static function ensureStatusBadge(editor:AceWrap):DivElement {
+		var badge:DivElement = cast Reflect.field(editor, "_aiStatusBadge");
+		bindStatusBadgeLayout(editor);
+		if (badge != null && badge.parentElement != null) return badge;
+		badge = Main.document.createDivElement();
+		badge.className = "ace_ai-status";
+		var parent = editor.container.parentElement;
+		(parent != null ? parent : Main.document.body).appendChild(badge);
+		Reflect.setField(editor, "_aiStatusBadge", badge);
+		return badge;
+	}
+
+	static function bindStatusBadgeLayout(editor:AceWrap):Void {
+		if (Reflect.field(editor, "_aiStatusLayoutBound") == true) return;
+		Reflect.setField(editor, "_aiStatusLayoutBound", true);
+		untyped editor.renderer.on("scrollbarVisibilityChanged", function(_) {
+			applyStatusBadgeScrollbarOffset(editor);
+		});
+	}
+
+	static function applyStatusBadgeScrollbarOffset(editor:AceWrap):Void {
+		var renderer:Dynamic = editor.renderer;
+		var scrollBarH:Dynamic = Reflect.field(renderer, "scrollBarH");
+		var height:Float = 0;
+		if (scrollBarH != null) {
+			var getHeight:Dynamic = Reflect.field(scrollBarH, "getHeight");
+			if (getHeight != null) {
+				var value:Dynamic = Reflect.callMethod(scrollBarH, getHeight, []);
+				if (value != null) height = value;
+			}
+		}
+		var offset = height > 0 ? Math.ceil((height + 6) / 2) : 0;
+		var value = offset + "px";
+		Main.document.documentElement.style.setProperty("--ai-status-scrollbar-offset", value);
+		var badge:DivElement = cast Reflect.field(editor, "_aiStatusBadge");
+		if (badge != null) badge.style.setProperty("--ai-status-scrollbar-offset", value);
+	}
+
+	public static function sanitizeStatusBadgeOpacity(value:Dynamic):Int {
+		var opacity = value != null ? Std.parseInt(Std.string(value)) : null;
+		if (opacity == null) opacity = 80;
+		if (opacity < 0) return 0;
+		if (opacity > 100) return 100;
+		return opacity;
+	}
+
+	public static function applyStatusBadgeOpacity(?editor:AceWrap):Void {
+		var prefs = Preferences.current != null ? Preferences.current.aiCompletion : null;
+		var opacity = sanitizeStatusBadgeOpacity(prefs != null ? Reflect.field(prefs, "statusBadgeOpacityPercent") : null) / 100;
+		var value = Std.string(opacity);
+		Main.document.documentElement.style.setProperty("--ai-status-opacity", value);
+		if (editor == null) return;
+		var badge:DivElement = cast Reflect.field(editor, "_aiStatusBadge");
+		if (badge != null) badge.style.setProperty("--ai-status-opacity", value);
 	}
 	
 	public static function shorten(text:String, maxLen:Int):String {
