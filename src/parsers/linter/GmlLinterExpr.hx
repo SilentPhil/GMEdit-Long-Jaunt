@@ -365,7 +365,13 @@ class GmlLinterExpr extends GmlLinterHelper {
 						self.skip();
 						flags.remove(AsStat);
 						statKind = LKSet;
-						rc(self.readExpr(newDepth, None, null, currType));
+						var inlineIsType = self.readInlineIsType();
+						var targetType = inlineIsType != null ? inlineIsType : currType;
+						rc(self.readExpr(newDepth, None, null, targetType));
+						if (inlineIsType != null && currKind == LKIdent && !isLocalIdent) {
+							self.setContextInstType(currName, inlineIsType);
+							currType = inlineIsType;
+						}
 						self.checkTypeCast(this.currType, currType, "assignment", this.currValue);
 						currType = null;
 					} else {
@@ -503,18 +509,26 @@ class GmlLinterExpr extends GmlLinterHelper {
 					}
 					if (ctn != null) {
 						var wantWarn = false;
-						var found = AceGmlTools.findNamespace(ctn, self.getImports(), function(ns) {
-							wantWarn = true;
-							if (isStatic) {
-								currType = ns.staticTypes[field];
-								currFunc = ns.docStaticMap[field];
-								return ns.staticKind.exists(field);
-							} else {
-								currType = ns.getInstType(field);
-								currFunc = ns.getInstDoc(field);
-								return ns.getInstKind(field) != null;
-							}
-						});
+						var found = false;
+						var localInstType = !isStatic ? self.getContextNamespaceInstType(ctn, field) : null;
+						if (localInstType != null) {
+							currType = localInstType;
+							currFunc = currType.getSelfCallDoc(self.getImports());
+							found = true;
+						} else {
+							found = AceGmlTools.findNamespace(ctn, self.getImports(), function(ns) {
+								wantWarn = true;
+								if (isStatic) {
+									currType = ns.staticTypes[field];
+									currFunc = ns.docStaticMap[field];
+									return ns.staticKind.exists(field);
+								} else {
+									currType = ns.getInstType(field);
+									currFunc = ns.getInstDoc(field);
+									return ns.getInstKind(field) != null;
+								}
+							});
+						}
 						if (isSelfField && !isStatic) {
 							missingInstanceFieldName = field;
 						}

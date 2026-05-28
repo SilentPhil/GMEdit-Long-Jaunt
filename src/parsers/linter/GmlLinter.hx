@@ -89,6 +89,7 @@ class GmlLinter {
 	var context(default, set):String = "";
 	public function set_context(ctx:String):String {
 		context = ctx;
+		contextInstTypes = new Dictionary();
 		if (setLocalVars || setLocalTypes) {
 			if ((editor.kind is file.kind.gml.KGmlEvents) && ctx == "properties") {
 				// don't re-index properties
@@ -110,6 +111,43 @@ class GmlLinter {
 			editor.imports[context] = imp;
 		}
 		return imp;
+	}
+
+	static var inlineIsRx = new RegExp("\\/\\/\\/\\s*@is\\b\\s*(?:\\{(.+?)\\})?");
+	var contextInstTypes:Dictionary<GmlType> = new Dictionary();
+	var namespaceInstTypes:Dictionary<Dictionary<GmlType>> = new Dictionary();
+	function getContextInstType(name:String):GmlType {
+		return contextInstTypes != null ? contextInstTypes[name] : null;
+	}
+	function getContextNamespaceInstType(namespace:String, field:String):GmlType {
+		var fields = namespaceInstTypes != null ? namespaceInstTypes[namespace] : null;
+		return fields != null ? fields[field] : null;
+	}
+	function setContextInstType(name:String, type:GmlType):Void {
+		if (type == null) return;
+		if (contextInstTypes == null) contextInstTypes = new Dictionary();
+		contextInstTypes[name] = type;
+		if (setLocalTypes) {
+			getImports(true).localTypes[name] = type;
+		}
+		var selfType = getSelfType();
+		var nsName = selfType != null ? selfType.unwrapNullable().getNamespace() : null;
+		if (nsName != null) {
+			if (namespaceInstTypes == null) namespaceInstTypes = new Dictionary();
+			var fields = namespaceInstTypes[nsName];
+			if (fields == null) {
+				fields = new Dictionary();
+				namespaceInstTypes[nsName] = fields;
+			}
+			fields[name] = type;
+		}
+	}
+	function readInlineIsType():GmlType {
+		var eol = reader.source.indexOf("\n", reader.pos);
+		if (eol < 0) eol = reader.source.length;
+		var mt = inlineIsRx.exec(reader.source.substring(reader.pos, eol));
+		if (mt == null || mt[1] == null) return null;
+		return GmlTypeDef.parse(mt[1], "@is inline assignment");
 	}
 	
 	/**

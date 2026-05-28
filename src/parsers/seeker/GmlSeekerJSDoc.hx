@@ -158,6 +158,10 @@ class GmlSeekerJSDoc {
 				if (namespace == null) return;
 			} else return;
 			var hint = out.fieldHints[namespace + ":" + name];
+			if (hint == null && hasType) {
+				hint = GmlSeekerProcField.addFieldHint(seeker, false, namespace, true, name,
+					null, doc, type, null, false);
+			}
 			if (hint != null) {
 				if (hasType) hint.type = type;
 				procComp(hint.comp);

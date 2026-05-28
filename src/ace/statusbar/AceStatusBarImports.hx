@@ -2,6 +2,7 @@ package ace.statusbar;
 import ace.AceStatusBar;
 import ace.extern.AceRange;
 import gml.GmlAPI;
+import gml.GmlFuncDoc;
 import gml.GmlImports;
 import gml.GmlNamespace;
 import gml.type.GmlType;
@@ -15,6 +16,43 @@ import tools.JsTools;
  * @author YellowAfterlife
  */
 class AceStatusBarImports {
+	static function copyDocWithReturnType(doc:GmlFuncDoc, name:String, returnType:GmlType):GmlFuncDoc {
+		if (doc != null && doc.hasReturn == true && doc.returnType != null && doc.returnType.getKind() != KVoid) {
+			return doc;
+		}
+		var out:GmlFuncDoc;
+		if (doc != null) {
+			out = new GmlFuncDoc(name, name + "(", doc.post, doc.args.copy(), doc.rest);
+			out.argTypes = doc.argTypes;
+			out.argsAreFromJSDoc = doc.argsAreFromJSDoc;
+			out.isConstructor = doc.isConstructor;
+			out.parentName = doc.parentName;
+			out.selfType = doc.selfType;
+			out.selfTypeIsAuto = doc.selfTypeIsAuto;
+			out.lookup = doc.lookup;
+			out.nav = doc.nav;
+			out.templateItems = doc.templateItems;
+			out.templateSelf = doc.templateSelf;
+		} else {
+			out = GmlFuncDoc.create(name);
+		}
+		out.returnTypeString = returnType.toString();
+		return out;
+	}
+	static function syncDocWithCallableType(doc:GmlFuncDoc, name:String, type:GmlType, imports:GmlImports):GmlFuncDoc {
+		if (type == null) return doc;
+		type = type.resolve().unwrapNullable().resolve();
+		return switch (type) {
+			case TInst(_, params, KFunction | KConstructor) if (params.length > 0):
+				var returnType = params[params.length - 1];
+				if (returnType.getKind() == KVoid) doc;
+				else {
+					if (doc == null) doc = AceGmlTools.findSelfCallDoc(type, imports);
+					copyDocWithReturnType(doc, name, returnType);
+				}
+			default: doc;
+		}
+	}
 	public static function procDocImport(ctx:AceStatusBarDocSearch):Int {
 		var imports = ctx.imports;
 		var hasGlobalNamespaces = !GmlAPI.gmlNamespaces.isEmpty();
@@ -70,6 +108,17 @@ class AceStatusBarImports {
 				}
 			}
 		} else {
+			if (imports != null && (fnType == "field" || fnType == "localfield")) {
+				var importedInstType = imports.localTypes[name];
+				if (importedInstType != null) {
+					ctx.type = importedInstType;
+					doc = syncDocWithCallableType(null, name, importedInstType, imports);
+					tk = iter.stepForward();
+					ctx.tk = tk;
+					ctx.doc = doc;
+					return argStart;
+				}
+			}
 			if (fnType == "localfield") {
 				objType = AceGmlTools.getSelfType({ session: ctx.session, scope: ctx.scope });
 			}
@@ -111,6 +160,7 @@ class AceStatusBarImports {
 			if (doc == null) {
 				doc = AceGmlTools.findSelfCallDoc(fieldType, imports);
 			}
+			doc = syncDocWithCallableType(doc, name, fieldType, imports);
 			ctx.type = fieldType;
 			ctx.typeText = fieldTypeText;
 		} else {

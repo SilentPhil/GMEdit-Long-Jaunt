@@ -85,6 +85,21 @@ class GmlLinterIdent {
 				currFunc = lam.docs[currName];
 				break;
 			}
+
+			var contextInstType = linter.getContextInstType(currName);
+			if (contextInstType != null) {
+				currType = contextInstType;
+				currFunc = currType.getSelfCallDoc(imp);
+				break;
+			}
+			if (imp != null) {
+				var importedInstType = imp.localTypes[currName];
+				if (importedInstType != null) {
+					currType = importedInstType;
+					currFunc = currType.getSelfCallDoc(imp);
+					break;
+				}
+			}
 			
 			var kind = GmlAPI.gmlKind[currName];
 			if (kind != null) {
@@ -146,17 +161,25 @@ class GmlLinterIdent {
 				};
 				case TInst(tn, _, tk) if (tk != GmlTypeKind.KAny): {
 					var wantWarn = false;
-					var found = AceGmlTools.findNamespace(tn, imp, function(ns:GmlNamespace) {
-						wantWarn = true;
-						if (ns.getInstKind(currName) != null) {
-							currType = ns.getInstType(currName);
-							currFunc = ns.getInstDoc(currName);
-							if (currFunc == null) {
-								currFunc = currType.getSelfCallDoc(linter.getImports());
-							}
-							return true;
-						} else return false;
-					});
+					var localInstType = linter.getContextNamespaceInstType(tn, currName);
+					var found = false;
+					if (localInstType != null) {
+						currType = localInstType;
+						currFunc = currType.getSelfCallDoc(imp);
+						found = true;
+					} else {
+						found = AceGmlTools.findNamespace(tn, imp, function(ns:GmlNamespace) {
+							wantWarn = true;
+							if (ns.getInstKind(currName) != null) {
+								currType = ns.getInstType(currName);
+								currFunc = ns.getInstDoc(currName);
+								if (currFunc == null) {
+									currFunc = currType.getSelfCallDoc(linter.getImports());
+								}
+								return true;
+							} else return false;
+						});
+					}
 					if (!found && wantWarn && linter.prefs.requireFields) {
 						linter.addWarning('Variable $currName is not part of $tn');
 					}
