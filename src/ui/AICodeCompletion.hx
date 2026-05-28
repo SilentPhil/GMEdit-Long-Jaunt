@@ -149,6 +149,7 @@ class AICodeCompletion {
 			} else {
 				completion = removeDuplicatedLinePrefix(completion, requestLinePrefix);
 			}
+			completion = normalizeCompletionIndent(editor, completion);
 			debugEventFor(debug, isFinal ? "text-final" : "text-delta", {
 				rawText: rawText,
 				cleanedText: cleaned,
@@ -406,6 +407,7 @@ class AICodeCompletion {
 			+ "Think of this as fill-in-the-middle: PREFIX is already before the cursor, PROTECTED_SUFFIX is already after the cursor.\n"
 			+ "Return only the missing code to insert at <CURSOR/>. Never return PREFIX or PROTECTED_SUFFIX text.\n"
 			+ "If PREFIX ends with a partially typed declaration or expression, return only the missing suffix after the cursor.\n"
+			+ "Use tab characters for indentation, not spaces.\n"
 			+ "Follow the surrounding code style. Do not put a statement on the same line after if/for/while. Use braces and put the statement on its own indented line, for example `if (condition) {\\n\\treturn value;\\n}` instead of `if (condition) return value;`.\n";
 		if (openTabsContext.text != "") {
 			prompt += "OPEN_CODE_TABS contains other open code tabs as read-only context. Use it for names, helpers, patterns, and related state, but the insertion target remains CURRENT_FILE.\n";
@@ -803,6 +805,49 @@ class AICodeCompletion {
 			if (fence >= 0) out = out.substring(0, fence);
 		}
 		return trimBlankLines(out);
+	}
+
+	static function normalizeCompletionIndent(editor:AceWrap, completion:String):String {
+		if (completion == null || completion == "") return "";
+		var tabSize = completionTabSize(editor);
+		var lines = completion.split("\n");
+		for (i in 0...lines.length) lines[i] = normalizeLineIndent(lines[i], tabSize);
+		return lines.join("\n");
+	}
+
+	static function completionTabSize(editor:AceWrap):Int {
+		var value:Dynamic = null;
+		try {
+			value = editor.session.getOption("tabSize");
+		} catch (x:Dynamic) {}
+		var tabSize:Null<Int> = value != null ? Std.parseInt(Std.string(value)) : null;
+		if (tabSize == null || tabSize <= 0) tabSize = Preferences.current != null ? Preferences.current.tabSize : 4;
+		if (tabSize == null || tabSize <= 0) tabSize = 4;
+		return tabSize;
+	}
+
+	static function normalizeLineIndent(line:String, tabSize:Int):String {
+		var index = 0;
+		var columns = 0;
+		while (index < line.length) {
+			var c = line.charCodeAt(index);
+			if (c == " ".code) {
+				columns++;
+			} else if (c == "\t".code) {
+				columns += tabSize - (columns % tabSize);
+			} else {
+				break;
+			}
+			index++;
+		}
+		if (index == 0) return line;
+		return repeatText("\t", Std.int(columns / tabSize)) + repeatText(" ", columns % tabSize) + line.substring(index);
+	}
+
+	static function repeatText(text:String, count:Int):String {
+		var out = "";
+		for (i in 0...count) out += text;
+		return out;
 	}
 
 	static function getCurrentLinePrefix(editor:AceWrap):String {
