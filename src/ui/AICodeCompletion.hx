@@ -44,6 +44,14 @@ typedef AICompletionPromptData = {
 	var protectedSuffix:String;
 }
 
+typedef AIOpenCodeTabsContext = {
+	var text:String;
+	var count:Int;
+	var chars:Int;
+	var truncated:Bool;
+	var files:Array<Dynamic>;
+}
+
 class AICodeCompletion {
 	static var pending:Bool = false;
 	static var lastDebug:Dynamic = null;
@@ -370,11 +378,17 @@ class AICodeCompletion {
 	static function buildRequest(editor:AceWrap, model:String, maxContextChars:Int, maxOutputTokens:Int, inlineSuggestion:Bool):AICompletionPromptData {
 		if (maxContextChars <= 0) maxContextChars = 12000;
 		if (maxContextChars < 1000) maxContextChars = 1000;
+		var openTabsContextBudget = getOpenCodeTabsContextBudget(maxContextChars, inlineSuggestion);
+		var currentContextChars = maxContextChars - openTabsContextBudget;
+		if (currentContextChars < 1000) {
+			currentContextChars = maxContextChars;
+			openTabsContextBudget = 0;
+		}
 		var code = editor.session.getValue();
 		var pos = editor.getCursorPosition();
 		var offset = posToOffset(code, pos);
-		var beforeLen = Std.int(maxContextChars * (inlineSuggestion ? 0.82 : 0.7));
-		var afterLen = maxContextChars - beforeLen;
+		var beforeLen = Std.int(currentContextChars * (inlineSuggestion ? 0.82 : 0.7));
+		var afterLen = currentContextChars - beforeLen;
 		var beforeStart = offset - beforeLen;
 		if (beforeStart < 0) beforeStart = 0;
 		var afterEnd = offset + afterLen;
@@ -386,12 +400,16 @@ class AICodeCompletion {
 		var file = editor.session.gmlFile;
 		var fileName = file != null ? file.name : "untitled";
 		var selected = editor.getSelectedText();
+		var openTabsContext = buildOpenCodeTabsContext(editor, openTabsContextBudget);
 		var prompt = "Complete GameMaker Language code at <CURSOR/>.\n"
 			+ "File: " + fileName + "\n"
 			+ "Think of this as fill-in-the-middle: PREFIX is already before the cursor, PROTECTED_SUFFIX is already after the cursor.\n"
 			+ "Return only the missing code to insert at <CURSOR/>. Never return PREFIX or PROTECTED_SUFFIX text.\n"
 			+ "If PREFIX ends with a partially typed declaration or expression, return only the missing suffix after the cursor.\n"
 			+ "Follow the surrounding code style. Do not put a statement on the same line after if/for/while. Use braces and put the statement on its own indented line, for example `if (condition) {\\n\\treturn value;\\n}` instead of `if (condition) return value;`.\n";
+		if (openTabsContext.text != "") {
+			prompt += "OPEN_CODE_TABS contains other open code tabs as read-only context. Use it for names, helpers, patterns, and related state, but the insertion target remains CURRENT_FILE.\n";
+		}
 		if (inlineSuggestion) {
 			prompt += "This will be shown as an inline ghost suggestion. Prefer the shortest useful continuation; one line is best unless a small block is clearly needed.\n"
 				+ "Complete only the current expression, statement, branch body, or function body. Never include following top-level/static members, functions, enums, macros, or code copied from PROTECTED_SUFFIX.\n"
@@ -403,6 +421,9 @@ class AICodeCompletion {
 		}
 		if (selected != null && selected != "") {
 			prompt += "The editor currently has selected text; return replacement text for that selection if appropriate.\n";
+		}
+		if (openTabsContext.text != "") {
+			prompt += "\n<OPEN_CODE_TABS>\n" + openTabsContext.text + "\n</OPEN_CODE_TABS>";
 		}
 		prompt += "\n<CURRENT_FILE>\n<PREFIX>\n" + before + "\n</PREFIX>\n<CURSOR/>\n<PROTECTED_SUFFIX>\n" + after + "\n</PROTECTED_SUFFIX>\n</CURRENT_FILE>";
 		var request:Dynamic = {
@@ -421,6 +442,12 @@ class AICodeCompletion {
 			context: {
 				prefixChars: before.length,
 				suffixChars: after.length,
+				requestedContextChars: maxContextChars,
+				currentFileContextChars: currentContextChars,
+				openTabsChars: openTabsContext.chars,
+				openTabsCount: openTabsContext.count,
+				openTabsTruncated: openTabsContext.truncated,
+				openTabsFiles: openTabsContext.files,
 				linePrefix: linePrefix,
 				protectedSuffix: protectedSuffix,
 				prefixTruncated: beforeStart > 0,
@@ -429,6 +456,122 @@ class AICodeCompletion {
 			linePrefix: linePrefix,
 			protectedSuffix: protectedSuffix,
 		};
+	}
+
+	static function getOpenCodeTabsContextBudget(maxContextChars:Int, inlineSuggestion:Bool):Int {
+		var budget = Std.int(maxContextChars * (inlineSuggestion ? 0.18 : 0.25));
+		if (budget < 300) return 0;
+		var maxBudget = inlineSuggestion ? 2500 : 6000;
+		return budget > maxBudget ? maxBudget : budget;
+	}
+
+	static function buildOpenCodeTabsContext(editor:AceWrap, maxChars:Int):AIOpenCodeTabsContext {
+		var files:Array<Dynamic> = [];
+		var empty:AIOpenCodeTabsContext = {
+			text: "",
+			count: 0,
+			chars: 0,
+			truncated: false,
+			files: files,
+		};
+		if (maxChars <= 0 || ChromeTabs.impl == null) return empty;
+		var tabEls = ChromeTabs.impl.tabEls;
+		if (tabEls == null) return empty;
+		var currentFile = editor.session.gmlFile;
+		var items:Array<Dynamic> = [];
+		var order = 0;
+		for (tab in tabEls) {
+			if (tab == null) continue;
+			var file:Dynamic = tab.gmlFile;
+			if (file == null || file == currentFile || Reflect.field(file, "codeEditor") == null) continue;
+			var session:Dynamic = null;
+			try {
+				session = file.getAceSession();
+			} catch (x:Dynamic) {}
+			if (session == null) continue;
+			var code:String = null;
+			try {
+				code = session.getValue();
+			} catch (x:Dynamic) {}
+			if (code == null || code.trim() == "") continue;
+			var time = tab.gmlATime != null ? tab.gmlATime : 0;
+			items.push({
+				file: file,
+				code: code,
+				time: time,
+				order: order++,
+			});
+		}
+		items.sort(function(a:Dynamic, b:Dynamic):Int {
+			if (a.time > b.time) return -1;
+			if (a.time < b.time) return 1;
+			if (a.order < b.order) return -1;
+			if (a.order > b.order) return 1;
+			return 0;
+		});
+		var blocks:Array<String> = [];
+		var remaining = maxChars;
+		var truncated = false;
+		for (item in items) {
+			if (remaining < 300) {
+				truncated = true;
+				break;
+			}
+			var file:Dynamic = item.file;
+			var fileName = promptMeta(Reflect.field(file, "name"));
+			var filePath = promptMeta(Reflect.field(file, "path"));
+			var header = "<OPEN_TAB>\nName: " + fileName;
+			if (filePath != "") header += "\nPath: " + filePath;
+			header += "\nCode:\n";
+			var footer = "\n</OPEN_TAB>\n";
+			var codeBudget = remaining - header.length - footer.length;
+			if (codeBudget < 200) {
+				truncated = true;
+				break;
+			}
+			var trimmed:Dynamic = trimOpenTabCode(item.code, codeBudget);
+			var block = header + trimmed.text + footer;
+			blocks.push(block);
+			remaining -= block.length;
+			files.push({
+				name: fileName,
+				path: filePath,
+				chars: Std.string(trimmed.text).length,
+				truncated: trimmed.truncated,
+			});
+			if (trimmed.truncated) truncated = true;
+		}
+		if (files.length < items.length) truncated = true;
+		var text = blocks.join("\n");
+		return {
+			text: text,
+			count: files.length,
+			chars: text.length,
+			truncated: truncated,
+			files: files,
+		};
+	}
+
+	static function trimOpenTabCode(code:String, maxChars:Int):Dynamic {
+		code = normalizeNewlines(code);
+		if (maxChars <= 0) return { text: "", truncated: code != "" };
+		if (code.length <= maxChars) return { text: code, truncated: false };
+		var marker = "\n/* ... open tab truncated ... */\n";
+		if (maxChars <= marker.length + 2) {
+			return { text: code.substring(0, maxChars), truncated: true };
+		}
+		var bodyChars = maxChars - marker.length;
+		var headLen = Std.int(bodyChars * 0.65);
+		var tailLen = bodyChars - headLen;
+		return {
+			text: code.substring(0, headLen) + marker + code.substring(code.length - tailLen),
+			truncated: true,
+		};
+	}
+
+	static function promptMeta(value:Dynamic):String {
+		if (value == null) return "";
+		return Std.string(value).replace("\r", " ").replace("\n", " ").trim();
 	}
 	
 	static function postJson(url:String, apiKey:String, body:String, onSuccess:String->Void, onError:String->Void):AICompletionRequestHandle {
