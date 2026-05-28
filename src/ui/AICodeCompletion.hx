@@ -100,7 +100,7 @@ class AICodeCompletion {
 		setStatus(editor, "AI completion: requesting...");
 		var handle = requestCompletion(editor, false, true, function(completion) {
 			pending = false;
-			editor.insert(completion);
+			insertCompletion(editor, completion);
 			setStatus(editor, "AI completion inserted");
 		}, function(errorText) {
 			pending = false;
@@ -849,6 +849,91 @@ class AICodeCompletion {
 		if (col > line.length) col = line.length;
 		return offset + col;
 	}
+
+	static function insertCompletion(editor:AceWrap, text:String):Void {
+		var start:AcePos;
+		var range:AceRange;
+		if (editor.selection.isEmpty()) {
+			start = copyPos(editor.getCursorPosition());
+			var linePrefix = editor.session.getLine(start.row).substring(0, start.column);
+			var end = extendEndOverDuplicateAutoClosers(editor.session, start, start, text, linePrefix);
+			range = AceRange.fromPair(start, end);
+		} else {
+			var selected = editor.getSelectionRange();
+			start = copyPos(selected.start);
+			range = AceRange.fromPair(selected.start, selected.end);
+			editor.selection.clearSelection();
+		}
+		editor.session.doc.replace(range, text);
+		editor.gotoPos(endPosAfterInsert(start, text));
+	}
+
+	public static function extendEndOverDuplicateAutoClosers(session:Dynamic, start:AcePos, end:AcePos, insertedText:String, openerText:String):AcePos {
+		var out = copyPos(end);
+		if (start.row != end.row || insertedText == null || insertedText == "") return out;
+		var closers = unmatchedClosers(openerText);
+		if (closers.length == 0) return out;
+		while (closers.length > 0) {
+			var closer = closers.pop();
+			var closerText = String.fromCharCode(closer);
+			if (insertedText.indexOf(closerText) < 0) continue;
+			var line:String = session.getLine(out.row);
+			if (out.column >= line.length || line.charCodeAt(out.column) != closer) break;
+			out.column++;
+		}
+		return out;
+	}
+
+	static function unmatchedClosers(text:String):Array<Int> {
+		var stack:Array<Int> = [];
+		var inString = false;
+		var stringQuote = 0;
+		var escaped = false;
+		var i = 0;
+		while (text != null && i < text.length) {
+			var c = text.charCodeAt(i);
+			if (inString) {
+				if (escaped) {
+					escaped = false;
+				} else if (c == "\\".code) {
+					escaped = true;
+				} else if (c == stringQuote) {
+					inString = false;
+				}
+				i++;
+				continue;
+			}
+			if (c == "\"".code || c == "'".code) {
+				inString = true;
+				stringQuote = c;
+			} else if (c == "(".code) {
+				stack.push(")".code);
+			} else if (c == "[".code) {
+				stack.push("]".code);
+			} else if (c == "{".code) {
+				stack.push("}".code);
+			} else if ((c == ")".code || c == "]".code || c == "}".code) && stack.length > 0 && stack[stack.length - 1] == c) {
+				stack.pop();
+			}
+			i++;
+		}
+		return stack;
+	}
+
+	static function copyPos(pos:AcePos):AcePos {
+		return new AcePos(pos.column, pos.row);
+	}
+
+	static function endPosAfterInsert(start:AcePos, text:String):AcePos {
+		text = normalizeNewlines(text);
+		var lines = text.split("\n");
+		if (lines.length <= 1) return new AcePos(start.column + text.length, start.row);
+		return new AcePos(lines[lines.length - 1].length, start.row + lines.length - 1);
+	}
+
+	static function normalizeNewlines(text:String):String {
+		return text != null ? text.replace("\r\n", "\n").replace("\r", "\n") : "";
+	}
 	
 	public static function setStatus(editor:AceWrap, message:String):Void {
 		if (editor == null) return;
@@ -1021,6 +1106,9 @@ class AICodeCompletionState {
 		}
 		var replacement = typedText + part;
 		if (!current.insertText.startsWith(replacement)) replacement = current.insertText;
+		var linePrefix = editor.session.getLine(current.replaceEnd.row).substring(0, current.replaceEnd.column);
+		var replaceEnd = AICodeCompletion.extendEndOverDuplicateAutoClosers(editor.session, current.replaceStart, current.replaceEnd, replacement, linePrefix);
+		currentRange = AceRange.fromPair(current.replaceStart, replaceEnd);
 		var newEnd = endPosAfterInsert(current.replaceStart, replacement);
 		suppressSelectionHide = true;
 		editor.session.doc.replace(currentRange, replacement);
@@ -1361,6 +1449,8 @@ class AICodeCompletionState {
 	}
 
 	function replaceRange(start:AcePos, end:AcePos, text:String):Void {
+		var linePrefix = start.row == end.row ? editor.session.getLine(end.row).substring(0, end.column) : "";
+		end = AICodeCompletion.extendEndOverDuplicateAutoClosers(editor.session, start, end, text, linePrefix);
 		editor.session.doc.replace(AceRange.fromPair(start, end), text);
 		editor.gotoPos(endPosAfterInsert(start, text));
 	}
