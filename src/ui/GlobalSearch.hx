@@ -5,6 +5,7 @@ import ace.extern.*;
 import Main.aceEditor;
 import Main.window;
 import gml.*;
+import gml.type.GmlTypeDef;
 import electron.Dialog;
 import gml.file.GmlFile;
 import js.lib.RegExp;
@@ -36,6 +37,7 @@ using tools.HtmlTools;
 	public static var element:Element;
 	public static var infoElement:Element;
 	public static var fdFind:InputElement;
+	public static var fdVarType:InputElement;
 	public static var fdReplace:InputElement;
 	public static var btFind:InputElement;
 	public static var btReplace:InputElement;
@@ -43,6 +45,7 @@ using tools.HtmlTools;
 	public static var btCancel:InputElement;
 	public static var cbWholeWord:InputElement;
 	public static var cbMatchCase:InputElement;
+	public static var cbVarTypeInvert:InputElement;
 	public static var cbCheckComments:InputElement;
 	public static var cbCheckStrings:InputElement;
 	public static var cbCheckObjects:InputElement;
@@ -59,6 +62,7 @@ using tools.HtmlTools;
 	public static var cbUnique:InputElement;
 	public static var divSearching:DivElement;
 	public static var currentPath:String;
+	static var searchRun:GlobalSearchRunState;
 	//
 	static function offsetToPos(code:String, till:Int, rowStart:Int):AcePos {
 		return ui.search.GlobalSearchImpl.offsetToPos(code, till, rowStart);
@@ -102,7 +106,7 @@ using tools.HtmlTools;
 		if (!isVisible()) {
 			element.style.display = "";
 			infoElement.style.display = "none";
-			divSearching.style.display = "none";
+			if (searchRun == null) divSearching.style.display = "none";
 			var s = aceEditor.getSelectedText();
 			if (s != "" && s != null) fdFind.value = s;
 			fdFind.focus();
@@ -110,6 +114,60 @@ using tools.HtmlTools;
 		} else {
 			element.style.display = "none";
 		}
+	}
+	static function setSearchControlsEnabled(enabled:Bool):Void {
+		fdFind.disabled = !enabled;
+		fdVarType.disabled = !enabled;
+		cbVarTypeInvert.disabled = !enabled;
+		fdReplace.disabled = !enabled;
+		btFind.disabled = !enabled;
+		btReplace.disabled = !enabled;
+		btPreview.disabled = !enabled;
+		cbWholeWord.disabled = !enabled;
+		cbMatchCase.disabled = !enabled;
+		cbCheckComments.disabled = !enabled;
+		cbCheckStrings.disabled = !enabled;
+		cbCheckObjects.disabled = !enabled;
+		cbCheckScripts.disabled = !enabled;
+		cbCheckHeaders.disabled = !enabled;
+		cbCheckTimelines.disabled = !enabled;
+		cbCheckRooms.disabled = !enabled;
+		cbCheckMacros.disabled = !enabled;
+		cbCheckShaders.disabled = !enabled;
+		cbCheckExtensions.disabled = !enabled;
+		cbCheckLibResources.disabled = !enabled;
+		cbExpandLambdas.disabled = !enabled;
+		cbRegExp.disabled = !enabled;
+		cbUnique.disabled = !enabled;
+	}
+	static function updateSearchProgress(progress:GlobalSearchProgress):Void {
+		if (searchRun == null) return;
+		searchRun.done = progress.done;
+		searchRun.total = progress.total;
+		var text:String;
+		if (searchRun.cancelled || progress.cancelled) {
+			text = "Cancelling search...";
+		} else if (progress.total > 0) {
+			var percent = Math.floor(progress.done * 100 / progress.total);
+			text = 'Searching: ${progress.done}/${progress.total} ($percent%)';
+		} else {
+			text = 'Searching: ${progress.done} files';
+		}
+		if (progress.name != null && progress.name != "") {
+			text += " - " + progress.name;
+		}
+		divSearching.innerText = text;
+	}
+	static function cancelSearch():Void {
+		if (searchRun == null) return;
+		searchRun.cancelled = true;
+		btCancel.disabled = true;
+		btCancel.value = "Cancelling...";
+		updateSearchProgress({
+			done: searchRun.done,
+			total: searchRun.total,
+			cancelled: true,
+		});
 	}
 	public static function getOptions():GlobalSearchOpt {
 		var find:EitherType<String, RegExp>;
@@ -123,8 +181,25 @@ using tools.HtmlTools;
 			window.alert("Error compiling the regular expression: " + x);
 			return null;
 		}
+		var variableType = StringTools.trim(fdVarType.value);
+		if (variableType != "") {
+			if (cbRegExp.checked) {
+				window.alert("Variable type filter can only be used with plain variable names.");
+				return null;
+			}
+			if (!jsRx(~/^[A-Za-z_][A-Za-z0-9_]*$/).test(fdFind.value)) {
+				window.alert("Variable type filter expects a single variable name.");
+				return null;
+			}
+			if (GmlTypeDef.parse(variableType, "global search") == null) {
+				window.alert("Could not parse variable type: " + variableType);
+				return null;
+			}
+		}
 		return {
 			find: find,
+			variableType: variableType != "" ? variableType : null,
+			variableTypeInvert: variableType != "" && cbVarTypeInvert.checked,
 			findFilter: null,
 			replaceBy: null,
 			previewReplace: false,
@@ -146,10 +221,36 @@ using tools.HtmlTools;
 		};
 	}
 	public static function runAuto(opt:GlobalSearchOpt) {
+		if (searchRun != null) return;
+		var state:GlobalSearchRunState = {
+			cancelled: false,
+			done: 0,
+			total: 0,
+		};
+		searchRun = state;
+		opt.searchWasCancelled = false;
+		opt.searchCancelled = function() {
+			return state.cancelled;
+		};
+		opt.searchProgress = function(progress) {
+			updateSearchProgress(progress);
+		};
+		setSearchControlsEnabled(false);
+		btCancel.disabled = false;
+		btCancel.value = "Cancel Search";
 		divSearching.style.display = "";
+		updateSearchProgress({done: 0, total: 0});
 		run(opt, function() {
-			element.style.display = "none";
-			infoElement.style.display = "none";
+			var cancelled = state.cancelled || opt.searchWasCancelled;
+			if (searchRun == state) searchRun = null;
+			setSearchControlsEnabled(true);
+			btCancel.disabled = false;
+			btCancel.value = "Cancel";
+			divSearching.style.display = "none";
+			if (!cancelled) {
+				element.style.display = "none";
+				infoElement.style.display = "none";
+			}
 		});
 	}
 	public static function findAuto(?opt:GlobalSearchOpt) {
@@ -180,23 +281,31 @@ using tools.HtmlTools;
 		runAuto(opt);
 	}
 	public static function init() {
-        element = Main.document.querySelector("#global-search");
+		element = Main.document.querySelector("#global-search");
 		element.innerHTML = SynSugar.xmls(<form>
 			<div class="search-main">
-				<div>
-					Find what:
-					<input type="text" name="find-text" />
+				<div class="search-row">
+					<label for="global-search-find-text">Find what:</label>
+					<input id="global-search-find-text" type="text" name="find-text" />
 				</div>
-				<div>
-					Replace with:
-					<input type="text" name="replace-text" />
+				<div class="search-row">
+					<label for="global-search-find-type">Type:</label>
+					<div class="search-type-filter">
+						<input id="global-search-find-type" type="text" name="find-type" title="Optional variable type filter" />
+						<input id="global-search-find-type-invert" type="checkbox" name="find-type-invert" title="Find variables that have a different known type" />
+						<label for="global-search-find-type-invert" title="Find variables that have a different known type">Not type</label>
+					</div>
 				</div>
-				<div>
+				<div class="search-row">
+					<label for="global-search-replace-text">Replace with:</label>
+					<input id="global-search-replace-text" type="text" name="replace-text" />
+				</div>
+				<div class="search-buttons">
 					<input type="button" class="highlighted_button" name="find" value="Find All" />
 					<input type="button" class="highlighted_button" name="replace" value="Replace All" title="Replace items across the project" />
 					<input type="button" class="highlighted_button" name="cancel" value="Cancel" /><br/>
 				</div>
-				<div>
+				<div class="search-buttons">
 					<input type="button" class="highlighted_button" name="preview" value="Preview 'Replace All'" title="Preview replace operation without modifications" />
 				</div>
 				<div style="display:none" class="searching-text">
@@ -253,6 +362,8 @@ using tools.HtmlTools;
 		</html>);
 		//{
         fdFind = element.querySelectorAuto('input[name="find-text"]');
+        fdVarType = element.querySelectorAuto('input[name="find-type"]');
+        cbVarTypeInvert = element.querySelectorAuto('input[name="find-type-invert"]');
         fdReplace = element.querySelectorAuto('input[name="replace-text"]');
         btFind = element.querySelectorAuto('input[name="find"]');
         btReplace = element.querySelectorAuto('input[name="replace"]');
@@ -283,6 +394,12 @@ using tools.HtmlTools;
 				case KeyboardEvent.DOM_VK_ESCAPE: btCancel.click();
 			}
 		}
+		fdVarType.onkeydown = function(e:KeyboardEvent) {
+			switch (e.keyCode) {
+				case KeyboardEvent.DOM_VK_RETURN: btFind.click();
+				case KeyboardEvent.DOM_VK_ESCAPE: btCancel.click();
+			}
+		}
 		fdReplace.onkeydown = function(e:KeyboardEvent) {
 			switch (e.keyCode) {
 				case KeyboardEvent.DOM_VK_RETURN: btReplace.click();
@@ -296,11 +413,34 @@ using tools.HtmlTools;
 			replaceAuto();
 		};
 		btPreview.onclick = function(_) previewAuto();
-		btCancel.onclick = function(_) element.style.display = "none";
+		btCancel.onclick = function(_) {
+			if (searchRun != null) {
+				cancelSearch();
+			} else element.style.display = "none";
+		};
 	}
 }
+typedef GlobalSearchRunState = {
+	cancelled:Bool,
+	done:Int,
+	total:Int,
+};
+typedef GlobalSearchProgress = {
+	done:Int,
+	total:Int,
+	?name:String,
+	?cancelled:Bool,
+};
 typedef GlobalSearchOpt = {
 	find:EitherType<String, RegExp>,
+	/** If set, only includes variable references matching this type or its nullable form. */
+	?variableType:String,
+	/** If true, includes typed references that do not match variableType and enabled non-code text segments. */
+	?variableTypeInvert:Bool,
+	/** If set, only includes method references whose receiver expression has this type. */
+	?receiverType:String,
+	/** If true, direct self-field references are matched even when not followed by a call. */
+	?receiverAllowSelfField:Bool,
 	?replaceBy:EitherType<String, Function>,
 	/** If `true`, shows pairs of before-after replacement lines but does not modify files. */
 	?previewReplace:Bool,
@@ -343,5 +483,11 @@ typedef GlobalSearchOpt = {
 	?errors:String,
 	/** If set, prepends the given strings before the output */
 	?results:String,
+	/** Runtime-only: reports project search progress. */
+	?searchProgress:GlobalSearchProgress->Void,
+	/** Runtime-only: returns true if the search should stop. */
+	?searchCancelled:Void->Bool,
+	/** Runtime-only: set when the search has been cancelled. */
+	?searchWasCancelled:Bool,
 };
 typedef GlobalSearchCtxFilter = (ctx:String, path:String)->Bool;

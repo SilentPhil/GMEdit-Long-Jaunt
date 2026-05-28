@@ -184,6 +184,23 @@ class GmlLinter {
 		}
 	}
 
+	function isInheritedInstanceField(name:String):Bool {
+		var t = getSelfType();
+		if (t == null) return false;
+		inline function check(ns:GmlNamespace):Bool {
+			return ns != null && ns.parent != null && ns.parent.getInstKind(name) != null;
+		}
+		return switch (t) {
+			case TInst(_, _, KAny): false;
+			case TInst(nsName, _, _): {
+				var imp = getImports();
+				if (imp != null && check(imp.namespaces[nsName])) true;
+				else check(GmlAPI.gmlNamespaces[nsName]);
+			};
+			default: false;
+		}
+	}
+
 	function checkInstanceVarDeclaration(name:String, oldDepth:Int, isLocal:Bool):Void {
 		if (!prefs.warnInstanceVarDeclarations || isLocal || name == null) return;
 		if (isInstanceVarDeclarationBody(oldDepth)) {
@@ -194,7 +211,7 @@ class GmlLinter {
 		}
 		if (isKnownNonInstanceIdentifier(name)) return;
 		if (constructorInstVars != null) {
-			if (!constructorInstVars.exists(name)) {
+			if (!constructorInstVars.exists(name) && !isInheritedInstanceField(name)) {
 				addWarning('Instance variable `$name` is declared outside the class body');
 			}
 			return;

@@ -17,6 +17,7 @@ import gml.GmlGlobalVar;
 import gml.GmlImports;
 import gml.GmlLocals;
 import gml.Project;
+import gml.type.GmlType;
 import synext.GmlExtLambda;
 import tools.Dictionary;
 import tools.JsTools;
@@ -43,6 +44,32 @@ class AceTooltips {
 	}
 	
 	public static var getDocAt_extra:String;
+	public static function getTypeAt(session:AceSession, pos:AcePos, token:AceToken):GmlType {
+		if (token == null) return null;
+		var scope = session.gmlScopes.get(pos.row);
+		var codeEditor = session.gmlEditor;
+		if (codeEditor == null) return null;
+		var iter = new AceTokenIterator(session, pos.row, pos.column);
+		var endIter = new AceTokenIterator(session, pos.row, pos.column);
+		var funcEnd = endIter.stepForward() == null
+			? session.getEOF()
+			: endIter.getCurrentTokenPosition();
+		var ctx:AceStatusBarDocSearch = {
+			session: session,
+			scope: scope,
+			imports: codeEditor.imports[scope],
+			lambdas: codeEditor.lambdas[scope],
+			tk: token,
+			doc: null,
+			docs: null,
+			iter: iter,
+			exprStart: iter.getCurrentTokenPosition(),
+			funcEnd: funcEnd,
+		};
+		if (!AceStatusBar.getDocData(ctx)) return null;
+		if (ctx.type == null) AceStatusBar.procDocImport(ctx);
+		return ctx.type;
+	}
 	public static function getDocAt(session:AceSession, pos:AcePos, token:AceToken) {
 		var scope = session.gmlScopes.get(pos.row);
 		var codeEditor = session.gmlEditor;

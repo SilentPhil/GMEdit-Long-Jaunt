@@ -22,6 +22,13 @@ using tools.NativeString;
  * @author YellowAfterlife
  */
 class GlobalSearchImpl {
+	static function getSaveOptions(opt:GlobalSearchOpt):GlobalSearchOpt {
+		var out:GlobalSearchOpt = Reflect.copy(opt);
+		out.searchProgress = null;
+		out.searchCancelled = null;
+		out.searchWasCancelled = null;
+		return out;
+	}
 	public static function offsetToPos(code:String, till:Int, rowStart:Int):AcePos {
 		var pos:Int;
 		if (till < rowStart) {
@@ -66,6 +73,14 @@ class GlobalSearchImpl {
 			rx = new RegExp(eterm, eopt);
 		}
 		if (term == "") return;
+		function searchCancelled():Bool {
+			if (opt.searchWasCancelled == true) return true;
+			if (opt.searchCancelled != null && opt.searchCancelled()) {
+				opt.searchWasCancelled = true;
+				return true;
+			}
+			return false;
+		}
 		var results = "";
 		var found = 0;
 		var checkRefKind = opt.checkRefKind;
@@ -79,14 +94,24 @@ class GlobalSearchImpl {
 		var isRepl = repl != null;
 		var isReplFn = Syntax.typeof(repl) == "function";
 		var isPrev = opt.previewReplace;
-		var saveData = new GlobalSeachData(opt);
+		var saveData = new GlobalSeachData(getSaveOptions(opt));
 		var saveItems = saveData.list;
 		var saveItem:GlobalSearchItem;
 		var saveCtxItems:Array<GlobalSearchItem>;
+		var typeFilter = opt.variableType != null
+			? new GlobalSearchTypeFilter(opt.variableType)
+			: opt.receiverType != null ? new GlobalSearchTypeFilter(opt.receiverType, true, opt.receiverAllowSelfField == true) : null;
+		if (typeFilter != null && !typeFilter.isValid()) return;
+		var typeSearch = typeFilter != null;
+		var typeSearchInvert = typeSearch && opt.variableTypeInvert == true;
+		var checkStrings = typeSearch && !typeSearchInvert ? false : opt.checkStrings;
+		var checkComments = typeSearch && !typeSearchInvert ? false : opt.checkComments;
+		var checkHeaders = typeSearch && !typeSearchInvert ? false : opt.checkHeaders;
 		var canLambda = pj.canLambda() && opt.expandLambdas;
 		var checkLibRes = opt.checkLibResources;
 		var lambdaGml:String = null;
 		pj.search(function(name:String, path:String, code:String) {
+			if (searchCancelled()) return isRepl ? code : null;
 			if (!checkLibRes && pj.libraryResourceMap[name]) return isRepl ? code : null;
 			var lambdaPre:GmlExtLambdaPre;
 			if (canLambda) {
@@ -95,6 +120,18 @@ class GlobalSearchImpl {
 				code = GmlExtLambda.preImpl(code, lambdaPre);
 				lambdaGml = lambdaPre.gml;
 			} else lambdaPre = null;
+			var typeFilterPrepared = false;
+			function matchType(ctxName:String, ofs:Int, text:String, nonCode:Bool):Bool {
+				if (typeFilter == null) return true;
+				if (nonCode && typeSearchInvert) return true;
+				if (searchCancelled()) return false;
+				if (!typeFilterPrepared) {
+					typeFilter.prepareFile(name, path, code);
+					typeFilterPrepared = true;
+				}
+				if (searchCancelled()) return false;
+				return typeFilter.accepts(ctxName, ofs, text, opt.matchCase, opt.variableTypeInvert == true);
+			}
 			GlobalSearch.currentPath = path;
 			var isShader = (Path.extension(path) == "fsh" || Path.extension(path) == "vsh");
 			var q = new GmlReader(code, null, isShader);
@@ -117,11 +154,13 @@ class GlobalSearchImpl {
 			var ctxLast = null;
 			var out = isRepl ? "" : null;
 			var replStart = 0;
-			function flush(till:Int) {
+			function flush(till:Int, nonCode:Bool = false) {
 				if (!ctxCheck) return;
+				if (searchCancelled()) return;
 				var subc:String = q.substring(start, till);
 				var mt = rx.exec(subc);
 				while (mt != null) {
+					if (searchCancelled()) return;
 					var ofs = start + mt.index;
 					var eol = code.indexOf("\n", ofs);
 					if (eol >= 0) {
@@ -139,6 +178,7 @@ class GlobalSearchImpl {
 						if ((allowDotPrefix || !GmlCodeTools.isDotAccessBacktrack(code, ofs))
 							&& (filterFn == null || filterFn(curr))
 							&& (lineFilter == null || lineFilter(line))
+							&& matchType(ctxName, ofs, mt[0], nonCode)
 						) {
 							saveItem = { row: pos.row, code: line, next: null };
 							saveItems.push(saveItem);
@@ -182,13 +222,30 @@ class GlobalSearchImpl {
 					mt = rx.exec(subc);
 				}
 			}
-			while (q.loop) {
+			while (q.loop && !searchCancelled()) {
 				var p = q.pos;
 				var c = q.read();
 				var p1:Int;
 				switch (c) {
 					case "/".code: {
-						if (!opt.checkComments) switch (q.peek()) {
+						if (typeSearchInvert && checkComments) switch (q.peek()) {
+							case "/".code: {
+								flush(p);
+								var nonCodeStart = p;
+								q.skipLine();
+								start = nonCodeStart;
+								flush(q.pos, true);
+								start = q.pos;
+							};
+							case "*".code: {
+								flush(p);
+								var nonCodeStart = p;
+								q.skip(); q.skipComment();
+								start = nonCodeStart;
+								flush(q.pos, true);
+								start = q.pos;
+							};
+						} else if (!checkComments) switch (q.peek()) {
 							case "/".code: {
 								flush(p);
 								q.skipLine();
@@ -202,7 +259,16 @@ class GlobalSearchImpl {
 						}
 					};
 					case '"'.code, "'".code, "@".code, "`".code: {
-						if (!opt.checkStrings) {
+						if (typeSearchInvert && checkStrings) {
+							flush(p);
+							var nonCodeStart = p;
+							q.skipStringAuto(c, version);
+							if (q.pos > p + 1) {
+								start = nonCodeStart;
+								flush(q.pos, true);
+								start = q.pos;
+							}
+						} else if (!checkStrings) {
 							q.skipStringAuto(c, version);
 							if (q.pos > p + 1) {
 								flush(p);
@@ -210,7 +276,17 @@ class GlobalSearchImpl {
 							}
 						}
 					};
-					case "$".code if (!opt.checkStrings && q.isDqTplStart(version)): {
+					case "$".code if (typeSearchInvert && checkStrings && q.isDqTplStart(version)): {
+						flush(p);
+						var nonCodeStart = p;
+						q.skipDqTplString(version);
+						if (q.pos > p + 1) {
+							start = nonCodeStart;
+							flush(q.pos, true);
+							start = q.pos;
+						}
+					}
+					case "$".code if (!checkStrings && q.isDqTplStart(version)): {
 						q.skipDqTplString(version);
 						if (q.pos > p + 1) {
 							flush(p);
@@ -233,9 +309,9 @@ class GlobalSearchImpl {
 							ctxStart = q.pos;
 							ctxCheckProc(ctxName);
 							saveCtxItems = [];
-							if (opt.checkHeaders) {
+							if (checkHeaders) {
 								start = p;
-								flush(q.pos);
+								flush(q.pos, typeSearchInvert);
 							}
 							saveData.map.set(ctxName, saveCtxItems);
 							start = q.pos;
@@ -244,6 +320,7 @@ class GlobalSearchImpl {
 				}
 			}
 			flush(q.pos);
+			if (searchCancelled()) return isRepl ? code : null;
 			if (isRepl) {
 				out += q.substring(replStart, q.length);
 				var hasLambda = canLambda && !isPrev && GmlExtLambda.hasHashLambda(out);
@@ -259,6 +336,7 @@ class GlobalSearchImpl {
 			return isRepl && !isPrev ? out : null;
 		}, function() {
 			if (finish != null) finish();
+			if (searchCancelled()) return;
 			var name:String;
 			if (checkRefKind) {
 				name = "references";
@@ -272,6 +350,13 @@ class GlobalSearchImpl {
 			name += ": " + term;
 			var head = '// ' + found + ' result';
 			if (found != 1) head += "s";
+			if (opt.variableType != null) {
+				head += opt.variableTypeInvert == true
+					? ' for type != ${opt.variableType}'
+					: ' for type ${opt.variableType}';
+			} else if (opt.receiverType != null) {
+				head += ' for receiver type ${opt.receiverType}';
+			}
 			if (isRepl) {
 				if (isPrev) {
 					head += " would be replaced";

@@ -217,6 +217,46 @@ var queue:Array<SoulCharacter> = [];
 // - queue -> opens SoulCharacter
 ```
 
+### Typed global search and references
+
+The global search dialog (`Ctrl+Shift+F`) has an optional `Type` field for variable-name searches.
+When filled, GMEdit first finds text matches and then keeps only variable references whose inferred
+type matches the requested type. Nullable forms are included automatically, so searching for
+`soul` with type `SoulBasic` also matches `SoulBasic?`.
+
+Enable `Not type` to invert the filter and show matches whose known type is different from the
+requested type, plus matching text inside enabled strings/comments.
+
+Long searches show file progress and can be cancelled from the search dialog.
+
+```gml
+var soul:SoulBasic = get_selected_soul();
+soul.get_traits().cure_bleeding();
+
+var soul:SoulCharacter = get_character_soul();
+soul.get_character_soul();
+```
+
+`Shift+F1`/`Shift+F12` on a `static method = function` declaration finds method references for that
+method's owner type instead of every method with the same name. This includes both receiver calls
+(`soul.get_mood_gui_data_struct()`) and direct self-calls inside the same constructor
+(`get_mood_gui_data_struct()`).
+
+`Shift+F1`/`Shift+F12` on a direct class field searches references to that field for the owning
+class.
+
+### Extract constructor to separate script
+
+Place the cursor on the name in a top-level constructor declaration and run
+`Refactor: Extract to separate file` from the command palette. GMEdit moves that constructor into a
+new same-named script resource in the same GMS project-tree folder as the original script, removes it
+from the source script, and updates the GameMaker project metadata.
+
+```gml
+function GameDirectorPhase(_generic:GameDirectorPhaseGeneric) constructor {
+}
+```
+
 ### AI code completion
 
 GMEdit can show AI-powered inline ghost completions while typing, and can also insert a completion
