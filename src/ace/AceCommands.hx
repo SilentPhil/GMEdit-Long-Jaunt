@@ -9,6 +9,7 @@ import tools.CharCode;
 import tools.NativeString;
 import ui.AICodeCompletion;
 import ui.CommandPalette;
+import ui.RefactorExtractClass;
 import ace.extern.AceCommand;
 import ui.ext.Bookmarks;
 using StringTools;
@@ -132,6 +133,12 @@ using StringTools;
 				if (tk != null) ui.OpenDeclaration.findReferences(editor.session, pos, tk);
 			}
 		});
+		add({
+			name: "extractConstructorToScript",
+			exec: function(editor:AceWrap) {
+				RefactorExtractClass.run(editor);
+			}
+		}, "Refactor: Extract to separate file");
 		add({
 			name: "saveFile",
 			bindKey: wm("Ctrl-S", "Command-S"),

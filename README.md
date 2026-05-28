@@ -245,6 +245,18 @@ method's owner type instead of every method with the same name. This includes bo
 `Shift+F1`/`Shift+F12` on a direct class field searches references to that field for the owning
 class.
 
+### Extract constructor to separate script
+
+Place the cursor on the name in a top-level constructor declaration and run
+`Refactor: Extract to separate file` from the command palette. GMEdit moves that constructor into a
+new same-named script resource in the same GMS project-tree folder as the original script, removes it
+from the source script, and updates the GameMaker project metadata.
+
+```gml
+function GameDirectorPhase(_generic:GameDirectorPhaseGeneric) constructor {
+}
+```
+
 ### AI code completion
 
 GMEdit can show AI-powered inline ghost completions while typing, and can also insert a completion
