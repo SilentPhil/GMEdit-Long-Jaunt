@@ -1,4 +1,5 @@
 package ui.project;
+import electron.Dialog;
 import gml.file.GmlFile;
 import ui.preferences.PrefPlugins;
 import gml.GmlAPI;
@@ -99,6 +100,160 @@ class ProjectProperties {
 			"Library resources are omitted from search results and Global Lookup.",
 			"Takes effect upon reloading the project."
 		].join("\n");
+	}
+
+	static function parseWindowsExportVersion(text:String):WindowsExportVersionParts {
+		text = NativeString.trimBoth(text);
+		var rxPart = new RegExp("^\\d+$");
+		var split = text.split(".");
+		if (split.length != 4) return null;
+		var parts:Array<Int> = [];
+		for (part in split) {
+			if (!rxPart.test(part)) return null;
+			parts.push(Std.parseInt(part));
+		}
+		return {
+			major: parts[0],
+			minor: parts[1],
+			revision: parts[2],
+			build: parts[3],
+		};
+	}
+
+	static inline function formatWindowsExportVersion(parts:WindowsExportVersionParts):String {
+		return '${parts.major}.${parts.minor}.${parts.revision}.${parts.build}';
+	}
+
+	static function getDynamicInt(data:Dynamic, field:String, fallback:Int):Int {
+		var value:Dynamic = Reflect.field(data, field);
+		if (value == null) return fallback;
+		var parsed = Std.parseInt("" + value);
+		return parsed != null ? parsed : fallback;
+	}
+
+	static function getGmxInt(data:gmx.SfGmx, field:String, fallback:Int):Int {
+		var value = data.findInt(field);
+		return value != null ? value : fallback;
+	}
+
+	static function getGms1ConfigPath(project:Project):String {
+		var projectGmx = project.readGmxFileSync(project.name);
+		for (configs in projectGmx.findAll("Configs")) {
+			var config = configs.find("Config");
+			if (config == null || config.text == null || config.text == "") continue;
+			var path = config.text + ".config.gmx";
+			if (project.existsSync(path)) return path;
+		}
+		return null;
+	}
+
+	static function readWindowsExportVersion(project:Project):WindowsExportVersionInfo {
+		switch (project.version.config.projectModeId) {
+			case 1: {
+				var path = getGms1ConfigPath(project);
+				if (path == null) return null;
+				var gmx = project.readGmxFileSync(path);
+				var options = gmx.find("Options");
+				if (options == null) return null;
+				var parts:WindowsExportVersionParts = {
+					major: getGmxInt(options, "option_windows_major_version", 1),
+					minor: getGmxInt(options, "option_windows_mainor_version", 0),
+					revision: getGmxInt(options, "option_windows_release_version", 0),
+					build: getGmxInt(options, "option_windows_build_version", 0),
+				};
+				return {
+					path: path,
+					version: formatWindowsExportVersion(parts),
+					isGmx: true,
+				};
+			};
+			case 2: {
+				var path = "options/windows/options_windows.yy";
+				if (!project.existsSync(path)) return null;
+				var yy:Dynamic = project.readYyFileSync(path);
+				var value:Dynamic = Reflect.field(yy, "option_windows_version");
+				var version:String;
+				if (value is String) {
+					version = value;
+				} else if (value != null) {
+					version = formatWindowsExportVersion({
+						major: getDynamicInt(value, "major", 1),
+						minor: getDynamicInt(value, "minor", 0),
+						revision: getDynamicInt(value, "revision", 0),
+						build: getDynamicInt(value, "build", 0),
+					});
+				} else {
+					version = "1.0.0.0";
+				}
+				return {
+					path: path,
+					version: version,
+					isGmx: false,
+				};
+			};
+			default:
+				return null;
+		}
+	}
+
+	static function writeWindowsExportVersion(project:Project, info:WindowsExportVersionInfo, parts:WindowsExportVersionParts) {
+		if (info.isGmx) {
+			var gmx = project.readGmxFileSync(info.path);
+			var options = gmx.find("Options");
+			if (options == null) {
+				options = gmx.addTextChild("Options");
+			}
+			options.setChildInt("option_windows_major_version", parts.major);
+			options.setChildInt("option_windows_mainor_version", parts.minor);
+			options.setChildInt("option_windows_release_version", parts.revision);
+			options.setChildInt("option_windows_build_version", parts.build);
+			project.writeGmxFileSync(info.path, gmx);
+		} else {
+			var yy:Dynamic = project.readYyFileSync(info.path);
+			var value:Dynamic = Reflect.field(yy, "option_windows_version");
+			if (value != null && !(value is String)) {
+				Reflect.setField(value, "major", parts.major);
+				Reflect.setField(value, "minor", parts.minor);
+				Reflect.setField(value, "revision", parts.revision);
+				Reflect.setField(value, "build", parts.build);
+			} else {
+				Reflect.setField(yy, "option_windows_version", formatWindowsExportVersion(parts));
+			}
+			project.writeYyFileSync(info.path, yy);
+		}
+	}
+
+	static function buildWindowsExport(project:Project, out:DivElement) {
+		var info:WindowsExportVersionInfo;
+		try {
+			info = readWindowsExportVersion(project);
+		} catch (x:Dynamic) {
+			info = null;
+		}
+		if (info == null) return;
+
+		var fs = Preferences.addGroup(out, "Windows export");
+		fs.id = "project-properties-windows-export";
+		var input:InputElement = null;
+		var el = Preferences.addInput(fs, "Version", info.version, function(s) {
+			var parts = parseWindowsExportVersion(s);
+			if (parts == null) {
+				input.classList.add("error");
+				input.title = "Expected four non-negative numbers: major.minor.release.build";
+				return;
+			}
+			try {
+				writeWindowsExportVersion(project, info, parts);
+				input.classList.remove("error");
+				input.title = 'Stored in ${info.path}';
+			} catch (x:Dynamic) {
+				input.classList.add("error");
+				input.title = "Failed to save Windows export version.";
+				Dialog.showError("Failed to save Windows export version: " + x);
+			}
+		});
+		input = el.querySelectorAuto("input");
+		input.title = 'Stored in ${info.path}. Format: major.minor.release.build';
 	}
 	
 	static function addGmlNameInput(out:Element, legend:String, curr:GmlName, fn:GmlName->Void) {
@@ -220,6 +375,7 @@ class ProjectProperties {
 	public static function build(project:Project, out:DivElement) {
 		buildCode(project, out);
 		buildSearch(project, out);
+		buildWindowsExport(project, out);
 		buildSyntax(project, out);
 		ui.preferences.PrefLinter.build(out, project);
 		PrefPlugins.buildProjectProperties(out, project);
@@ -250,4 +406,17 @@ class ProjectProperties {
 		
 	}
 
+}
+
+private typedef WindowsExportVersionInfo = {
+	path:String,
+	version:String,
+	isGmx:Bool,
+}
+
+private typedef WindowsExportVersionParts = {
+	major:Int,
+	minor:Int,
+	revision:Int,
+	build:Int,
 }
