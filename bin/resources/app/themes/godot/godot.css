@@ -112,6 +112,17 @@ input[type="checkbox"], input[type="radio"], input[type="number"], select {
   flex: 0 0 10px;
 }
 
+.tree-toggle-button {
+  --tree-toggle-bg: linear-gradient(#303846, #252B34);
+  --tree-toggle-hover-bg: linear-gradient(#3C5872, #304960);
+  --tree-toggle-border-color: #363D4A;
+  --tree-toggle-hover-border-color: #5B94C6;
+  --tree-toggle-icon-color: #D0D6DF;
+  --tree-toggle-hover-icon-color: #fff;
+  --tree-toggle-shadow: 0 2px 8px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --tree-toggle-active-shadow: 0 1px 4px rgba(0, 0, 0, 0.34), inset 0 1px 2px rgba(0, 0, 0, 0.24);
+}
+
 #pref-theme:after {
   content: "This theme comes with the same font used in the Godot script editor. To use it, click on \"Code Editor Settings\" below. Then, add \"JetBrainsMono\" to the front of the \"Font Family\" list.";
   margin-top: 1em;

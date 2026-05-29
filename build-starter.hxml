@@ -1,0 +1,6 @@
+-js bin/resources/app/app-starter.js
+-cp src
+-main ui.Starter
+-dce full
+-D analyzer-optimize
+-D starter

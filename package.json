@@ -4,7 +4,7 @@
   "description": "",
   "scripts": {
     "postinstall": "(cd bin/resources/app && npm install)",
-    "compile": "haxe build.hxml",
+    "compile": "haxe build-starter.hxml && haxe build.hxml",
     "package": "npm run compile && (cd bin/resources/app && npx electron-builder)",
     "postpackage": "node scripts/rename-win-artifacts.js",
     "start": "(cd bin/resources/app && npm start)"

@@ -48,6 +48,94 @@ https://stackoverflow.com/a/36247448/5578773
 	flex: 0 0 5px;
 	cursor: e-resize;
 }
+#splitter-td {
+	overflow: visible;
+	z-index: 10000;
+}
+#splitter-td.tree-panel-collapsed {
+	width: 20px;
+	flex-basis: 20px;
+	cursor: default;
+}
+.tree-toggle-button {
+	--tree-toggle-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M14.5 6L8.5 12l6 6' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+	--tree-toggle-bg: linear-gradient(#fff, #f1f1f1);
+	--tree-toggle-hover-bg: linear-gradient(#fff, #fafafa);
+	--tree-toggle-border-color: #BCBBBC;
+	--tree-toggle-hover-border-color: #9f9f9f;
+	--tree-toggle-icon-color: #444;
+	--tree-toggle-hover-icon-color: #111;
+	--tree-toggle-shadow: 0 2px 8px rgba(0, 0, 0, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.75);
+	--tree-toggle-active-shadow: 0 1px 4px rgba(0, 0, 0, 0.18), inset 0 1px 2px rgba(0, 0, 0, 0.08);
+	position: absolute;
+	top: auto;
+	bottom: 20px;
+	left: 50%;
+	width: 44px;
+	height: 52px;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: var(--tree-toggle-icon-color);
+	transform: translateX(-50%);
+	cursor: pointer;
+	z-index: 10001;
+}
+.tree-toggle-button:before {
+	content: "";
+	display: block;
+	position: absolute;
+	left: 10px;
+	top: 10px;
+	width: 24px;
+	height: 32px;
+	border: 1px solid var(--tree-toggle-border-color);
+	border-radius: 6px;
+	background: var(--tree-toggle-bg);
+	box-shadow: var(--tree-toggle-shadow);
+	opacity: 0;
+	transform: scale(0.96);
+	transition: opacity 120ms ease, transform 120ms ease, background 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+}
+.tree-toggle-button:after {
+	content: "";
+	display: block;
+	position: absolute;
+	left: 14px;
+	top: 18px;
+	width: 16px;
+	height: 16px;
+	background: currentColor;
+	-webkit-mask: var(--tree-toggle-icon) center / 16px 16px no-repeat;
+	mask: var(--tree-toggle-icon) center / 16px 16px no-repeat;
+	opacity: 0;
+	transition: opacity 120ms ease, transform 120ms ease;
+}
+.tree-toggle-button:hover,
+.tree-toggle-button:focus-visible {
+	color: var(--tree-toggle-hover-icon-color);
+}
+.tree-toggle-button:hover:before,
+.tree-toggle-button:focus-visible:before {
+	background: var(--tree-toggle-hover-bg);
+	border-color: var(--tree-toggle-hover-border-color);
+	opacity: 1;
+	transform: scale(1);
+}
+.tree-toggle-button:hover:after,
+.tree-toggle-button:focus-visible:after {
+	opacity: 1;
+}
+.tree-toggle-button:active:before {
+	box-shadow: var(--tree-toggle-active-shadow);
+	transform: scale(1) translateY(1px);
+}
+.tree-toggle-button:active:after {
+	transform: translateY(1px);
+}
+#splitter-td.tree-panel-collapsed .tree-toggle-button {
+	--tree-toggle-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M9.5 6l6 6-6 6' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
 #main #editor-td {
 	flex-grow: 1;
 	padding: 0px;
