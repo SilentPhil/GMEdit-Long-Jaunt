@@ -1,5 +1,6 @@
 package ace.statusbar;
 import ace.AceStatusBar;
+import ace.AceGmlTools;
 import ace.extern.AceRange;
 import gml.GmlAPI;
 import gml.GmlFuncDoc;
@@ -119,11 +120,11 @@ class AceStatusBarImports {
 					return argStart;
 				}
 			}
-			if (fnType == "localfield") {
-				objType = AceGmlTools.getSelfType({ session: ctx.session, scope: ctx.scope });
-			}
 			if (imports != null) {
 				doc = AceMacro.jsOr(imports.docs[name], doc);
+			}
+			if (fnType == "localfield" || fnType == "asset.script" && doc == null) {
+				objType = AceGmlTools.getSelfType({ session: ctx.session, scope: ctx.scope });
 			}
 			tk = iter.stepForward();
 		}
