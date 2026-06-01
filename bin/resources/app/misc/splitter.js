@@ -90,21 +90,6 @@ function Splitter(sizer) {
 	if (sub) w = sub.width;
 	this.setWidth(Math.max(0|(w || this.defaultWidth), this.minWidth));
 	//
-	function getConfSub() {
-		return getSessionSub(q.lsKey, true);
-	}
-	function readCollapsed() {
-		var sub = getConfSub();
-		if (sub != null && typeof sub.collapsed == "boolean") return sub.collapsed;
-		return false;
-	}
-	function saveCollapsed(collapsed) {
-		var sub = getConfSub();
-		if (sub != null) {
-			sub.collapsed = collapsed;
-			flushSessionData();
-		}
-	}
 	function updateToggleButton() {
 		if (!q.toggleButton) return;
 		var label = q.collapsed ? "Show resources panel" : "Hide resources panel";
@@ -117,7 +102,7 @@ function Splitter(sizer) {
 		mainEl.style.setProperty(q.widthVar, q.sizer.offsetWidth + "px");
 		syncMain();
 	}
-	function setCollapsed(collapsed, save) {
+	function setCollapsed(collapsed) {
 		if (q.collapsed == collapsed) return;
 		if (collapsed) {
 			var currentWidth = parseFloat(q.target.style.width) || q.target.offsetWidth || q.defaultWidth;
@@ -136,8 +121,8 @@ function Splitter(sizer) {
 		updateToggleButton();
 		if (q.updateTabs && window.$gmedit) $gmedit["ui.ChromeTabs"].impl.layoutTabs();
 		emitResize();
-		if (save) saveCollapsed(collapsed);
 	}
+	this.setCollapsed = setCollapsed;
 	if (this.toggleButton) {
 		this.toggleButton.addEventListener("mousedown", function(e) {
 			e.stopPropagation();
@@ -145,9 +130,9 @@ function Splitter(sizer) {
 		this.toggleButton.addEventListener("click", function(e) {
 			e.preventDefault();
 			e.stopPropagation();
-			setCollapsed(!q.collapsed, true);
+			setCollapsed(!q.collapsed);
 		});
-		if (readCollapsed()) setCollapsed(true, false); else updateToggleButton();
+		updateToggleButton();
 	}
 	//
 	var sp_mousemove, sp_mouseup, sp_x, sp_y;
@@ -195,6 +180,18 @@ Splitter.prototype = {
 			syncMain(nw);
 		}
 	}
+};
+Splitter.expandTarget = function(selector) {
+	var target = document.querySelector(selector);
+	if (target == null) return false;
+	for (var i = 0; i < splitters.length; i++) {
+		var sp = splitters[i];
+		if (sp.target == target || sp.sizer == target) {
+			if (sp.setCollapsed) sp.setCollapsed(false);
+			return true;
+		}
+	}
+	return false;
 };
 window.GMEdit_Splitter = Splitter;
 var splitterEls = document.querySelectorAll(".splitter-td");

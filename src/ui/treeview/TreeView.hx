@@ -369,6 +369,7 @@ using tools.PathTools;
 	}
 	
 	public static function showElement(item:Element, flash:Bool) {
+		showResourcePanel();
 		if (flash) {
 			var flashStep = 0;
 			var flashInt = 0;
@@ -394,6 +395,13 @@ using tools.PathTools;
 		if (check && par != null) TreeView.ensureThumbs(par);
 		
 		item.scrollIntoViewIfNeeded();
+	}
+	public static function showResourcePanel():Void {
+		var splitter:Dynamic = Reflect.field(window, "GMEdit_Splitter");
+		if (splitter == null) return;
+		var expandTarget:Dynamic = Reflect.field(splitter, "expandTarget");
+		if (expandTarget == null) return;
+		Reflect.callMethod(splitter, expandTarget, ["#tree-td"]);
 	}
 	//
 	public static var openPaths:Array<String> = [];
