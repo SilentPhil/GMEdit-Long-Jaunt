@@ -206,6 +206,21 @@ function PathFinderAroundAnchorDllAsync() constructor {
 }
 ```
 
+### Deprecated function warnings
+
+Functions and methods can be marked with `/// @deprecated`. The linter warns when code calls a
+deprecated function or method. Text after the tag is included in the warning, so it can point to a
+replacement API.
+
+```gml
+/// @deprecated Use new_get_phase() instead
+function old_get_phase() {
+	return 0;
+}
+
+old_get_phase(); // Warning: `old_get_phase` is deprecated: Use new_get_phase() instead
+```
+
 ### Open a variable's type declaration
 
 Press `F1`/`F12` or middle-click a variable/field to open the declaration of its complex type when the

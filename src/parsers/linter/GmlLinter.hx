@@ -753,6 +753,10 @@ class GmlLinter {
 			maxArgs = doc.maxArgs;
 			
 			// also check for other problems while we are here:
+			if (doc.deprecated != null) {
+				var suffix = doc.deprecated != "" ? ": " + doc.deprecated : "";
+				addWarning('`$currName` is deprecated$suffix');
+			}
 			if (doc.isConstructor) {
 				if (!isNew) addWarning('`$currName` is a constructor, but is not being used via `new`');
 			} else {

@@ -31,6 +31,7 @@ class GmlSeekerJSDoc {
 	public var implementsNames:Array<String> = null;
 	public var templateItems:Array<GmlTypeTemplateItem> = null;
 	public var isStatic:Bool = false;
+	public var deprecated:String = null;
 	public var redirectCount = 0;
 	
 	public function reset(resetInterf = true):Void {
@@ -40,6 +41,7 @@ class GmlSeekerJSDoc {
 		self = null;
 		returns = null;
 		isStatic = false;
+		deprecated = null;
 		if (resetInterf) resetInterface();
 	}
 	public function resetInterface() {
@@ -68,6 +70,7 @@ class GmlSeekerJSDoc {
 		r.implementsNames = copyArray(implementsNames);
 		r.templateItems = copyArray(templateItems);
 		r.isStatic = isStatic;
+		r.deprecated = deprecated;
 		r.redirectCount = redirectCount;
 		return r;
 	}
@@ -99,6 +102,7 @@ class GmlSeekerJSDoc {
 		if (q.isInterface) isInterface = true;
 		if (q.interfaceName != null) interfaceName = q.interfaceName;
 		if (q.isStatic) isStatic = true;
+		if (q.deprecated != null) deprecated = q.deprecated;
 		implementsNames = concatArrays(implementsNames, q.implementsNames);
 		templateItems = concatArrays(templateItems, q.templateItems);
 	}
@@ -333,8 +337,16 @@ class GmlSeekerJSDoc {
 				if (ctrReturn != null) addFieldHint_doc.returnTypeString = ctrReturn;
 				if (templateSelf != null) addFieldHint_doc.templateSelf = templateSelf;
 				if (templateItems != null) addFieldHint_doc.templateItems = templateItems;
+				GmlSeekerProcDoc.flushMetaToDoc(this, addFieldHint_doc);
 			}
+			deprecated = null;
 			return; // found!
+		}
+		
+		mt = jsDoc_deprecated.exec(s);
+		if (mt != null) {
+			deprecated = mt[1].trimBoth();
+			return;
 		}
 		
 		mt = jsDoc_self.exec(s);
@@ -405,6 +417,8 @@ class GmlSeekerJSDoc {
 				var post = mt[3];
 				var rest = fa.contains("...");
 				var jsd = new GmlFuncDoc(fn, pre, post, fa.splitNonEmpty(","), rest);
+				GmlSeekerProcDoc.flushMetaToDoc(this, jsd);
+				deprecated = null;
 				out.docs[fn] = jsd;
 				out.comps[fn] = new AceAutoCompleteItem(fn, pre + fa + post);
 				if (!out.kindMap.exists(fn)) {
