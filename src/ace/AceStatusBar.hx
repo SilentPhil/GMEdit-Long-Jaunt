@@ -134,12 +134,15 @@ class AceStatusBar {
 				case "macroname": break;
 				case "set.operator": break;
 				#if !lwedit
-				case "curly.paren.lparen": break;
-				case "curly.paren.rparen": break;
+				case "curly.paren.lparen": {
+					if (depth <= 0) break;
+					depth -= tk.value.length;
+				};
+				case "curly.paren.rparen": depth += tk.value.length;
 				#end
-				case "paren.rparen": depth += tk.value.length;
+				case "paren.rparen", "square.paren.rparen": depth += tk.value.length;
 				case "punctuation.operator" if (tk.value == ";"): break;
-				case "paren.lparen": {
+				case "paren.lparen", "square.paren.lparen": {
 					depth -= tk.value.length;
 					if (depth < minDepth) {
 						minDepth = depth;
