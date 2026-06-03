@@ -513,7 +513,10 @@ class GmlLinterExpr extends GmlLinterHelper {
 						var localInstType = !isStatic ? self.getContextNamespaceInstType(ctn, field) : null;
 						if (localInstType != null) {
 							currType = localInstType;
-							currFunc = currType.getSelfCallDoc(self.getImports());
+							currFunc = AceGmlTools.findNamespace(ctn, self.getImports(), function(ns) {
+								return ns.getInstDoc(field);
+							});
+							if (currFunc == null) currFunc = currType.getSelfCallDoc(self.getImports());
 							found = true;
 						} else {
 							found = AceGmlTools.findNamespace(ctn, self.getImports(), function(ns) {

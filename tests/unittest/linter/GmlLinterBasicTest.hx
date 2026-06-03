@@ -74,4 +74,25 @@ class GmlLinterBasicTest {
 		Assert.areEqual(1, t.warnings.length);
 		Assert.isTrue(t.warnings[0].text.indexOf("old_method") >= 0);
 	}
+
+	@Test public function testStaticFunctionOptionalArgKeepsFieldDoc() {
+		var prefs = Project.current.properties.linterPrefs;
+		var oldSpecTypeStatic = prefs.specTypeStatic;
+		prefs.specTypeStatic = true;
+		try {
+			var t = LinterHelper.runLinter(
+				"function LinterStaticOptionalArgs() constructor {\n"
+				+ "\tstatic fire_guard = function(_guard/*:int*/, _reset/*:bool*/ = true)/*->void*/ {}\n"
+				+ "\tstatic dismiss = function()/*->void*/ {\n"
+				+ "\t\tfire_guard(1);\n"
+				+ "\t}\n"
+				+ "}"
+			);
+			Assert.areEqual(0, t.problems.length);
+		} catch (x:Dynamic) {
+			prefs.specTypeStatic = oldSpecTypeStatic;
+			throw x;
+		}
+		prefs.specTypeStatic = oldSpecTypeStatic;
+	}
 }

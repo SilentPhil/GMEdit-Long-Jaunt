@@ -18,6 +18,15 @@ class GmlLinterIdent {
 	public static var type:GmlType = null;
 	public static var func:GmlFuncDoc = null;
 	public static var isLocal:Bool = false;
+	static function getSelfInstDoc(linter:GmlLinter, currName:String, imp:GmlImports):GmlFuncDoc {
+		return switch (linter.getSelfType()) {
+			case TInst(tn, _, tk) if (tk != GmlTypeKind.KAny):
+				AceGmlTools.findNamespace(tn, imp, function(ns:GmlNamespace) {
+					return ns.getInstDoc(currName);
+				});
+			default: null;
+		}
+	}
 	public static function read(linter:GmlLinter, currName:String) {
 		var currType:GmlType = null;
 		var currFunc:GmlFuncDoc = null;
@@ -87,7 +96,8 @@ class GmlLinterIdent {
 			}
 
 			var contextInstType = linter.getContextInstType(currName);
-			if (contextInstType != null) {
+			var selfInstDoc = contextInstType != null ? getSelfInstDoc(linter, currName, imp) : null;
+			if (contextInstType != null && selfInstDoc == null) {
 				currType = contextInstType;
 				currFunc = currType.getSelfCallDoc(imp);
 				break;
@@ -95,9 +105,12 @@ class GmlLinterIdent {
 			if (imp != null) {
 				var importedInstType = imp.localTypes[currName];
 				if (importedInstType != null) {
-					currType = importedInstType;
-					currFunc = currType.getSelfCallDoc(imp);
-					break;
+					if (selfInstDoc == null) selfInstDoc = getSelfInstDoc(linter, currName, imp);
+					if (selfInstDoc == null) {
+						currType = importedInstType;
+						currFunc = currType.getSelfCallDoc(imp);
+						break;
+					}
 				}
 			}
 			
@@ -165,7 +178,8 @@ class GmlLinterIdent {
 					var found = false;
 					if (localInstType != null) {
 						currType = localInstType;
-						currFunc = currType.getSelfCallDoc(imp);
+						currFunc = getSelfInstDoc(linter, currName, imp);
+						if (currFunc == null) currFunc = currType.getSelfCallDoc(imp);
 						found = true;
 					} else {
 						found = AceGmlTools.findNamespace(tn, imp, function(ns:GmlNamespace) {
