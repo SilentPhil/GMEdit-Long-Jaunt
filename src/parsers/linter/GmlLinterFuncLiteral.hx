@@ -31,6 +31,7 @@ class GmlLinterFuncLiteral extends GmlLinterHelper {
 		var targetType = options.targetType;
 		var templateTypes = options.templateTypes;
 		var targetArgTypes:Array<GmlType> = null;
+		var targetReturnType:GmlType = null;
 		if (targetType != null) {
 			var mappedType = targetType;
 			if (templateTypes != null) {
@@ -39,6 +40,7 @@ class GmlLinterFuncLiteral extends GmlLinterHelper {
 			switch (mappedType) {
 				case TInst(_, tp, KFunction | KConstructor) if (tp.length > 0):
 					targetArgTypes = tp.slice(0, tp.length - 1);
+					targetReturnType = tp[tp.length - 1];
 				default:
 			}
 		}
@@ -178,6 +180,10 @@ class GmlLinterFuncLiteral extends GmlLinterHelper {
 						: name != "function" ? GmlTypeDef.simple(name) : GmlTypeDef.any;
 				}
 			}
+		}
+		if (doc.returnTypeString == null && targetReturnType != null) {
+			doc.returnTypeString = targetReturnType.toString();
+			nextFuncRetStatus = targetReturnType.getKind() == KVoid ? WantNoReturn : WantReturn;
 		}
 		//
 		var oldLocalNames = linter.localNamesPerDepth;

@@ -1,15 +1,18 @@
 package test_helpers;
 
+import file.FileKind;
 import gml.file.GmlFileInMemory;
 import parsers.GmlSeekData;
+import parsers.GmlSeeker;
 import parsers.linter.GmlLinter;
 import file.kind.KGml;
 import editors.EditCode;
 
 class LinterHelper {
 
-	public static function runLinter(code:String) {
-		var file = GmlFileHelper.makeGmlFile(code);
+	public static function runLinter(code:String, index:Bool = false, ?kind:FileKind) {
+		var file = GmlFileHelper.makeGmlFile(code, kind);
+		if (index) GmlSeeker.runSync(file.path, code, null, file.kind);
 		var editor = file.codeEditor;
 		var linter = new GmlLinter();
 		var ok = !linter.run(code, editor, gml.Project.current.version);

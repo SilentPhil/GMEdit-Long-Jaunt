@@ -147,6 +147,16 @@ button[type=button].highlighted-button {
 	border-color: #161719;
 	background: #495057;
 }
+.tree-toggle-button {
+	--tree-toggle-bg: linear-gradient(#464d55, #333940);
+	--tree-toggle-hover-bg: linear-gradient(#56606a, #404850);
+	--tree-toggle-border-color: #161719;
+	--tree-toggle-hover-border-color: #0f1012;
+	--tree-toggle-icon-color: #d0d0d0;
+	--tree-toggle-hover-icon-color: #fff;
+	--tree-toggle-shadow: 0 2px 8px rgba(0, 0, 0, 0.36), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+	--tree-toggle-active-shadow: 0 1px 4px rgba(0, 0, 0, 0.42), inset 0 1px 2px rgba(0, 0, 0, 0.28);
+}
 #misc-splitter-td {
 	background: #505050;
 }

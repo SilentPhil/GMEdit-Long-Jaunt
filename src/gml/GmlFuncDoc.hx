@@ -67,6 +67,9 @@ class GmlFuncDoc {
 	/** Whether type of `self` was auto-set based on constructor name/interface **/
 	public var selfTypeIsAuto = true;
 	
+	/** Non-null when the function or method is marked as deprecated. */
+	public var deprecated:String = null;
+	
 	// these are currently only set for sub-functions so that you can navigate to them
 	public var lookup:GmlLookup = null;
 	public var nav:GmlFileNav = null;

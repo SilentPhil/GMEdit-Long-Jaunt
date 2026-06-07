@@ -3,6 +3,7 @@ import ace.extern.AceTokenType;
 import gml.file.GmlFile;
 import js.lib.RegExp;
 import gml.GmlAPI;
+import gml.GmlAPI.GmlLookup;
 import gml.GmlFuncDoc;
 import gml.type.GmlType;
 import gml.type.GmlTypeDef;
@@ -19,6 +20,13 @@ class GmlSeekerProcIdent {
 	public static function proc(seeker:GmlSeekerImpl, s:String) {
 		var q = seeker.reader;
 		var commentLineJumps = seeker.commentLineJumps;
+		var nameStart = q.pos - s.length;
+		var nameLookup:GmlLookup = {
+			path: seeker.orig,
+			sub: seeker.sub,
+			row: q.row,
+			col: nameStart - q.rowStart,
+		};
 		
 		// skip if it's a local/project/extension identifier:
 		var isDotSelf = false;
@@ -202,7 +210,7 @@ class GmlSeekerProcIdent {
 					default:
 				}
 			}
-			GmlSeekerProcField.addFieldHint(seeker, isConstructor, seeker.jsDoc.interfaceName, true, s, args, null, fieldType, argTypes, true, templateItems);
+			GmlSeekerProcField.addFieldHint(seeker, isConstructor, seeker.jsDoc.interfaceName, true, s, args, null, fieldType, argTypes, true, templateItems, false, nameLookup);
 			var addFieldHint_doc = GmlSeekerProcField.addFieldHint_doc;
 			if (addFieldHint_doc != null) {
 				// related: GmlSeekerProcVar

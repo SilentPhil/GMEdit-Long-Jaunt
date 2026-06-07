@@ -1,6 +1,7 @@
 package parsers.seeker;
 import ace.extern.AceAutoCompleteItem;
 import gml.GmlAPI;
+import gml.GmlAPI.GmlLookup;
 import gml.GmlField;
 import gml.GmlFuncDoc;
 import gml.type.GmlType;
@@ -28,8 +29,9 @@ class GmlSeekerProcField {
 		argTypes:Array<GmlType>,
 		isAuto:Bool,
 		?templateItems:Array<GmlTypeTemplateItem>,
-		isPrivate:Bool = false
-	) {
+		isPrivate:Bool = false,
+		?lookup:GmlLookup
+	):GmlSeekDataHint {
 		var parentSpace:String = null;
 		if (namespace == null) {
 			if (seeker.isCreateEvent) {
@@ -38,8 +40,8 @@ class GmlSeekerProcField {
 			} else if (seeker.doc != null) {
 				namespace = seeker.doc.name;
 				parentSpace = seeker.doc.parentName;
-				if (namespace == null) return;
-			} else return;
+				if (namespace == null) return null;
+			} else return null;
 		}
 		field = JsTools.or(field, "");
 			
@@ -73,13 +75,16 @@ class GmlSeekerProcField {
 		var privateFieldRegex = seeker.privateFieldRegex;
 		var comp = (privateFieldRegex == null || !privateFieldRegex.test(name)) && !(isInst && isPrivate)
 			? new AceAutoCompleteItem(name, compMeta, info) : null;
-		var hint = new GmlSeekDataHint(namespace, isInst, field, comp, hintDoc, parentSpace, type, isPrivate);
+		var hint = new GmlSeekDataHint(namespace, isInst, field, comp, hintDoc, parentSpace, type, isPrivate, lookup);
 		
 		var out = seeker.out;
 		var lastHint = out.fieldHints[hint.key];
 		if (lastHint == null) {
 			out.fieldHints[hint.key] = hint;
-		} else lastHint.merge(hint, isAuto);
+		} else {
+			lastHint.merge(hint, isAuto);
+			hint = lastHint;
+		}
 		
 		if (isField) {
 			//
@@ -90,6 +95,7 @@ class GmlSeekerProcField {
 			out.kindMap[name] = "namespace";
 			if (hintDoc != null) out.docs[name] = hintDoc;
 		}
+		return hint;
 	}
 	
 	public static function addInstVar(seeker:GmlSeekerImpl, s:String):Void {

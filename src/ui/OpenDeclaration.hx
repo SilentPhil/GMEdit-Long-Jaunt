@@ -1,4 +1,5 @@
 package ui;
+import ace.AceGmlTools;
 import ace.AceTooltips;
 import gml.GmlFuncDoc;
 import ace.AceStatusBar;
@@ -16,6 +17,7 @@ import haxe.io.Path;
 import gml.GmlAPI;
 import gml.GmlImports;
 import gml.type.GmlType;
+import parsers.linter.GmlLinter;
 import ui.ColorPicker;
 import ui.treeview.TreeView;
 using tools.NativeString;
@@ -269,6 +271,56 @@ class OpenDeclaration {
 		var imports = session.gmlEditor != null ? session.gmlEditor.imports[scope] : null;
 		return openType(type, pos, imports);
 	}
+
+	static function canOpenFieldLookupAt(token:AceToken):Bool {
+		return switch (token.type) {
+			case "field", "localfield", "asset.script": true;
+			default: false;
+		}
+	}
+
+	static function openFieldLookupAt(session:AceSession, pos:AcePos, token:AceToken):Bool {
+		if (!canOpenFieldLookupAt(token)) return false;
+		var codeEditor = session.gmlEditor;
+		if (codeEditor == null) return false;
+		var scope = session.gmlScopes.get(pos.row);
+		if (scope == null) scope = "";
+
+		var iter = new AceTokenIterator(session, pos.row, pos.column);
+		var tk = iter.stepBackwardNonText();
+		if (tk == null || tk.value != ".") return false;
+		var dotPos = iter.getCurrentTokenPosition();
+
+		tk = iter.stepBackwardNonText();
+		if (tk == null) return false;
+		var prevPos = iter.getCurrentTokenPosition();
+		var prevEnd = new AcePos(prevPos.column + tk.value.length, prevPos.row);
+		var from = AceGmlTools.skipDotExprBackwards(session, prevEnd);
+		var receiver = session.getTextRange(AceRange.fromPair(from, dotPos));
+		if (receiver.trimBoth() == "") return false;
+
+		var inf = GmlLinter.getType(receiver, codeEditor, scope, dotPos);
+		var type = inf.type;
+		if (type == null) return false;
+		type = type.resolve().unwrapNullable().resolve();
+
+		var isStatic = type.isType();
+		if (isStatic) {
+			type = type.unwrapParam();
+			if (type == null) return false;
+			type = type.resolve().unwrapNullable().resolve();
+		}
+
+		var typeName = type.getNamespace();
+		if (typeName == null) return false;
+		var imports = codeEditor.imports[scope];
+		var lookup:GmlLookup = null;
+		AceGmlTools.findNamespace(typeName, imports, function(ns) {
+			lookup = isStatic ? ns.staticLookup[token.value] : ns.getInstLookup(token.value);
+			return lookup != null;
+		});
+		return openLookup(lookup);
+	}
 	
 	public static function openImportFile(rel:String) {
 		var dir = "#import";
@@ -377,6 +429,7 @@ class OpenDeclaration {
 		if (doc != null && doc.lookup != null) {
 			return openLookup(doc.lookup, doc.nav);
 		}
+		if (openFieldLookupAt(session, pos, token)) return true;
 		if (openTypeAt(session, pos, token)) return true;
 		//
 		var helpURL = GmlAPI.helpURL;

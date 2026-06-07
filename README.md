@@ -84,6 +84,12 @@ Same page also houses screenshots and development log.
 
 This fork keeps a set of extra GML typing/navigation improvements aimed at large typed projects.
 
+### Collapsible resource panel
+
+The left project resource panel can be hidden from the splitter between the resource tree and code
+editor. The toggle stays available as a subtle hover control near the bottom of the splitter, making
+it easy to reclaim editor space and restore the resource tree when needed.
+
 ### Legacy enum integer types
 
 The older `int<ENUM>` syntax remains supported and should not warn just because newer upstream GMEdit
@@ -198,6 +204,21 @@ function PathFinderAroundAnchorDllAsync() constructor {
 
 	// Error: missing member `get_result`
 }
+```
+
+### Deprecated function warnings
+
+Functions and methods can be marked with `/// @deprecated`. The linter warns when code calls a
+deprecated function or method. Text after the tag is included in the warning, so it can point to a
+replacement API.
+
+```gml
+/// @deprecated Use new_get_phase() instead
+function old_get_phase() {
+	return 0;
+}
+
+old_get_phase(); // Warning: `old_get_phase` is deprecated: Use new_get_phase() instead
 ```
 
 ### Open a variable's type declaration

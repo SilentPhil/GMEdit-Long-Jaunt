@@ -278,7 +278,7 @@ class GmlSeekData {
 			if (hint.parentSpace != null && (ns.parent == null || ns.parent.name != hint.parentSpace)) {
 				ns.parent = GmlAPI.ensureNamespace(hint.parentSpace);
 			}
-			ns.addFieldHint(hint.field, hint.isInst, hint.comp, hint.doc, hint.type, hint.isPrivate);
+			ns.addFieldHint(hint.field, hint.isInst, hint.comp, hint.doc, hint.type, hint.isPrivate, hint.lookup);
 		}
 		
 		if (prev.hasGMLive || next.hasGMLive) {
@@ -321,8 +321,11 @@ class GmlSeekDataHint {
 	public var doc:GmlFuncDoc;
 	public var type:GmlType;
 	public var isPrivate:Bool;
+	public var lookup:gml.GmlAPI.GmlLookup;
 	public function new(namespace:String, isInst:Bool, field:String,
-		comp:AceAutoCompleteItem, doc:GmlFuncDoc, parentSpace:String, type:GmlType, isPrivate:Bool = false
+		comp:AceAutoCompleteItem, doc:GmlFuncDoc, parentSpace:String, type:GmlType,
+		isPrivate:Bool = false,
+		?lookup:gml.GmlAPI.GmlLookup
 	) {
 		this.namespace = namespace;
 		this.parentSpace = parentSpace;
@@ -332,6 +335,7 @@ class GmlSeekDataHint {
 		this.comp = comp;
 		this.type = type;
 		this.isPrivate = isPrivate;
+		this.lookup = lookup;
 		this.key = namespace + (isInst ? ":" : ".") + field;
 	}
 	public function merge(hint:GmlSeekDataHint, ?preferExisting:Bool) {
@@ -359,6 +363,7 @@ class GmlSeekDataHint {
 		}
 		//
 		if (hint.doc != null && (!preferExisting || doc == null)) doc = hint.doc;
+		if (hint.lookup != null && (!preferExisting || lookup == null)) lookup = hint.lookup;
 		if (hint.type != null) {
 			if (!preferExisting || type == null) {
 				type = hint.type;

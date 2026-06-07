@@ -34,6 +34,24 @@ class GmlLinterFuncArgs extends GmlLinterHelper {
 		var argTypes:ReadOnlyArray<GmlType>, argTypeClamp:Int, argTypesLen:Int;
 		var templateTypes:Array<GmlType> = null;
 		var isFuncValue = false;
+		var fnTypeReturnType:GmlType = null;
+		function getCallableParams(type:GmlType):ReadOnlyArray<GmlType> {
+			if (type == null) return null;
+			type = type.resolve();
+			type = type.unwrapNullable().resolve();
+			var typeKind = type.getKind();
+			if (typeKind != KFunction && typeKind != KConstructor) return null;
+			var params = type.unwrapParams();
+			return params != null && params.length > 0 ? params : null;
+		}
+		function useCallableParams(params:ReadOnlyArray<GmlType>):Void {
+			isFuncValue = true;
+			argTypes = params;
+			argTypesLen = params.length - 1;
+			fnTypeReturnType = params[argTypesLen];
+			var isRest = argTypesLen > 0 && argTypes[argTypesLen - 1].resolve().getKind() == KRest;
+			argTypeClamp = isRest ? argTypesLen - 1 : 0x7fffffff;
+		}
 		if (doc != null) {
 			argTypes = doc.argTypes;
 			argTypesLen = argTypes != null ? argTypes.length : 0;
@@ -43,6 +61,13 @@ class GmlLinterFuncArgs extends GmlLinterHelper {
 				if (fnType != null) {
 					GmlTypeTools.equals(fnType, doc.getFunctionType(), templateTypes);
 				}
+			}
+			var callableParams = getCallableParams(fnType);
+			if (callableParams != null && (
+				doc.argTypes == null
+				|| !GmlTypeTools.equals(fnType, doc.getFunctionType(), templateTypes)
+			)) {
+				useCallableParams(callableParams);
 			}
 			if (doc.templateSelf != null) {
 				if (doc.pre.endsWith(":(")) {
@@ -59,15 +84,9 @@ class GmlLinterFuncArgs extends GmlLinterHelper {
 				}
 			}
 		} else if (fnType != null) {
-			fnType = fnType.resolve();
-			fnType = fnType.unwrapNullable().resolve();
-			var fnTypeKind = fnType.getKind();
-			if (fnTypeKind == KFunction || fnTypeKind == KConstructor) {
-				isFuncValue = true;
-				argTypes = fnType.unwrapParams();
-				argTypesLen = argTypes.length - 1;
-				var isRest = argTypesLen > 0 && argTypes[argTypesLen - 1].resolve().getKind() == KRest;
-				argTypeClamp = isRest ? argTypesLen - 1 : 0x7fffffff;
+			var callableParams = getCallableParams(fnType);
+			if (callableParams != null) {
+				useCallableParams(callableParams);
 			} else {
 				argTypes = null;
 				argTypesLen = 0;
@@ -111,7 +130,8 @@ class GmlLinterFuncArgs extends GmlLinterHelper {
 		var coroutineResult:GmlType = null;
 		//
 		if (doc != null) {
-			if (argTypes != null) for (argType in argTypes) {
+			if (argTypes != null) for (i in 0 ... argTypesLen) {
+				var argType = argTypes[i];
 				switch (argType) {
 					case null:
 					case TInst(_, [], KBufferAutoType):
@@ -287,7 +307,7 @@ class GmlLinterFuncArgs extends GmlLinterHelper {
 		}
 		
 		if (doc != null) {
-			var retType = doc.returnType;
+			var retType = fnTypeReturnType != null ? fnTypeReturnType : doc.returnType;
 			if (bufferAutoTypeRet) {
 				retType = bufferAutoType;
 			}

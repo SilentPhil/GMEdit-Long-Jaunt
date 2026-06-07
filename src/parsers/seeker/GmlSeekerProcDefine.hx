@@ -158,6 +158,7 @@ class GmlSeekerProcDefine {
 				var isConstructor = (s == ":" || s == "constructor");
 				//
 				GmlSeekerProcField.addFieldHint(seeker, isConstructor, seeker.getObjectName(), true, fname, args, null, null, argTypes, true);
+				GmlSeekerProcDoc.flushMetaToDoc(jsDoc, GmlSeekerProcField.addFieldHint_doc);
 			} else procFuncLiteralArgs(seeker, false);
 			jsDoc.reset(false); // discard any collected JSDoc
 			return;

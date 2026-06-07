@@ -63,11 +63,19 @@ const outputDir = path.join(distDir, outputName);
 const outputZip = path.join(distDir, `${outputName}.zip`);
 const generatedZip = path.join(distDir, `GMEdit-${appPackage.version}-win.zip`);
 
-if (!fs.existsSync(unpackedDir)) {
+const hasUnpackedDir = fs.existsSync(unpackedDir);
+const hasGeneratedZip = fs.existsSync(generatedZip);
+
+if (!hasUnpackedDir && !hasGeneratedZip) {
+	console.log("No Windows artifacts found; skipping Windows artifact rename.");
+	process.exit(0);
+}
+
+if (!hasUnpackedDir) {
 	throw new Error(`Expected electron-builder output at ${unpackedDir}`);
 }
 
-if (!fs.existsSync(generatedZip)) {
+if (!hasGeneratedZip) {
 	throw new Error(`Expected electron-builder archive at ${generatedZip}`);
 }
 

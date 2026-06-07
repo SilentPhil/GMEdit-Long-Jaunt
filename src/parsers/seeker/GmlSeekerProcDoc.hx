@@ -11,6 +11,11 @@ import js.html.Console;
  * @author YellowAfterlife
  */
 class GmlSeekerProcDoc {
+	public static function flushMetaToDoc(jsDoc:GmlSeekerJSDoc, doc:GmlFuncDoc):Void {
+		if (doc == null) return;
+		if (jsDoc.deprecated != null) doc.deprecated = jsDoc.deprecated;
+	}
+	
 	public static function flushSelfType(seeker:GmlSeekerImpl, doc:GmlFuncDoc) {
 		final jsDoc = seeker.jsDoc;
 		final main = seeker.main;
@@ -35,7 +40,6 @@ class GmlSeekerProcDoc {
 	}
 	public static function flushToDoc(seeker:GmlSeekerImpl, jsDoc:GmlSeekerJSDoc, doc:GmlFuncDoc, updateComp:Bool){
 		final q = seeker.reader;
-		final jsDoc = seeker.jsDoc;
 		final main = seeker.main;
 		final out = seeker.out;
 		
@@ -65,6 +69,7 @@ class GmlSeekerProcDoc {
 			doc.returnTypeString = jsDoc.returns;
 			updateComp = true;
 		}
+		flushMetaToDoc(jsDoc, doc);
 		flushSelfType(seeker, doc);
 		
 		//
