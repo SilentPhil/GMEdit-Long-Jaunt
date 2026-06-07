@@ -5,6 +5,8 @@
   "scripts": {
     "postinstall": "(cd bin/resources/app && npm install)",
     "compile": "haxe build-starter.hxml && haxe build.hxml",
+    "test:build": "haxe tests/test.hxml",
+    "test:electron": "node tests/run-electron-tests.js",
     "package": "npm run compile && (cd bin/resources/app && npx electron-builder)",
     "postpackage": "node scripts/rename-win-artifacts.js",
     "start": "(cd bin/resources/app && npm start)"
