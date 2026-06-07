@@ -19,7 +19,9 @@ class GmlLinterIdent {
 	public static var func:GmlFuncDoc = null;
 	public static var isLocal:Bool = false;
 	static function getSelfInstDoc(linter:GmlLinter, currName:String, imp:GmlImports):GmlFuncDoc {
-		return switch (linter.getSelfType()) {
+		var selfType = linter.getSelfType();
+		if (selfType == null) return null;
+		return switch (selfType) {
 			case TInst(tn, _, tk) if (tk != GmlTypeKind.KAny):
 				AceGmlTools.findNamespace(tn, imp, function(ns:GmlNamespace) {
 					return ns.getInstDoc(currName);
@@ -81,7 +83,7 @@ class GmlLinterIdent {
 				isLocal = true;
 				if (imp != null) {
 					currType = imp.localTypes[currName];
-					currFunc = currType.getSelfCallDoc(imp);
+					currFunc = currType != null ? currType.getSelfCallDoc(imp) : null;
 				} else { // locals without type information
 					currType = null;
 					currFunc = null;

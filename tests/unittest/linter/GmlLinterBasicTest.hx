@@ -9,6 +9,9 @@ import test_helpers.LinterHelper;
 import massive.munit.Assert;
 
 class GmlLinterBasicTest {
+	function problemTexts(t:LinterHelper):String {
+		return [for (p in t.problems) p.text].join("\n");
+	}
 	function runLinter23(code:String, index:Bool = false, ?kind:FileKind) {
 		var prevAPI = GmlAPI.version;
 		var prevProject = Project.current.version;
@@ -40,7 +43,7 @@ class GmlLinterBasicTest {
 		var child = GmlAPI.ensureNamespace("LinterInheritedChild");
 		child.parent = parent;
 
-		var t = LinterHelper.runLinter(
+		var t = runLinter23(
 			"function LinterInheritedChild() : LinterInheritedParent() constructor {\n"
 			+ "\tstatic apply = function() {\n"
 			+ "\t\t__base_field = 1;\n"
@@ -49,7 +52,7 @@ class GmlLinterBasicTest {
 			+ "}"
 		);
 
-		Assert.areEqual(1, t.warnings.length);
+		Assert.areEqual(1, t.warnings.length, problemTexts(t));
 		Assert.isTrue(t.warnings[0].text.indexOf("__missing_field") >= 0);
 	}
 
@@ -100,7 +103,7 @@ class GmlLinterBasicTest {
 		var oldSpecTypeStatic = prefs.specTypeStatic;
 		prefs.specTypeStatic = true;
 		try {
-			var t = LinterHelper.runLinter(
+			var t = runLinter23(
 				"function LinterStaticOptionalArgs() constructor {\n"
 				+ "\tstatic fire_guard = function(_guard/*:int*/, _reset/*:bool*/ = true)/*->void*/ {}\n"
 				+ "\tstatic dismiss = function()/*->void*/ {\n"
@@ -108,7 +111,7 @@ class GmlLinterBasicTest {
 				+ "\t}\n"
 				+ "}"
 			);
-			Assert.areEqual(0, t.problems.length);
+			Assert.areEqual(0, t.problems.length, problemTexts(t));
 		} catch (x:Dynamic) {
 			prefs.specTypeStatic = oldSpecTypeStatic;
 			throw x;
