@@ -4,6 +4,7 @@ import file.kind.gml.KGmlScript;
 import gml.GmlAPI;
 import gml.GmlVersion;
 import gml.Project;
+import parsers.linter.GmlLinterPrefs;
 import test_helpers.LinterHelper;
 import massive.munit.Assert;
 
@@ -75,8 +76,27 @@ class GmlLinterBasicTest {
 		Assert.isTrue(t.warnings[0].text.indexOf("old_method") >= 0);
 	}
 
+	@Test public function testPrivateStaticAliasInConstructor() {
+		runLinter23(
+			"function SoftTutorialObjective() : PubSubHandler() constructor {\n"
+			+ "\t/// @private\n"
+			+ "\tstatic pub_sub_unsubscribe_all_base = pub_sub_unsubscribe_all;\n"
+			+ "\tstatic pub_sub_unsubscribe_all = function(_not_used_obj = undefined)->void {\n"
+			+ "\t\tif (__is_subscribed) {\n"
+			+ "\t\t\tpub_sub_unsubscribe_all_base(_not_used_obj);\n"
+			+ "\t\t\t__is_subscribed = false;\n"
+			+ "\t\t}\n"
+			+ "\t}\n"
+			+ "}"
+		, true, KGmlScript.inst);
+		var ns = GmlAPI.gmlNamespaces["SoftTutorialObjective"];
+		Assert.isTrue(ns.isInstPrivate("pub_sub_unsubscribe_all_base"));
+		Assert.isFalse(ns.isInstPrivate("pub_sub_unsubscribe_all"));
+	}
+
 	@Test public function testStaticFunctionOptionalArgKeepsFieldDoc() {
 		var prefs = Project.current.properties.linterPrefs;
+		if (prefs == null) prefs = Project.current.properties.linterPrefs = GmlLinterPrefs.defValue;
 		var oldSpecTypeStatic = prefs.specTypeStatic;
 		prefs.specTypeStatic = true;
 		try {

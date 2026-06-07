@@ -169,6 +169,7 @@ class GmlSeekerProcVar {
 				var templateItems:Array<GmlTypeTemplateItem> = GmlSeekerProcExpr.templateItems;
 				var fieldType:GmlType = GmlSeekerProcExpr.fieldType;
 				var jsDocBeforeFunc:GmlSeekerJSDoc = null;
+				var isPrivateField = seeker.jsDoc.isPrivate;
 				static var doLoopConfig = new GmlSeeker_doLoop();
 				if (exprIsFunction) {
 					jsDocBeforeFunc = seeker.jsDoc.copy();
@@ -207,7 +208,7 @@ class GmlSeekerProcVar {
 				function addFieldHint(asInst:Bool) {
 					// related: GmlSeekerProcIdent
 					GmlSeekerProcField.addFieldHint(seeker, exprIsConstructor, seeker.jsDoc.interfaceName,
-					asInst, name, args, null, fieldType, argTypes, true, templateItems, jsDocBeforeFunc != null && jsDocBeforeFunc.isPrivate);
+					asInst, name, args, null, fieldType, argTypes, true, templateItems, isPrivateField);
 					
 					var addFieldHint_doc = GmlSeekerProcField.addFieldHint_doc;
 					if (addFieldHint_doc != null) {
@@ -242,6 +243,7 @@ class GmlSeekerProcVar {
 				}
 				if (isConstructor) addFieldHint(true);
 				if (addStaticHint) addFieldHint(false);
+				if (isPrivateField) seeker.jsDoc.isPrivate = false;
 				
 				seeker.localKind = oldLocalKind;
 				if (exprIsFunction) {
