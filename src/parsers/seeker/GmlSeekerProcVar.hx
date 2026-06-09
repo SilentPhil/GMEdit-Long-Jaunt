@@ -170,7 +170,10 @@ class GmlSeekerProcVar {
 				var templateItems:Array<GmlTypeTemplateItem> = GmlSeekerProcExpr.templateItems;
 				var fieldType:GmlType = GmlSeekerProcExpr.fieldType;
 				var jsDocBeforeFunc:GmlSeekerJSDoc = null;
-				var fieldAccess = seeker.jsDoc.access;
+				var hasExplicitFieldAccess = seeker.jsDoc.access != Public;
+				var fieldAccess = hasExplicitFieldAccess ? seeker.jsDoc.access : (
+					seeker.doc != null && seeker.doc.isConstructor ? seeker.doc.defaultFieldAccess : Public
+				);
 				var isPrivateField = seeker.jsDoc.isPrivate || fieldAccess == Private;
 				static var doLoopConfig = new GmlSeeker_doLoop();
 				if (exprIsFunction) {
@@ -245,7 +248,7 @@ class GmlSeekerProcVar {
 				}
 				if (isConstructor) addFieldHint(true);
 				if (addStaticHint) addFieldHint(false);
-				if (fieldAccess != Public) {
+				if (hasExplicitFieldAccess) {
 					seeker.jsDoc.isPrivate = false;
 					seeker.jsDoc.access = Public;
 				}

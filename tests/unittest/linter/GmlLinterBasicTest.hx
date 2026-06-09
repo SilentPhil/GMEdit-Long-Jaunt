@@ -116,6 +116,44 @@ class GmlLinterBasicTest {
 		Assert.isNotNull(base.getInstKind("secret", 0, "LinterPrivateBase"));
 	}
 
+	@Test public function testPrivateConstructorMarksFieldsPrivateByDefault() {
+		runLinter23(
+			"/// @private\n"
+			+ "function LinterPrivateDefaultBase() constructor {\n"
+			+ "\t__hidden = false;\n"
+			+ "\tstatic secret = function() {}\n"
+			+ "}\n"
+		, true, KGmlScript.inst);
+
+		var ns = GmlAPI.gmlNamespaces["LinterPrivateDefaultBase"];
+		Assert.isTrue(ns.isInstPrivate("__hidden"));
+		Assert.isTrue(ns.isInstPrivate("secret"));
+		Assert.isNull(ns.getInstCompItem("__hidden"));
+		Assert.isNull(ns.getInstCompItem("secret"));
+	}
+
+	@Test public function testPrivateConstructorDefaultWarnsInChild() {
+		var t = runLinter23(
+			"/// @private\n"
+			+ "function LinterPrivateDefaultWarnBase() constructor {\n"
+			+ "\t__hidden = false;\n"
+			+ "\t/// @protected\n"
+			+ "\t__protected = true;\n"
+			+ "}\n"
+			+ "function LinterPrivateDefaultWarnChild() : LinterPrivateDefaultWarnBase() constructor {\n"
+			+ "\t__hidden = true;\n"
+			+ "\t__protected = false;\n"
+			+ "}\n"
+		, true, KGmlScript.inst);
+
+		Assert.areEqual(1, t.warnings.length, problemTexts(t));
+		Assert.isTrue(t.warnings[0].text.indexOf("private field `__hidden`") >= 0);
+
+		var base = GmlAPI.gmlNamespaces["LinterPrivateDefaultWarnBase"];
+		Assert.isFalse(base.isInstPrivate("__protected"));
+		Assert.isNull(base.getInstKind("__protected", 0, "LinterProtectedOther"));
+	}
+
 	@Test public function testPrivateInlineIsFieldWarnsInChildConstructor() {
 		var t = runLinter23(
 			"function LinterPrivateInlineBase() constructor {\n"

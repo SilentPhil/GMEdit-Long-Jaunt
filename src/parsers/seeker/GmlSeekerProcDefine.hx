@@ -1,6 +1,7 @@
 package parsers.seeker;
 import ace.extern.AceAutoCompleteItem;
 import gml.GmlFuncDoc;
+import gml.GmlNamespace.GmlFieldAccess;
 import gml.GmlLocals;
 import gml.type.GmlTypeTemplateItem;
 import parsers.GmlSeekData.GmlSeekDataNamespaceHint;
@@ -280,6 +281,11 @@ class GmlSeekerProcDefine {
 					seeker.linkDoc();
 				}
 				doc.isConstructor = true;
+				if (jsDoc.access != Public) {
+					doc.defaultFieldAccess = jsDoc.access;
+					jsDoc.access = Public;
+					jsDoc.isPrivate = false;
+				}
 				doc.returnTypeString = doc.getConstructorType();
 				if (s == ":") {
 					s = seeker.find(Line | Cub0 | Ident);

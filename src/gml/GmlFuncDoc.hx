@@ -1,5 +1,6 @@
 package gml;
 import gml.GmlAPI.GmlLookup;
+import gml.GmlNamespace.GmlFieldAccess;
 import gml.funcdoc.*;
 import gml.file.GmlFile;
 import gml.type.GmlType;
@@ -78,6 +79,9 @@ class GmlFuncDoc {
 	
 	/** Whether this function or method is expected to override a base member. */
 	public var isOverride:Bool = false;
+	
+	/** Default access to use for fields declared directly inside this constructor. */
+	public var defaultFieldAccess:GmlFieldAccess = Public;
 	
 	// these are currently only set for sub-functions so that you can navigate to them
 	public var lookup:GmlLookup = null;

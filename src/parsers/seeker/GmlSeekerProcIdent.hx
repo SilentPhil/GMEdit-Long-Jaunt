@@ -5,6 +5,7 @@ import js.lib.RegExp;
 import gml.GmlAPI;
 import gml.GmlAPI.GmlLookup;
 import gml.GmlFuncDoc;
+import gml.GmlNamespace.GmlFieldAccess;
 import gml.type.GmlType;
 import gml.type.GmlTypeDef;
 import gml.type.GmlTypeTemplateItem;
@@ -210,7 +211,13 @@ class GmlSeekerProcIdent {
 					default:
 				}
 			}
-			GmlSeekerProcField.addFieldHint(seeker, isConstructor, seeker.jsDoc.interfaceName, true, s, args, null, fieldType, argTypes, true, templateItems, false, nameLookup);
+			var hasExplicitFieldAccess = seeker.jsDoc.access != Public;
+			var fieldAccess = hasExplicitFieldAccess ? seeker.jsDoc.access : (
+				seeker.doc != null && seeker.doc.isConstructor ? seeker.doc.defaultFieldAccess : Public
+			);
+			var isPrivateField = seeker.jsDoc.isPrivate || fieldAccess == Private;
+			GmlSeekerProcField.addFieldHint(seeker, isConstructor, seeker.jsDoc.interfaceName,
+				true, s, args, null, fieldType, argTypes, true, templateItems, isPrivateField, nameLookup, fieldAccess);
 			var addFieldHint_doc = GmlSeekerProcField.addFieldHint_doc;
 			if (addFieldHint_doc != null) {
 				// related: GmlSeekerProcVar
@@ -239,6 +246,10 @@ class GmlSeekerProcIdent {
 					addFieldHint_doc.templateSelf = templateSelf;
 					addFieldHint_doc.templateItems = templateItems;
 				}
+			}
+			if (hasExplicitFieldAccess) {
+				seeker.jsDoc.isPrivate = false;
+				seeker.jsDoc.access = Public;
 			}
 		}
 		seeker.restoreReader();
