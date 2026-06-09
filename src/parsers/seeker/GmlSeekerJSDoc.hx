@@ -1,6 +1,7 @@
 package parsers.seeker;
 import ace.extern.AceAutoCompleteItem;
 import gml.GmlFuncDoc;
+import gml.GmlNamespace.GmlFieldAccess;
 import gml.type.GmlType;
 import gml.type.GmlTypeDef;
 import gml.type.GmlTypeTemplateItem;
@@ -32,6 +33,7 @@ class GmlSeekerJSDoc {
 	public var templateItems:Array<GmlTypeTemplateItem> = null;
 	public var isStatic:Bool = false;
 	public var isPrivate:Bool = false;
+	public var access:GmlFieldAccess = Public;
 	public var deprecated:String = null;
 	public var redirectCount = 0;
 	
@@ -43,6 +45,7 @@ class GmlSeekerJSDoc {
 		returns = null;
 		isStatic = false;
 		isPrivate = false;
+		access = Public;
 		deprecated = null;
 		if (resetInterf) resetInterface();
 	}
@@ -73,6 +76,7 @@ class GmlSeekerJSDoc {
 		r.templateItems = copyArray(templateItems);
 		r.isStatic = isStatic;
 		r.isPrivate = isPrivate;
+		r.access = access;
 		r.deprecated = deprecated;
 		r.redirectCount = redirectCount;
 		return r;
@@ -106,6 +110,7 @@ class GmlSeekerJSDoc {
 		if (q.interfaceName != null) interfaceName = q.interfaceName;
 		if (q.isStatic) isStatic = true;
 		if (q.isPrivate) isPrivate = true;
+		if (q.access != Public) access = q.access;
 		if (q.deprecated != null) deprecated = q.deprecated;
 		implementsNames = concatArrays(implementsNames, q.implementsNames);
 		templateItems = concatArrays(templateItems, q.templateItems);
@@ -129,10 +134,13 @@ class GmlSeekerJSDoc {
 		var out = seeker.out;
 		var q = seeker.reader;
 		var hasType = typeStr != null;
-		var isPrivate = false;
+		var access:GmlFieldAccess = Public;
 		if (doc != null) {
-			var publicDoc = doc.replaceExt(jsDoc_private_tag, "").trimBoth();
-			isPrivate = publicDoc != doc.trimBoth();
+			var accessMatch = jsDoc_access_tag.exec(doc);
+			var publicDoc = doc.replaceExt(jsDoc_access_tag, "").trimBoth();
+			access = accessMatch != null && accessMatch[1] == "protected" ? Protected : (
+				publicDoc != doc.trimBoth() ? Private : Public
+			);
 			doc = publicDoc;
 		}
 		//
@@ -174,12 +182,13 @@ class GmlSeekerJSDoc {
 			var hint = out.fieldHints[namespace + ":" + name];
 			if (hint == null && hasType) {
 				hint = GmlSeekerProcField.addFieldHint(seeker, false, namespace, true, name,
-					null, doc, type, null, false);
+					null, doc, type, null, false, null, false, null, access);
 			}
 			if (hint != null) {
 				if (hasType) hint.type = type;
-				if (isPrivate) {
-					hint.isPrivate = true;
+				if (access != Public) {
+					hint.access = access;
+					hint.isPrivate = access == Private;
 					hint.comp = null;
 				}
 				procComp(hint.comp);
@@ -346,7 +355,7 @@ class GmlSeekerJSDoc {
 			var info = hr.source.substring(hr.pos);
 			
 			GmlSeekerProcField.addFieldHint(seeker, isNew, nsName, isInst, fdName, args,
-				info, GmlTypeDef.parse(typeStr, mt[0]), null, false);
+				info, GmlTypeDef.parse(typeStr, mt[0]), null, false, null, false, null, access);
 			var addFieldHint_doc = GmlSeekerProcField.addFieldHint_doc;
 			if (addFieldHint_doc != null) {
 				if (ctrReturn != null) addFieldHint_doc.returnTypeString = ctrReturn;
@@ -455,6 +464,14 @@ class GmlSeekerJSDoc {
 		if (mt != null) {
 			if (procIs(seeker, s, null, s.substring(3).trimBoth())) return;
 			isPrivate = true;
+			access = Private;
+			return;
+		}
+		
+		mt = jsDoc_protected.exec(s);
+		if (mt != null) {
+			if (procIs(seeker, s, null, s.substring(3).trimBoth())) return;
+			access = Protected;
 			return;
 		}
 		

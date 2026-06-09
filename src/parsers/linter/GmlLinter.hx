@@ -7,6 +7,7 @@ import gml.GmlFuncDoc;
 import gml.GmlImports;
 import gml.GmlLocals;
 import gml.GmlNamespace;
+import gml.GmlNamespace.GmlNamespaceAccessInfo;
 import gml.file.GmlFileKindTools;
 import gml.type.GmlType;
 import gml.Project;
@@ -103,6 +104,7 @@ class GmlLinter {
 	var localVarTokenType:AceTokenType = "local";
 	var funcLiteralDepth:Int = 0;
 	var constructorInstVars:Dictionary<Bool> = null;
+	var instAccessWarnings:Dictionary<Bool> = new Dictionary();
 	
 	function getImports(?force:Bool):GmlImports {
 		var imp = editor.imports[context];
@@ -166,6 +168,10 @@ class GmlLinter {
 		if (t == null && prefs.strictScriptSelf) t = GmlTypeDef.void;
 		return t;
 	}
+	function getSelfNamespaceName():String {
+		var t = getSelfType();
+		return t != null ? t.unwrapNullable().getNamespace() : null;
+	}
 
 	
 	
@@ -207,13 +213,13 @@ class GmlLinter {
 					var ns = imp.namespaces[nsName];
 					if (ns != null) {
 						foundNamespace = true;
-						if (ns.getInstKind(name) != null) return false;
+						if (ns.getInstKind(name, 0, nsName) != null) return false;
 					}
 				}
 				var ns = GmlAPI.gmlNamespaces[nsName];
 				if (ns != null) {
 					foundNamespace = true;
-					if (ns.getInstKind(name) != null) return false;
+					if (ns.getInstKind(name, 0, nsName) != null) return false;
 				}
 				foundNamespace;
 			};
@@ -226,7 +232,7 @@ class GmlLinter {
 		var t = getSelfType();
 		if (t == null) return false;
 		inline function check(ns:GmlNamespace):Bool {
-			return ns != null && ns.parent != null && ns.parent.getInstKind(name) != null;
+			return ns != null && ns.parent != null && ns.parent.getInstKind(name, 0, ns.name) != null;
 		}
 		return switch (t) {
 			case TInst(_, _, KAny): false;
@@ -239,8 +245,49 @@ class GmlLinter {
 		}
 	}
 
+	function getInaccessibleInheritedInstanceField(name:String):GmlNamespaceAccessInfo {
+		var t = getSelfType();
+		if (t == null) return null;
+		return switch (t) {
+			case TInst(_, _, KAny): null;
+			case TInst(nsName, _, _): {
+				inline function check(ns:GmlNamespace):GmlNamespaceAccessInfo {
+					if (ns == null || ns.parent == null) return null;
+					var access = ns.parent.getInstAccess(name);
+					if (access != null && !GmlNamespace.isAccessAllowed(access.access, access.owner, ns.name)) {
+						return access;
+					}
+					return null;
+				}
+				var imp = getImports();
+				var access = imp != null ? check(imp.namespaces[nsName]) : null;
+				access != null ? access : check(GmlAPI.gmlNamespaces[nsName]);
+			};
+			default: null;
+		}
+	}
+
+	function warnInstAccess(field:String, access:GmlNamespaceAccessInfo):Void {
+		if (access == null) return;
+		var key = reader.row + ":" + access.owner + ":" + field;
+		if (instAccessWarnings[key]) return;
+		instAccessWarnings[key] = true;
+		switch (access.access) {
+			case Private:
+				addWarning('Trying to access private field `$field` of ${access.owner}');
+			case Protected:
+				addWarning('Trying to access protected field `$field` of ${access.owner}');
+			default:
+		}
+	}
+
 	function checkInstanceVarDeclaration(name:String, oldDepth:Int, isLocal:Bool):Void {
 		if (!prefs.warnInstanceVarDeclarations || isLocal || name == null) return;
+		var inaccessibleInherited = getInaccessibleInheritedInstanceField(name);
+		if (inaccessibleInherited != null) {
+			warnInstAccess(name, inaccessibleInherited);
+			return;
+		}
 		if (isInstanceVarDeclarationBody(oldDepth)) {
 			if (constructorInstVars != null) {
 				constructorInstVars[name] = true;

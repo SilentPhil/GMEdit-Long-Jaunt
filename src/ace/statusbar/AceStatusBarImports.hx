@@ -135,24 +135,26 @@ class AceStatusBarImports {
 			var tn = objType.getNamespace();
 			var fieldType:GmlType = null;
 			var fieldTypeText:String = null;
+			var selfType = AceGmlTools.getSelfType({ session: ctx.session, scope: ctx.scope });
+			var accessContext = selfType != null ? selfType.getNamespace() : null;
 			if (tn != null) {
 				AceGmlTools.findNamespace(tn, imports, function(ns:GmlNamespace){
 					if (doc == null) {
-						doc = ns.getInstDoc(name);
+						doc = ns.getInstDoc(name, 0, accessContext);
 						if (doc != null
 							&& Std.is(ns, GmlImportNamespace)
 							&& (cast ns:GmlImportNamespace).longen.exists(name)
 						) argStart = 1;
 					}
 					if (fieldType == null) {
-						fieldType = ns.getInstType(name);
+						fieldType = ns.getInstType(name, 0, accessContext);
 					}
 					if (fieldTypeText == null) {
-						var comp = ns.getInstCompItem(name);
+						var comp = ns.getInstCompItem(name, 0, accessContext);
 						if (comp != null) {
 							fieldTypeText = comp.doc;
 						} else {
-							fieldTypeText = ns.getInstTypeText(name);
+							fieldTypeText = ns.getInstTypeText(name, 0, accessContext);
 							if (fieldTypeText != null) fieldTypeText += "\n" + "unlisted";
 						}
 					}

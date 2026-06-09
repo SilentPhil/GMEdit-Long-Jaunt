@@ -53,17 +53,17 @@ class AceGmlHighlightIdents {
 			} else return null;
 		} else return null;
 	}
-	static function genIdentPairFunc_getInstType(field:String, localTypeNS:String, ns:GmlNamespace, ns2:GmlNamespace) {
+	static function genIdentPairFunc_getInstType(field:String, localTypeNS:String, ns:GmlNamespace, ns2:GmlNamespace, accessContext:String = null) {
 		var fdType:AceTokenType;
 		if (ns != null) {
-			fdType = ns.getInstKind(field);
+			fdType = ns.getInstKind(field, 0, accessContext);
 			if (fdType == null) {
 				if (ns2 != null) {
-					fdType = jsOrx(ns2.getInstKind(field), "typeerror");
+					fdType = jsOrx(ns2.getInstKind(field, 0, accessContext), "typeerror");
 				} else fdType = "typeerror";
 			}
 		} else if (ns2 != null) {
-			fdType = jsOrx(ns2.getInstKind(field), "typeerror");
+			fdType = jsOrx(ns2.getInstKind(field, 0, accessContext), "typeerror");
 		} else {
 			var en = GmlAPI.gmlEnums[localTypeNS];
 			if (en != null) {
@@ -89,7 +89,7 @@ class AceGmlHighlightIdents {
 			var imports = editor.imports[scope];
 			type = genIdentPairFunc_getInstType(name, localTypeNS,
 				JsTools.nca(imports, imports.namespaces[localTypeNS]),
-				GmlAPI.gmlNamespaces[localTypeNS]);
+				GmlAPI.gmlNamespaces[localTypeNS], localTypeNS);
 			if (type == "field") type = def;
 		} while (false);
 		if (type == null) type = def;
@@ -179,9 +179,11 @@ class AceGmlHighlightIdents {
 						}
 						localTypeNS = JsTools.nca(localType, localType.getNamespace());
 						if (localTypeNS != null) {
+							var accessContext = AceGmlTools.getSelfType({session:editor.session, scope:scope});
+							var accessContextNS = JsTools.nca(accessContext, accessContext.getNamespace());
 							fdType = genIdentPairFunc_getInstType(field, localTypeNS,
 								JsTools.nca(imp, imp.namespaces[localTypeNS]),
-								GmlAPI.gmlNamespaces[localTypeNS]);
+								GmlAPI.gmlNamespaces[localTypeNS], accessContextNS);
 						} else switch (localType) {
 							case null: //
 							case TAnon(inf):
@@ -212,7 +214,7 @@ class AceGmlHighlightIdents {
 							ns2 = GmlAPI.gmlNamespaces[localTypeNS];
 							objType = genIdentPairFunc_getInstType(object, localTypeNS,
 								JsTools.nca(imp, imp.namespaces[localTypeNS]),
-								GmlAPI.gmlNamespaces[localTypeNS]);
+								GmlAPI.gmlNamespaces[localTypeNS], localTypeNS);
 							if (objType == "field") objType = def;
 						} while (false);
 						if (objType == null) objType = def;

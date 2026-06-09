@@ -88,7 +88,11 @@ class GmlSeekerJSDocRegex {
 	public static var jsDoc_private = new RegExp("^///\\s*"
 		+ "@private\\b\\s*"
 	);
-	public static var jsDoc_private_tag = new RegExp("(?:^|\\s+)@private\\b\\s*", "g");
+	public static var jsDoc_protected = new RegExp("^///\\s*"
+		+ "@protected\\b\\s*"
+	);
+	public static var jsDoc_access_tag = new RegExp("(?:^|\\s+)@(private|protected)\\b\\s*", "g");
+	public static var jsDoc_private_tag = jsDoc_access_tag;
 	public static var jsDoc_deprecated = new RegExp("^///\\s*"
 		+ "@deprecated\\b\\s*"
 		+ "(.*)"

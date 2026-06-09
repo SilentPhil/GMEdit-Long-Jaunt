@@ -97,6 +97,65 @@ class GmlLinterBasicTest {
 		Assert.isFalse(ns.isInstPrivate("pub_sub_unsubscribe_all"));
 	}
 
+	@Test public function testPrivateFieldIsNotAvailableToChild() {
+		runLinter23(
+			"function LinterPrivateBase() constructor {\n"
+			+ "\t/// @private\n"
+			+ "\tstatic secret = function() {}\n"
+			+ "}\n"
+			+ "function LinterPrivateChild() : LinterPrivateBase() constructor {\n"
+			+ "\tstatic check = function() {\n"
+			+ "\t\tsecret();\n"
+			+ "\t}\n"
+			+ "}"
+		, true, KGmlScript.inst);
+
+		var base = GmlAPI.gmlNamespaces["LinterPrivateBase"];
+		var child = GmlAPI.gmlNamespaces["LinterPrivateChild"];
+		Assert.isNull(child.getInstKind("secret", 0, "LinterPrivateChild"));
+		Assert.isNotNull(base.getInstKind("secret", 0, "LinterPrivateBase"));
+	}
+
+	@Test public function testPrivateInlineIsFieldWarnsInChildConstructor() {
+		var t = runLinter23(
+			"function LinterPrivateInlineBase() constructor {\n"
+			+ "\t__hidden = false; /// @is {bool} @private\n"
+			+ "}\n"
+			+ "function LinterPrivateInlineChild() : LinterPrivateInlineBase() constructor {\n"
+			+ "\t__hidden = true;\n"
+			+ "}"
+		, true, KGmlScript.inst);
+
+		Assert.areEqual(1, t.warnings.length, problemTexts(t));
+		Assert.isTrue(t.warnings[0].text.indexOf("private field `__hidden`") >= 0);
+	}
+
+	@Test public function testProtectedFieldIsAvailableOnlyToChild() {
+		runLinter23(
+			"function LinterProtectedBase() constructor {\n"
+			+ "\t/// @protected\n"
+			+ "\tstatic inner = function() {}\n"
+			+ "}\n"
+			+ "function LinterProtectedChild() : LinterProtectedBase() constructor {\n"
+			+ "\tstatic check = function() {\n"
+			+ "\t\tinner();\n"
+			+ "\t}\n"
+			+ "}\n"
+			+ "function LinterProtectedOther() constructor {\n"
+			+ "\tstatic check = function(v:LinterProtectedBase) {\n"
+			+ "\t\tv.inner();\n"
+			+ "\t}\n"
+			+ "}"
+		, true, KGmlScript.inst);
+
+		var base = GmlAPI.gmlNamespaces["LinterProtectedBase"];
+		var child = GmlAPI.gmlNamespaces["LinterProtectedChild"];
+		Assert.isNotNull(child.getInstKind("inner", 0, "LinterProtectedChild"));
+		Assert.isNotNull(child.getInstCompItem("inner", 0, "LinterProtectedChild"));
+		Assert.isNull(child.getInstCompItem("inner"));
+		Assert.isNull(base.getInstKind("inner", 0, "LinterProtectedOther"));
+	}
+
 	@Test public function testStaticFunctionOptionalArgKeepsFieldDoc() {
 		var prefs = Project.current.properties.linterPrefs;
 		if (prefs == null) prefs = Project.current.properties.linterPrefs = GmlLinterPrefs.defValue;

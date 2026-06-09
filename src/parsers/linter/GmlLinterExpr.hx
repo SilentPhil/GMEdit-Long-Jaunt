@@ -3,6 +3,8 @@ import ace.AceGmlTools;
 import gml.GmlAPI;
 import gml.GmlEnum;
 import gml.GmlFuncDoc;
+import gml.GmlNamespace;
+import gml.GmlNamespace.GmlFieldAccess;
 import gml.type.GmlType;
 import gml.type.GmlTypeCanCastTo;
 import gml.type.GmlTypeDef;
@@ -526,12 +528,14 @@ class GmlLinterExpr extends GmlLinterHelper {
 									currFunc = ns.docStaticMap[field];
 									return ns.staticKind.exists(field);
 								} else {
-									currType = ns.getInstType(field);
-									currFunc = ns.getInstDoc(field);
-									if (ns.isInstPrivate(field)) {
-										self.addWarning('Trying to access private field `$field` of $ctn');
+									var accessContext = self.getSelfNamespaceName();
+									currType = ns.getInstType(field, 0, accessContext);
+									currFunc = ns.getInstDoc(field, 0, accessContext);
+									var access = ns.getInstAccess(field);
+									if (access != null && !GmlNamespace.isAccessAllowed(access.access, access.owner, accessContext)) {
+										self.warnInstAccess(field, access);
 									}
-									return ns.getInstKind(field) != null;
+									return ns.getInstKind(field, 0, accessContext) != null;
 								}
 							});
 						}

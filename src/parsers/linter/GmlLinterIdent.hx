@@ -4,6 +4,7 @@ import gml.GmlAPI;
 import gml.GmlFuncDoc;
 import gml.GmlImports;
 import gml.GmlNamespace;
+import gml.GmlNamespace.GmlFieldAccess;
 import gml.type.GmlType;
 import gml.type.GmlTypeDef;
 import tools.JsTools;
@@ -24,7 +25,7 @@ class GmlLinterIdent {
 		return switch (selfType) {
 			case TInst(tn, _, tk) if (tk != GmlTypeKind.KAny):
 				AceGmlTools.findNamespace(tn, imp, function(ns:GmlNamespace) {
-					return ns.getInstDoc(currName);
+					return ns.getInstDoc(currName, 0, linter.getSelfNamespaceName());
 				});
 			default: null;
 		}
@@ -184,11 +185,17 @@ class GmlLinterIdent {
 						if (currFunc == null) currFunc = currType.getSelfCallDoc(imp);
 						found = true;
 					} else {
+						var accessContext = linter.getSelfNamespaceName();
 						found = AceGmlTools.findNamespace(tn, imp, function(ns:GmlNamespace) {
 							wantWarn = true;
-							if (ns.getInstKind(currName) != null) {
-								currType = ns.getInstType(currName);
-								currFunc = ns.getInstDoc(currName);
+							var access = ns.getInstAccess(currName);
+							if (access != null && !GmlNamespace.isAccessAllowed(access.access, access.owner, accessContext)) {
+								linter.warnInstAccess(currName, access);
+								return false;
+							}
+							if (ns.getInstKind(currName, 0, accessContext) != null) {
+								currType = ns.getInstType(currName, 0, accessContext);
+								currFunc = ns.getInstDoc(currName, 0, accessContext);
 								if (currFunc == null) {
 									currFunc = currType.getSelfCallDoc(linter.getImports());
 								}

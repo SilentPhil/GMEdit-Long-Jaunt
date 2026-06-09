@@ -269,7 +269,9 @@ using tools.NativeString;
 					var tn = type.getNamespace();
 					var ns = dotKindMeta ? GmlAPI.gmlNamespaces[tn] : imp.namespaces[tn];
 					if (ns != null) {
-						callback(null, isStatic ? ns.compStatic.array : ns.getInstComp());
+						var selfType = AceGmlTools.getSelfType({session:session, scope:scope});
+						var accessContext = selfType != null ? selfType.getNamespace() : null;
+						callback(null, isStatic ? ns.compStatic.array : ns.getInstComp(0, true, accessContext));
 						return;
 					} else if (!isGlobal) {
 						var en = GmlAPI.gmlEnums[tn];

@@ -4,6 +4,7 @@ import gml.GmlAPI;
 import gml.GmlAPI.GmlLookup;
 import gml.GmlField;
 import gml.GmlFuncDoc;
+import gml.GmlNamespace.GmlFieldAccess;
 import gml.type.GmlType;
 import gml.type.GmlTypeCanCastTo;
 import gml.type.GmlTypeDef;
@@ -30,7 +31,8 @@ class GmlSeekerProcField {
 		isAuto:Bool,
 		?templateItems:Array<GmlTypeTemplateItem>,
 		isPrivate:Bool = false,
-		?lookup:GmlLookup
+		?lookup:GmlLookup,
+		access:GmlFieldAccess = Public
 	):GmlSeekDataHint {
 		var parentSpace:String = null;
 		if (namespace == null) {
@@ -73,9 +75,10 @@ class GmlSeekerProcField {
 		var isFunc = args != null || GmlTypeCanCastTo.canCastTo(type, GmlTypeDef.anyFunction);
 		var compMeta = isField ? (isFunc ? "function" : "variable") : "namespace";
 		var privateFieldRegex = seeker.privateFieldRegex;
-		var comp = (privateFieldRegex == null || !privateFieldRegex.test(name)) && !(isInst && isPrivate)
+		if (isPrivate && access == Public) access = Private;
+		var comp = (privateFieldRegex == null || !privateFieldRegex.test(name)) && !(isInst && access == Private)
 			? new AceAutoCompleteItem(name, compMeta, info) : null;
-		var hint = new GmlSeekDataHint(namespace, isInst, field, comp, hintDoc, parentSpace, type, isPrivate, lookup);
+		var hint = new GmlSeekDataHint(namespace, isInst, field, comp, hintDoc, parentSpace, type, isPrivate, lookup, access);
 		
 		var out = seeker.out;
 		var lastHint = out.fieldHints[hint.key];
