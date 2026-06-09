@@ -97,6 +97,15 @@ class GmlSeekerJSDocRegex {
 		+ "@deprecated\\b\\s*"
 		+ "(.*)"
 	);
+	public static var jsDoc_virtual = new RegExp("^///\\s*"
+		+ "@virtual\\b\\s*"
+	);
+	public static var jsDoc_abstract = new RegExp("^///\\s*"
+		+ "@abstract\\b\\s*"
+	);
+	public static var jsDoc_override = new RegExp("^///\\s*"
+		+ "@override\\b\\s*"
+	);
 	
 	public static var jsDoc_index_redirect = new RegExp("^///\\s*"
 		+ "@index_redirect\\b\\s*"

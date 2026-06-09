@@ -219,6 +219,9 @@ class AceWrapCommonCompleters {
 			new AceAutoCompleteItem("typedef", jsk, "@typedef {FullType} Alias\nDeclare a shorthand for a type"),
 			new AceAutoCompleteItem("init", jsk, "@init\nMarks a non-Create event as a variable/function source"),
 			new AceAutoCompleteItem("static", jsk, "@static\nMarks a static variable as intended for access via Constructor.varname"),
+			new AceAutoCompleteItem("virtual", jsk, "@virtual\nMarks a method as intended for overriding"),
+			new AceAutoCompleteItem("abstract", jsk, "@abstract\nMarks a method that descendants must implement"),
+			new AceAutoCompleteItem("override", jsk, "@override\nMarks a method as overriding a base/interface member"),
 		];
 		jsDocCompleter = new AceWrapCompleter([], ["comment.meta"], false, gmlOnly);
 		for (ac in jsDocItems) jsDocCompleter.items.push(ac); // we don't want items sorted in this one case

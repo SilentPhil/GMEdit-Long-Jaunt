@@ -31,6 +31,9 @@ class AceStatusBarImports {
 			out.selfType = doc.selfType;
 			out.selfTypeIsAuto = doc.selfTypeIsAuto;
 			out.deprecated = doc.deprecated;
+			out.isVirtual = doc.isVirtual;
+			out.isAbstract = doc.isAbstract;
+			out.isOverride = doc.isOverride;
 			out.lookup = doc.lookup;
 			out.nav = doc.nav;
 			out.templateItems = doc.templateItems;

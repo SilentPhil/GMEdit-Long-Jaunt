@@ -177,4 +177,91 @@ class GmlLinterBasicTest {
 		}
 		prefs.specTypeStatic = oldSpecTypeStatic;
 	}
+
+	@Test public function testOverrideFindsBaseMethod() {
+		var t = runLinter23(
+			"function LinterOverrideBase() constructor {\n"
+			+ "\t/// @virtual\n"
+			+ "\tstatic run = function()->void {}\n"
+			+ "}\n"
+			+ "function LinterOverrideChild() : LinterOverrideBase() constructor {\n"
+			+ "\t/// @override\n"
+			+ "\tstatic run = function()->void {}\n"
+			+ "}"
+		, true, KGmlScript.inst);
+		Assert.areEqual(0, t.errors.length, problemTexts(t));
+	}
+
+	@Test public function testOverrideRequiresBaseMethod() {
+		var t = runLinter23(
+			"function LinterOverrideMissingBase() constructor {\n"
+			+ "}\n"
+			+ "function LinterOverrideMissingChild() : LinterOverrideMissingBase() constructor {\n"
+			+ "\t/// @override\n"
+			+ "\tstatic run = function()->void {}\n"
+			+ "}"
+		, true, KGmlScript.inst);
+		Assert.areEqual(1, t.errors.length, problemTexts(t));
+		Assert.isTrue(t.errors[0].text.indexOf("@override") >= 0);
+		Assert.isTrue(t.errors[0].text.indexOf("run") >= 0);
+	}
+
+	@Test public function testAbstractRequiresChildMethod() {
+		var t = runLinter23(
+			"function LinterAbstractBase() constructor {\n"
+			+ "\t/// @abstract\n"
+			+ "\tstatic run = function()->void {}\n"
+			+ "}\n"
+			+ "function LinterAbstractChild() : LinterAbstractBase() constructor {\n"
+			+ "}"
+		, true, KGmlScript.inst);
+		Assert.areEqual(1, t.errors.length, problemTexts(t));
+		Assert.isTrue(t.errors[0].text.indexOf("abstract member `run`") >= 0);
+	}
+
+	@Test public function testAbstractImplementedByChildMethod() {
+		var t = runLinter23(
+			"function LinterAbstractImplementedBase() constructor {\n"
+			+ "\t/// @abstract\n"
+			+ "\tstatic run = function()->void {}\n"
+			+ "}\n"
+			+ "function LinterAbstractImplementedChild() : LinterAbstractImplementedBase() constructor {\n"
+			+ "\t/// @override\n"
+			+ "\tstatic run = function()->void {}\n"
+			+ "}"
+		, true, KGmlScript.inst);
+		Assert.areEqual(0, t.errors.length, problemTexts(t));
+	}
+
+	@Test public function testAbstractImplementedByIntermediateParent() {
+		var t = runLinter23(
+			"function LinterAbstractChainBase() constructor {\n"
+			+ "\t/// @abstract\n"
+			+ "\tstatic run = function()->void {}\n"
+			+ "}\n"
+			+ "function LinterAbstractChainMiddle() : LinterAbstractChainBase() constructor {\n"
+			+ "\t/// @override\n"
+			+ "\tstatic run = function()->void {}\n"
+			+ "}\n"
+			+ "function LinterAbstractChainLeaf() : LinterAbstractChainMiddle() constructor {\n"
+			+ "\tstatic check = function()->bool { return true; }\n"
+			+ "}"
+		, true, KGmlScript.inst);
+		Assert.areEqual(0, t.errors.length, problemTexts(t));
+	}
+
+	@Test public function testInterfaceImplementsStillWorksWithNewTagsNearby() {
+		var t = runLinter23(
+			"/// @interface {LinterTagInterface}\n"
+			+ "function LinterTagInterface() constructor {\n"
+			+ "\tstatic run = function()->void {}\n"
+			+ "}\n"
+			+ "/// @implements {LinterTagInterface}\n"
+			+ "function LinterTagImpl() constructor {\n"
+			+ "\t/// @virtual\n"
+			+ "\tstatic run = function()->void {}\n"
+			+ "}"
+		, true, KGmlScript.inst);
+		Assert.areEqual(0, t.errors.length, problemTexts(t));
+	}
 }

@@ -308,8 +308,12 @@ class GmlLinter {
 
 	static var implementsLineRx = new RegExp("\\b@implement(?:s)?(?:\\b\\s*\\{(\\w+)\\}|\\b\\s+(\\w+))?");
 	static var interfaceLineRx = new RegExp("\\b@interface(?:\\b\\s*\\{(\\w+)\\})?");
+	public static var virtualLineRx = new RegExp("\\b@virtual\\b");
+	public static var abstractLineRx = new RegExp("\\b@abstract\\b");
+	public static var overrideLineRx = new RegExp("\\b@override\\b");
 	static var nextFunctionRx = new RegExp("\\bfunction\\s+(\\w+)\\b");
 	static var functionDeclLineRx = new RegExp("^\\s*function\\s+(\\w+)\\b");
+	public static var constructorParentLineRx = new RegExp("^\\s*function\\s+\\w+\\b[^\\n]*:\\s*(\\w+)\\s*\\(");
 	static var staticFieldLineRx = new RegExp("^\\s*static\\s+(\\w+)\\b\\s*=");
 	function findImplementsWarningPos(source:String, ownName:String, interfaceName:String, ?preferred:AcePos):AcePos {
 		var lines = source.split("\n");
@@ -396,6 +400,7 @@ class GmlLinter {
 		var pendingNames:Array<String> = null;
 		var pendingPositions:Array<AcePos> = null;
 		var pendingInterfaceName:String = null;
+		var pendingMeta:GmlLinterMemberMeta = null;
 		var current:GmlLinterInterfaceImplementation = null;
 		var currentBrace = { depth: 0, started: false };
 		var lines = source.split("\n");
@@ -416,6 +421,8 @@ class GmlLinter {
 			var line = lines[row];
 			var trimmed = line.trimBoth();
 			if (trimmed.startsWith("///")) {
+				var memberMeta = GmlLinterMemberMeta.fromLine(line, row);
+				if (memberMeta != null) pendingMeta = memberMeta;
 				var mtInterface = interfaceLineRx.exec(line);
 				if (mtInterface != null) {
 					pendingInterfaceName = mtInterface[1];
@@ -441,6 +448,7 @@ class GmlLinter {
 				if (fnMatch != null) {
 					var ownName = pendingInterfaceName != null ? pendingInterfaceName : fnMatch[1];
 					current = getImpl(ownName);
+					current.setParentFromLine(line);
 					if (pendingNames != null) for (i in 0 ... pendingNames.length) {
 						current.addInterface(pendingNames[i], pendingPositions[i]);
 					}
@@ -448,11 +456,21 @@ class GmlLinter {
 				}
 				clearPending();
 			}
+			if (current == null) {
+				var fnMatch = functionDeclLineRx.exec(line);
+				if (fnMatch != null) {
+					current = getImpl(fnMatch[1]);
+					current.setParentFromLine(line);
+					currentBrace = { depth: 0, started: false };
+				}
+			}
 			if (current != null) {
 				var staticMatch = staticFieldLineRx.exec(line);
 				if (staticMatch != null) {
-					current.instFields[staticMatch[1]] = true;
-					current.staticFields[staticMatch[1]] = true;
+					var field = staticMatch[1];
+					current.addField(field, true, row, line, pendingMeta);
+					current.addField(field, false, row, line, pendingMeta);
+					pendingMeta = null;
 				}
 				updateBraceDepth(line, currentBrace);
 				if (currentBrace.started && currentBrace.depth <= 0) {
@@ -462,17 +480,118 @@ class GmlLinter {
 		}
 		return out;
 	}
+	function namespaceHasOwnField(ns:GmlNamespace, field:String, isInst:Bool):Bool {
+		if (ns == null) return false;
+		return isInst
+			? ns.instKind.exists(field) || ns.instTypes.exists(field) || ns.docInstMap.exists(field) || ns.compInst.exists(field)
+			: ns.staticKind.exists(field) || ns.staticTypes.exists(field) || ns.docStaticMap.exists(field) || ns.compStatic.exists(field);
+	}
 	function namespaceHasOwnOrParentField(ns:GmlNamespace, field:String, isInst:Bool, includeSelf:Bool = true, depth:Int = 0):Bool {
 		var q = ns, n = depth;
 		while (q != null && ++n <= GmlNamespace.maxDepth) {
 			if (includeSelf) {
-				var kind = isInst ? q.instKind[field] : q.staticKind[field];
-				if (kind != null) return true;
+				if (namespaceHasOwnField(q, field, isInst)) return true;
 			}
 			includeSelf = true;
 			q = q.parent;
 		}
 		return false;
+	}
+	function namespaceHasInheritedOrInterfaceField(ns:GmlNamespace, field:String, isInst:Bool):Bool {
+		if (ns == null) return false;
+		if (namespaceHasOwnOrParentField(ns.parent, field, isInst)) return true;
+		for (itf in ns.interfaces.array) {
+			if (namespaceHasOwnOrParentField(itf, field, isInst)) return true;
+		}
+		return false;
+	}
+	function namespaceHasFieldBefore(ns:GmlNamespace, stopAt:GmlNamespace, field:String, isInst:Bool):Bool {
+		var q = ns, n = 0;
+		while (q != null && q != stopAt && ++n <= GmlNamespace.maxDepth) {
+			if (namespaceHasOwnField(q, field, isInst)) return true;
+			q = q.parent;
+		}
+		return false;
+	}
+	function currentImplHasField(
+		currentImpls:Dictionary<GmlLinterInterfaceImplementation>,
+		impl:GmlLinterInterfaceImplementation,
+		field:String,
+		isInst:Bool
+	):Bool {
+		if (impl == null) return false;
+		var fields = isInst ? impl.instFields : impl.staticFields;
+		if (fields.exists(field)) return true;
+		if (impl.parentName == null || currentImpls == null) return false;
+		return currentImplHasField(currentImpls, currentImpls[impl.parentName], field, isInst);
+	}
+	function checkVirtualOverrideImplementation(
+		impl:GmlLinterInterfaceImplementation,
+		currentImpls:Dictionary<GmlLinterInterfaceImplementation>
+	):Void {
+		var ns = GmlAPI.gmlNamespaces[impl.name];
+		if (ns == null) return;
+		var checkedOverride = new Dictionary<Bool>();
+		inline function checkOverride(field:String, isInst:Bool, pos:AcePos):Void {
+			var key = field;
+			if (checkedOverride[key]) return;
+			checkedOverride[key] = true;
+			var found = namespaceHasInheritedOrInterfaceField(ns, field, isInst);
+			if (!found && impl.parentName != null && currentImpls != null) {
+				found = currentImplHasField(currentImpls, currentImpls[impl.parentName], field, isInst);
+			}
+			if (!found) {
+				errors.push(new GmlLinterProblem(
+					'Member `$field` is marked @override but no base/interface member was found',
+					pos
+				));
+			}
+		}
+		for (field => meta in impl.instMeta) if (meta.isOverride) checkOverride(field, true, meta.pos);
+		for (field => meta in impl.staticMeta) if (meta.isOverride) checkOverride(field, false, meta.pos);
+		for (field => doc in ns.docInstMap) if (doc != null && doc.isOverride) {
+			checkOverride(field, true, { row: 0, column: 0 });
+		}
+		for (field => doc in ns.docStaticMap) if (doc != null && doc.isOverride) {
+			checkOverride(field, false, { row: 0, column: 0 });
+		}
+	}
+	function checkAbstractMembers(impl:GmlLinterInterfaceImplementation):Void {
+		var ns = GmlAPI.gmlNamespaces[impl.name];
+		if (ns == null || ns.parent == null) return;
+		var seen = new Dictionary<Bool>();
+		function checkParent(q:GmlNamespace, depth:Int):Void {
+			if (q == null || depth >= GmlNamespace.maxDepth) return;
+			inline function checkDocs(docs:Dictionary<GmlFuncDoc>, isInst:Bool):Void {
+				for (field => doc in docs) {
+					if (field == "" || doc == null || !doc.isAbstract) continue;
+					var key = field;
+					if (seen[key]) continue;
+					seen[key] = true;
+					var fields = isInst ? impl.instFields : impl.staticFields;
+					if (fields.exists(field)
+						|| namespaceHasOwnField(ns, field, isInst)
+						|| namespaceHasFieldBefore(ns.parent, q, field, isInst)
+					) continue;
+					var pos = { row: 0, column: 0 };
+					errors.push(new GmlLinterProblem(
+						'${impl.name} extends ${q.name} but is missing abstract member `$field`',
+						pos
+					));
+				}
+			}
+			checkDocs(q.docInstMap, true);
+			checkDocs(q.docStaticMap, false);
+			checkParent(q.parent, depth + 1);
+		}
+		checkParent(ns.parent, 0);
+	}
+	function checkVirtualOverrideImplementations(currentImpls:Dictionary<GmlLinterInterfaceImplementation>):Void {
+		if (prefs.suppressAll || isProperties || currentImpls == null) return;
+		for (_ => impl in currentImpls) {
+			checkVirtualOverrideImplementation(impl, currentImpls);
+			checkAbstractMembers(impl);
+		}
 	}
 	function implementationHasField(
 		impl:GmlLinterInterfaceImplementation,
@@ -577,6 +696,7 @@ class GmlLinter {
 	function checkInterfaceImplementations(source:String):Void {
 		if (prefs.suppressAll || isProperties) return;
 		var currentImpls = getCurrentInterfaceImplementations(source);
+		checkVirtualOverrideImplementations(currentImpls);
 		if (!currentImpls.isEmpty()) {
 			var checked = false;
 			for (ownName => impl in currentImpls) {
@@ -1548,10 +1668,13 @@ class GmlLinterProblem {
 }
 class GmlLinterInterfaceImplementation {
 	public var name:String;
+	public var parentName:String = null;
 	public var interfaces:Array<String> = [];
 	public var positions:Dictionary<AcePos> = new Dictionary();
 	public var instFields:Dictionary<Bool> = new Dictionary();
 	public var staticFields:Dictionary<Bool> = new Dictionary();
+	public var instMeta:Dictionary<GmlLinterMemberMeta> = new Dictionary();
+	public var staticMeta:Dictionary<GmlLinterMemberMeta> = new Dictionary();
 	public function new(name:String) {
 		this.name = name;
 	}
@@ -1560,6 +1683,44 @@ class GmlLinterInterfaceImplementation {
 			interfaces.push(interfaceName);
 			positions[interfaceName] = pos;
 		}
+	}
+	public function setParentFromLine(line:String):Void {
+		var mt = GmlLinter.constructorParentLineRx.exec(line);
+		parentName = mt != null ? mt[1] : null;
+	}
+	public function addField(field:String, isInst:Bool, row:Int, line:String, meta:GmlLinterMemberMeta):Void {
+		var fields = isInst ? instFields : staticFields;
+		fields[field] = true;
+		if (meta == null) return;
+		var metas = isInst ? instMeta : staticMeta;
+		metas[field] = meta.withFallbackPos(row, line);
+	}
+}
+class GmlLinterMemberMeta {
+	public var isVirtual:Bool;
+	public var isAbstract:Bool;
+	public var isOverride:Bool;
+	public var pos:AcePos;
+	public function new(isVirtual:Bool, isAbstract:Bool, isOverride:Bool, pos:AcePos) {
+		this.isVirtual = isVirtual;
+		this.isAbstract = isAbstract;
+		this.isOverride = isOverride;
+		this.pos = pos;
+	}
+	public static function fromLine(line:String, row:Int):GmlLinterMemberMeta {
+		var isVirtual = GmlLinter.virtualLineRx.test(line);
+		var isAbstract = GmlLinter.abstractLineRx.test(line);
+		var isOverride = GmlLinter.overrideLineRx.test(line);
+		if (!isVirtual && !isAbstract && !isOverride) return null;
+		var col = line.indexOf("@override");
+		if (col < 0) col = line.indexOf("@abstract");
+		if (col < 0) col = line.indexOf("@virtual");
+		return new GmlLinterMemberMeta(isVirtual, isAbstract, isOverride, { row: row, column: col >= 0 ? col : 0 });
+	}
+	public function withFallbackPos(row:Int, line:String):GmlLinterMemberMeta {
+		if (pos != null) return this;
+		var col = line.indexOf("static");
+		return new GmlLinterMemberMeta(isVirtual, isAbstract, isOverride, { row: row, column: col >= 0 ? col : 0 });
 	}
 }
 

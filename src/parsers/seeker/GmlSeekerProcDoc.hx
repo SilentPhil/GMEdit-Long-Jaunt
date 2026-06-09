@@ -14,6 +14,9 @@ class GmlSeekerProcDoc {
 	public static function flushMetaToDoc(jsDoc:GmlSeekerJSDoc, doc:GmlFuncDoc):Void {
 		if (doc == null) return;
 		if (jsDoc.deprecated != null) doc.deprecated = jsDoc.deprecated;
+		if (jsDoc.isVirtual) doc.isVirtual = true;
+		if (jsDoc.isAbstract) doc.isAbstract = true;
+		if (jsDoc.isOverride) doc.isOverride = true;
 	}
 	
 	public static function flushSelfType(seeker:GmlSeekerImpl, doc:GmlFuncDoc) {

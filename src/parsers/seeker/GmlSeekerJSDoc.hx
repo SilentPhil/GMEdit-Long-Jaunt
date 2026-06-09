@@ -35,6 +35,9 @@ class GmlSeekerJSDoc {
 	public var isPrivate:Bool = false;
 	public var access:GmlFieldAccess = Public;
 	public var deprecated:String = null;
+	public var isVirtual:Bool = false;
+	public var isAbstract:Bool = false;
+	public var isOverride:Bool = false;
 	public var redirectCount = 0;
 	
 	public function reset(resetInterf = true):Void {
@@ -47,6 +50,9 @@ class GmlSeekerJSDoc {
 		isPrivate = false;
 		access = Public;
 		deprecated = null;
+		isVirtual = false;
+		isAbstract = false;
+		isOverride = false;
 		if (resetInterf) resetInterface();
 	}
 	public function resetInterface() {
@@ -78,6 +84,9 @@ class GmlSeekerJSDoc {
 		r.isPrivate = isPrivate;
 		r.access = access;
 		r.deprecated = deprecated;
+		r.isVirtual = isVirtual;
+		r.isAbstract = isAbstract;
+		r.isOverride = isOverride;
 		r.redirectCount = redirectCount;
 		return r;
 	}
@@ -112,6 +121,9 @@ class GmlSeekerJSDoc {
 		if (q.isPrivate) isPrivate = true;
 		if (q.access != Public) access = q.access;
 		if (q.deprecated != null) deprecated = q.deprecated;
+		if (q.isVirtual) isVirtual = true;
+		if (q.isAbstract) isAbstract = true;
+		if (q.isOverride) isOverride = true;
 		implementsNames = concatArrays(implementsNames, q.implementsNames);
 		templateItems = concatArrays(templateItems, q.templateItems);
 	}
@@ -370,6 +382,24 @@ class GmlSeekerJSDoc {
 		mt = jsDoc_deprecated.exec(s);
 		if (mt != null) {
 			deprecated = mt[1].trimBoth();
+			return;
+		}
+		
+		mt = jsDoc_virtual.exec(s);
+		if (mt != null) {
+			isVirtual = true;
+			return;
+		}
+		
+		mt = jsDoc_abstract.exec(s);
+		if (mt != null) {
+			isAbstract = true;
+			return;
+		}
+		
+		mt = jsDoc_override.exec(s);
+		if (mt != null) {
+			isOverride = true;
 			return;
 		}
 

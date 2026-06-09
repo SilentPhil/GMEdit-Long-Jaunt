@@ -70,6 +70,15 @@ class GmlFuncDoc {
 	/** Non-null when the function or method is marked as deprecated. */
 	public var deprecated:String = null;
 	
+	/** Whether this function or method is intended to be overridden. */
+	public var isVirtual:Bool = false;
+	
+	/** Whether this function or method must be implemented by descendants. */
+	public var isAbstract:Bool = false;
+	
+	/** Whether this function or method is expected to override a base member. */
+	public var isOverride:Bool = false;
+	
 	// these are currently only set for sub-functions so that you can navigate to them
 	public var lookup:GmlLookup = null;
 	public var nav:GmlFileNav = null;
