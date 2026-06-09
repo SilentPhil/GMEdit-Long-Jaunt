@@ -212,9 +212,7 @@ class GmlSeekerProcIdent {
 				}
 			}
 			var hasExplicitFieldAccess = seeker.jsDoc.access != Public;
-			var fieldAccess = hasExplicitFieldAccess ? seeker.jsDoc.access : (
-				seeker.doc != null && seeker.doc.isConstructor ? seeker.doc.defaultFieldAccess : Public
-			);
+			var fieldAccess = GmlSeekerProcField.getEffectiveInstAccess(seeker, s, hasExplicitFieldAccess);
 			var isPrivateField = seeker.jsDoc.isPrivate || fieldAccess == Private;
 			GmlSeekerProcField.addFieldHint(seeker, isConstructor, seeker.jsDoc.interfaceName,
 				true, s, args, null, fieldType, argTypes, true, templateItems, isPrivateField, nameLookup, fieldAccess);

@@ -171,9 +171,7 @@ class GmlSeekerProcVar {
 				var fieldType:GmlType = GmlSeekerProcExpr.fieldType;
 				var jsDocBeforeFunc:GmlSeekerJSDoc = null;
 				var hasExplicitFieldAccess = seeker.jsDoc.access != Public;
-				var fieldAccess = hasExplicitFieldAccess ? seeker.jsDoc.access : (
-					seeker.doc != null && seeker.doc.isConstructor ? seeker.doc.defaultFieldAccess : Public
-				);
+				var fieldAccess = GmlSeekerProcField.getEffectiveInstAccess(seeker, name, hasExplicitFieldAccess);
 				var isPrivateField = seeker.jsDoc.isPrivate || fieldAccess == Private;
 				static var doLoopConfig = new GmlSeeker_doLoop();
 				if (exprIsFunction) {

@@ -168,6 +168,35 @@ class GmlLinterBasicTest {
 		Assert.isTrue(t.warnings[0].text.indexOf("private field `__hidden`") >= 0);
 	}
 
+	@Test public function testInheritedFieldAccessIsKeptWhenChildAssignsField() {
+		var t = runLinter23(
+			"function LinterInheritedAccessBase() constructor {\n"
+			+ "\t__caption = \"\"; /// @is {string} @protected\n"
+			+ "\t__icon = noone; /// @is {asset.GMSprite} @private\n"
+			+ "}\n"
+			+ "function LinterInheritedAccessChild() : LinterInheritedAccessBase() constructor {\n"
+			+ "\t__caption = \"child\";\n"
+			+ "\t__icon = noone;\n"
+			+ "}\n"
+			+ "function LinterInheritedAccessOther() constructor {\n"
+			+ "\tstatic check = function(item:LinterInheritedAccessChild) {\n"
+			+ "\t\titem.__caption = \"other\";\n"
+			+ "\t\titem.__icon = noone;\n"
+			+ "\t}\n"
+			+ "}\n"
+		, true, KGmlScript.inst);
+
+		Assert.areEqual(3, t.warnings.length, problemTexts(t));
+		Assert.isTrue(problemTexts(t).indexOf("private field `__icon`") >= 0);
+		Assert.isTrue(problemTexts(t).indexOf("protected field `__caption`") >= 0);
+
+		var child = GmlAPI.gmlNamespaces["LinterInheritedAccessChild"];
+		Assert.isNull(child.getInstCompItem("__caption"));
+		Assert.isNull(child.getInstCompItem("__icon"));
+		Assert.isNull(child.getInstKind("__caption", 0, "LinterInheritedAccessOther"));
+		Assert.isNull(child.getInstKind("__icon", 0, "LinterInheritedAccessOther"));
+	}
+
 	@Test public function testProtectedFieldIsAvailableOnlyToChild() {
 		runLinter23(
 			"function LinterProtectedBase() constructor {\n"

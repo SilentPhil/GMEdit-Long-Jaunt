@@ -19,6 +19,33 @@ import tools.NativeString;
  */
 class GmlSeekerProcField {
 	public static var addFieldHint_doc:GmlFuncDoc = null;
+	
+	public static function getEffectiveInstAccess(seeker:GmlSeekerImpl, field:String, hasExplicitFieldAccess:Bool):GmlFieldAccess {
+		if (hasExplicitFieldAccess) return seeker.jsDoc.access;
+		var doc = seeker.doc;
+		if (doc != null && doc.isConstructor && doc.defaultFieldAccess != Public) {
+			return doc.defaultFieldAccess;
+		}
+		var parentName = doc != null && doc.isConstructor ? doc.parentName : null;
+		var depth = 0;
+		while (parentName != null && ++depth <= gml.GmlNamespace.maxDepth) {
+			var hint = seeker.out.fieldHints[parentName + ":" + field];
+			if (hint != null) return hint.access;
+			
+			var ns = GmlAPI.gmlNamespaces[parentName];
+			var access = ns != null ? ns.getInstAccess(field) : null;
+			if (access != null) return access.access;
+			
+			var namespaceHint = seeker.out.namespaceHints[parentName];
+			if (namespaceHint != null) {
+				parentName = namespaceHint.parentSpace;
+			} else {
+				parentName = ns != null && ns.parent != null ? ns.parent.name : null;
+			}
+		}
+		return doc != null && doc.isConstructor ? doc.defaultFieldAccess : Public;
+	}
+	
 	public static function addFieldHint(seeker:GmlSeekerImpl,
 		isConstructor:Bool,
 		namespace:String,
