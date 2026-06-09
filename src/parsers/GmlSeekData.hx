@@ -279,7 +279,8 @@ class GmlSeekData {
 			if (hint.parentSpace != null && (ns.parent == null || ns.parent.name != hint.parentSpace)) {
 				ns.parent = GmlAPI.ensureNamespace(hint.parentSpace);
 			}
-			ns.addFieldHint(hint.field, hint.isInst, hint.comp, hint.doc, hint.type, hint.isPrivate, hint.lookup, hint.access);
+			ns.addFieldHint(hint.field, hint.isInst, hint.comp, hint.doc, hint.type,
+				hint.isPrivate, hint.lookup, hint.access, hint.accessSet);
 		}
 		
 		if (prev.hasGMLive || next.hasGMLive) {
@@ -323,12 +324,14 @@ class GmlSeekDataHint {
 	public var type:GmlType;
 	public var isPrivate:Bool;
 	public var access:GmlFieldAccess;
+	public var accessSet:Bool;
 	public var lookup:gml.GmlAPI.GmlLookup;
 	public function new(namespace:String, isInst:Bool, field:String,
 		comp:AceAutoCompleteItem, doc:GmlFuncDoc, parentSpace:String, type:GmlType,
 		isPrivate:Bool = false,
 		?lookup:gml.GmlAPI.GmlLookup,
-		access:GmlFieldAccess = Public
+		access:GmlFieldAccess = Public,
+		accessSet:Bool = false
 	) {
 		this.namespace = namespace;
 		this.parentSpace = parentSpace;
@@ -339,12 +342,17 @@ class GmlSeekDataHint {
 		this.type = type;
 		this.isPrivate = isPrivate;
 		this.access = isPrivate && access == Public ? Private : access;
+		this.accessSet = accessSet;
 		this.lookup = lookup;
 		this.key = namespace + (isInst ? ":" : ".") + field;
 	}
 	public function merge(hint:GmlSeekDataHint, ?preferExisting:Bool) {
+		if (hint.accessSet) {
+			access = hint.access;
+			accessSet = true;
+			isPrivate = access == Private;
+		} else if (hint.access != Public && !accessSet) access = hint.access;
 		if (hint.isPrivate) isPrivate = true;
-		if (hint.access != Public) access = hint.access;
 		if (access != Private && !isPrivate && comp == null && hint.comp != null) comp = hint.comp;
 		var cd1:String = comp != null && hint.comp != null ? JsTools.ncf(hint.comp.doc) : null;
 		if (cd1 != null) {

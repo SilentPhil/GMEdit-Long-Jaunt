@@ -59,7 +59,8 @@ class GmlSeekerProcField {
 		?templateItems:Array<GmlTypeTemplateItem>,
 		isPrivate:Bool = false,
 		?lookup:GmlLookup,
-		access:GmlFieldAccess = Public
+		access:GmlFieldAccess = Public,
+		accessSet:Bool = false
 	):GmlSeekDataHint {
 		var parentSpace:String = null;
 		if (namespace == null) {
@@ -105,7 +106,8 @@ class GmlSeekerProcField {
 		if (isPrivate && access == Public) access = Private;
 		var comp = (privateFieldRegex == null || !privateFieldRegex.test(name)) && !(isInst && access == Private)
 			? new AceAutoCompleteItem(name, compMeta, info) : null;
-		var hint = new GmlSeekDataHint(namespace, isInst, field, comp, hintDoc, parentSpace, type, isPrivate, lookup, access);
+		var hint = new GmlSeekDataHint(namespace, isInst, field, comp, hintDoc, parentSpace,
+			type, isPrivate, lookup, access, accessSet);
 		
 		var out = seeker.out;
 		var lastHint = out.fieldHints[hint.key];

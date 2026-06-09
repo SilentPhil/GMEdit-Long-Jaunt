@@ -295,6 +295,7 @@ class GmlNamespace {
 	public var docInstMap:Dictionary<GmlFuncDoc> = new Dictionary();
 	public var privateInst:Dictionary<Bool> = new Dictionary();
 	public var instAccess:Dictionary<GmlFieldAccess> = new Dictionary();
+	public var instAccessSet:Dictionary<Bool> = new Dictionary();
 	public function getInstDoc(field:String, depth:Int = 0, accessContext:String = null):GmlFuncDoc {
 		var q = this, n = depth;
 		while (q != null && ++n <= maxDepth) {
@@ -321,12 +322,26 @@ class GmlNamespace {
 	}
 	public function getOwnInstAccess(field:String):GmlFieldAccess {
 		var access = instAccess[field];
-		return access != null ? access : Public;
+		if (access != null) return access;
+		if (instAccessSet[field]) return Public;
+		var inherited = getInheritedInstAccess(field);
+		return inherited != null && inherited.access != Public ? inherited.access : Public;
+	}
+	private function getInheritedInstAccess(field:String):GmlNamespaceAccessInfo {
+		for (qi in interfaces.array) {
+			var access = qi.getInstAccess(field);
+			if (access != null) return access;
+		}
+		return parent != null ? parent.getInstAccess(field) : null;
 	}
 	public function getInstAccess(field:String, depth:Int = 0):GmlNamespaceAccessInfo {
 		var q = this, n = depth;
 		while (q != null && ++n <= maxDepth) {
 			if (q.instKind.exists(field) || q.instTypes.exists(field) || q.docInstMap.exists(field) || q.compInst.exists(field)) {
+				if (!q.instAccess.exists(field) && !q.instAccessSet[field]) {
+					var inherited = q.getInheritedInstAccess(field);
+					if (inherited != null && inherited.access != Public) return inherited;
+				}
 				return { access: q.getOwnInstAccess(field), owner: q.name };
 			}
 			for (qi in q.interfaces.array) {
@@ -359,7 +374,7 @@ class GmlNamespace {
 	}
 	
 	public function addFieldHint(field:String, isInst:Bool, comp:AceAutoCompleteItem, doc:GmlFuncDoc, type:GmlType,
-		isPrivate:Bool = false, ?lookup:GmlLookup, access:GmlFieldAccess = Public) {
+		isPrivate:Bool = false, ?lookup:GmlLookup, access:GmlFieldAccess = Public, accessSet:Bool = false) {
 		var kind = isInst ? instKind : staticKind;
 		kind[field] = doc != null ? "asset.script" : "field";
 		if (isInst) {
@@ -372,6 +387,7 @@ class GmlNamespace {
 					instAccess[field] = Protected;
 				default:
 			}
+			if (accessSet) instAccessSet[field] = true;
 		}
 		
 		var types = isInst ? instTypes : staticTypes;
@@ -404,6 +420,7 @@ class GmlNamespace {
 		if (isInst) {
 			privateInst.remove(field);
 			instAccess.remove(field);
+			instAccessSet.remove(field);
 		}
 		var lookups = isInst ? instLookup : staticLookup;
 		lookups.remove(field);

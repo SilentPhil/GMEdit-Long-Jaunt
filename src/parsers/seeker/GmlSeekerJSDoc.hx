@@ -34,6 +34,7 @@ class GmlSeekerJSDoc {
 	public var isStatic:Bool = false;
 	public var isPrivate:Bool = false;
 	public var access:GmlFieldAccess = Public;
+	public var accessSet:Bool = false;
 	public var deprecated:String = null;
 	public var isVirtual:Bool = false;
 	public var isAbstract:Bool = false;
@@ -49,6 +50,7 @@ class GmlSeekerJSDoc {
 		isStatic = false;
 		isPrivate = false;
 		access = Public;
+		accessSet = false;
 		deprecated = null;
 		isVirtual = false;
 		isAbstract = false;
@@ -83,6 +85,7 @@ class GmlSeekerJSDoc {
 		r.isStatic = isStatic;
 		r.isPrivate = isPrivate;
 		r.access = access;
+		r.accessSet = accessSet;
 		r.deprecated = deprecated;
 		r.isVirtual = isVirtual;
 		r.isAbstract = isAbstract;
@@ -119,7 +122,10 @@ class GmlSeekerJSDoc {
 		if (q.interfaceName != null) interfaceName = q.interfaceName;
 		if (q.isStatic) isStatic = true;
 		if (q.isPrivate) isPrivate = true;
-		if (q.access != Public) access = q.access;
+		if (q.accessSet) {
+			access = q.access;
+			accessSet = true;
+		}
 		if (q.deprecated != null) deprecated = q.deprecated;
 		if (q.isVirtual) isVirtual = true;
 		if (q.isAbstract) isAbstract = true;
@@ -147,12 +153,15 @@ class GmlSeekerJSDoc {
 		var q = seeker.reader;
 		var hasType = typeStr != null;
 		var access:GmlFieldAccess = Public;
+		var accessMatch = null;
 		if (doc != null) {
-			var accessMatch = jsDoc_access_tag.exec(doc);
+			accessMatch = jsDoc_access_tag.exec(doc);
 			var publicDoc = doc.replaceExt(jsDoc_access_tag, "").trimBoth();
-			access = accessMatch != null && accessMatch[1] == "protected" ? Protected : (
-				publicDoc != doc.trimBoth() ? Private : Public
-			);
+			if (accessMatch != null) switch (accessMatch[1]) {
+				case "private": access = Private;
+				case "protected": access = Protected;
+				default: access = Public;
+			}
 			doc = publicDoc;
 		}
 		//
@@ -198,10 +207,11 @@ class GmlSeekerJSDoc {
 			}
 			if (hint != null) {
 				if (hasType) hint.type = type;
-				if (access != Public) {
+				if (accessMatch != null) {
 					hint.access = access;
 					hint.isPrivate = access == Private;
-					hint.comp = null;
+					hint.accessSet = true;
+					if (access == Private) hint.comp = null;
 				}
 				procComp(hint.comp);
 			}
@@ -495,6 +505,7 @@ class GmlSeekerJSDoc {
 			if (procIs(seeker, s, null, s.substring(3).trimBoth())) return;
 			isPrivate = true;
 			access = Private;
+			accessSet = true;
 			return;
 		}
 		
@@ -502,6 +513,16 @@ class GmlSeekerJSDoc {
 		if (mt != null) {
 			if (procIs(seeker, s, null, s.substring(3).trimBoth())) return;
 			access = Protected;
+			accessSet = true;
+			return;
+		}
+		
+		mt = jsDoc_public.exec(s);
+		if (mt != null) {
+			if (procIs(seeker, s, null, s.substring(3).trimBoth())) return;
+			isPrivate = false;
+			access = Public;
+			accessSet = true;
 			return;
 		}
 		

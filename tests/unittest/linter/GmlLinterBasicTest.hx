@@ -154,6 +154,33 @@ class GmlLinterBasicTest {
 		Assert.isNull(base.getInstKind("__protected", 0, "LinterProtectedOther"));
 	}
 
+	@Test public function testPublicFieldOverridesPrivateConstructorDefault() {
+		var t = runLinter23(
+			"/// @private\n"
+			+ "function LinterPrivateDefaultPublicMethod() constructor {\n"
+			+ "\t__hidden = false;\n"
+			+ "\t/// @public\n"
+			+ "\tstatic visible = function()->bool {\n"
+			+ "\t\treturn __hidden;\n"
+			+ "\t}\n"
+			+ "}\n"
+			+ "function LinterPrivateDefaultPublicMethodOther() constructor {\n"
+			+ "\tstatic check = function(item:LinterPrivateDefaultPublicMethod) {\n"
+			+ "\t\titem.visible();\n"
+			+ "\t\titem.__hidden = true;\n"
+			+ "\t}\n"
+			+ "}\n"
+		, true, KGmlScript.inst);
+
+		Assert.areEqual(1, t.warnings.length, problemTexts(t));
+		Assert.isTrue(t.warnings[0].text.indexOf("private field `__hidden`") >= 0);
+
+		var ns = GmlAPI.gmlNamespaces["LinterPrivateDefaultPublicMethod"];
+		Assert.isFalse(ns.isInstPrivate("visible"));
+		Assert.isNotNull(ns.getInstKind("visible", 0, "LinterPrivateDefaultPublicMethodOther"));
+		Assert.isNotNull(ns.getInstCompItem("visible"));
+	}
+
 	@Test public function testPrivateInlineIsFieldWarnsInChildConstructor() {
 		var t = runLinter23(
 			"function LinterPrivateInlineBase() constructor {\n"
@@ -195,6 +222,54 @@ class GmlLinterBasicTest {
 		Assert.isNull(child.getInstCompItem("__icon"));
 		Assert.isNull(child.getInstKind("__caption", 0, "LinterInheritedAccessOther"));
 		Assert.isNull(child.getInstKind("__icon", 0, "LinterInheritedAccessOther"));
+	}
+
+	@Test public function testInheritedFieldAccessOverridesPrivateConstructorDefault() {
+		var t = runLinter23(
+			"/// @private\n"
+			+ "function LinterInheritedPrivateDefaultBase() constructor {\n"
+			+ "\t__caption = \"\"; /// @is {string} @protected\n"
+			+ "\t__hint = \"\"; /// @is {string} @protected\n"
+			+ "\t__icon = noone; /// @is {asset.GMSprite} @private\n"
+			+ "}\n"
+			+ "function LinterInheritedPrivateDefaultChild() : LinterInheritedPrivateDefaultBase() constructor {\n"
+			+ "\t__caption = \"child\";\n"
+			+ "\t__hint = \"hint\";\n"
+			+ "\t__icon = noone;\n"
+			+ "}\n"
+			+ "function LinterInheritedPrivateDefaultOther() constructor {\n"
+			+ "\tstatic check = function(item:LinterInheritedPrivateDefaultChild) {\n"
+			+ "\t\titem.__caption = \"other\";\n"
+			+ "\t\titem.__hint = \"other\";\n"
+			+ "\t\titem.__icon = noone;\n"
+			+ "\t}\n"
+			+ "}\n"
+		, true, KGmlScript.inst);
+
+		Assert.areEqual(4, t.warnings.length, problemTexts(t));
+		Assert.isTrue(problemTexts(t).indexOf("private field `__icon`") >= 0);
+		Assert.isTrue(problemTexts(t).indexOf("protected field `__caption`") >= 0);
+		Assert.isTrue(problemTexts(t).indexOf("protected field `__hint`") >= 0);
+
+		var child = GmlAPI.gmlNamespaces["LinterInheritedPrivateDefaultChild"];
+		Assert.isNull(child.getInstCompItem("__caption"));
+		Assert.isNull(child.getInstCompItem("__hint"));
+		Assert.isNull(child.getInstCompItem("__icon"));
+		Assert.isNull(child.getInstKind("__caption", 0, "LinterInheritedPrivateDefaultOther"));
+		Assert.isNull(child.getInstKind("__hint", 0, "LinterInheritedPrivateDefaultOther"));
+		Assert.isNull(child.getInstKind("__icon", 0, "LinterInheritedPrivateDefaultOther"));
+	}
+
+	@Test public function testLateInheritedAccessHidesImplicitPublicChildField() {
+		var parent = GmlAPI.ensureNamespace("LinterLateAccessParent");
+		var child = GmlAPI.ensureNamespace("LinterLateAccessChild");
+		child.addFieldHint("__caption", true, new ace.extern.AceAutoCompleteItem("__caption", "variable"), null, null);
+		parent.addFieldHint("__caption", true, null, null, null, false, null, Protected);
+		child.parent = parent;
+
+		Assert.isNotNull(child.getInstKind("__caption", 0, "LinterLateAccessChild"));
+		Assert.isNull(child.getInstKind("__caption", 0, "LinterLateAccessOther"));
+		Assert.isNull(child.getInstCompItem("__caption"));
 	}
 
 	@Test public function testProtectedFieldIsAvailableOnlyToChild() {

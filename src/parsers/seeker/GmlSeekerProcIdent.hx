@@ -211,11 +211,12 @@ class GmlSeekerProcIdent {
 					default:
 				}
 			}
-			var hasExplicitFieldAccess = seeker.jsDoc.access != Public;
+			var hasExplicitFieldAccess = seeker.jsDoc.accessSet;
 			var fieldAccess = GmlSeekerProcField.getEffectiveInstAccess(seeker, s, hasExplicitFieldAccess);
 			var isPrivateField = seeker.jsDoc.isPrivate || fieldAccess == Private;
 			GmlSeekerProcField.addFieldHint(seeker, isConstructor, seeker.jsDoc.interfaceName,
-				true, s, args, null, fieldType, argTypes, true, templateItems, isPrivateField, nameLookup, fieldAccess);
+				true, s, args, null, fieldType, argTypes, true, templateItems,
+				isPrivateField, nameLookup, fieldAccess, hasExplicitFieldAccess);
 			var addFieldHint_doc = GmlSeekerProcField.addFieldHint_doc;
 			if (addFieldHint_doc != null) {
 				// related: GmlSeekerProcVar
@@ -248,6 +249,7 @@ class GmlSeekerProcIdent {
 			if (hasExplicitFieldAccess) {
 				seeker.jsDoc.isPrivate = false;
 				seeker.jsDoc.access = Public;
+				seeker.jsDoc.accessSet = false;
 			}
 		}
 		seeker.restoreReader();
