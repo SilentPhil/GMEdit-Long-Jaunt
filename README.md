@@ -206,6 +206,64 @@ function PathFinderAroundAnchorDllAsync() constructor {
 }
 ```
 
+### Constructor member tags
+
+Constructor fields and methods can be annotated with access and inheritance tags.
+
+`/// @private`, `/// @protected`, and `/// @public` control whether a constructor member is visible
+from other constructors. Private members are only visible inside the declaring constructor, protected
+members are visible to descendants, and public members are visible everywhere. If a constructor itself
+is marked `/// @private`, fields declared directly inside it default to private unless a member has an
+explicit `/// @public` or `/// @protected` tag.
+
+```gml
+/// @private
+function InventoryBase() constructor {
+	__items = []; /// @is {Item[]}
+
+	/// @protected
+	static get_items = function()->Item[] {
+		return __items;
+	}
+
+	/// @public
+	static count = function()->int {
+		return array_length(__items);
+	}
+}
+
+function InventoryChild() : InventoryBase() constructor {
+	static pick_first = function()->Item? {
+		return get_items()[0]; // OK: protected member in a child constructor
+	}
+}
+```
+
+`/// @virtual` marks a member as intended to be overridden, `/// @abstract` marks a member that
+descendants must implement, and `/// @override` marks a member that must exist on a parent
+constructor or implemented interface. Invalid overrides and missing abstract members are reported as
+red linter errors.
+
+```gml
+function PhaseBase() constructor {
+	/// @abstract
+	static start = function()->void {}
+
+	/// @virtual
+	static finish = function()->void {}
+}
+
+function PhaseIntro() : PhaseBase() constructor {
+	/// @override
+	static start = function()->void {
+	}
+
+	/// @override
+	static finish = function()->void {
+	}
+}
+```
+
 ### Deprecated function warnings
 
 Functions and methods can be marked with `/// @deprecated`. The linter warns when code calls a
