@@ -180,6 +180,99 @@ class GmlLinterBasicTest {
 		Assert.isNotNull(ns.getInstKind("visible", 0, "LinterPrivateDefaultPublicMethodOther"));
 		Assert.isNotNull(ns.getInstCompItem("visible"));
 	}
+	
+	@Test public function testPrivateRegionMarksFieldsPrivateByDefault() {
+		runLinter23(
+			"function LinterPrivateRegionBase() constructor {\n"
+			+ "\t#region @private\n"
+			+ "\t__hidden = false;\n"
+			+ "\tstatic secret = function() {}\n"
+			+ "\t#endregion\n"
+			+ "\tpublic = true;\n"
+			+ "}\n"
+		, true, KGmlScript.inst);
+
+		var ns = GmlAPI.gmlNamespaces["LinterPrivateRegionBase"];
+		Assert.isTrue(ns.isInstPrivate("__hidden"));
+		Assert.isTrue(ns.isInstPrivate("secret"));
+		Assert.isFalse(ns.isInstPrivate("public"));
+		Assert.isNull(ns.getInstCompItem("__hidden"));
+		Assert.isNull(ns.getInstCompItem("secret"));
+		Assert.isNotNull(ns.getInstCompItem("public"));
+	}
+	
+	@Test public function testNamedProtectedRegionIsAvailableOnlyToChild() {
+		runLinter23(
+			"function LinterProtectedRegionBase() constructor {\n"
+			+ "\t#region helpers @protected\n"
+			+ "\tstatic inner = function() {}\n"
+			+ "\t#endregion\n"
+			+ "}\n"
+			+ "function LinterProtectedRegionChild() : LinterProtectedRegionBase() constructor {\n"
+			+ "\tstatic check = function() {\n"
+			+ "\t\tinner();\n"
+			+ "\t}\n"
+			+ "}\n"
+			+ "function LinterProtectedRegionOther() constructor {\n"
+			+ "\tstatic check = function(v:LinterProtectedRegionBase) {\n"
+			+ "\t\tv.inner();\n"
+			+ "\t}\n"
+			+ "}"
+		, true, KGmlScript.inst);
+
+		var base = GmlAPI.gmlNamespaces["LinterProtectedRegionBase"];
+		var child = GmlAPI.gmlNamespaces["LinterProtectedRegionChild"];
+		Assert.isNotNull(child.getInstKind("inner", 0, "LinterProtectedRegionChild"));
+		Assert.isNull(base.getInstKind("inner", 0, "LinterProtectedRegionOther"));
+		Assert.isNull(base.getInstCompItem("inner"));
+	}
+	
+	@Test public function testExplicitAccessOverridesRegionAccess() {
+		var t = runLinter23(
+			"function LinterRegionExplicitAccessBase() constructor {\n"
+			+ "\t#region @private\n"
+			+ "\t__hidden = false;\n"
+			+ "\t/// @public\n"
+			+ "\tstatic visible = function()->bool {\n"
+			+ "\t\treturn __hidden;\n"
+			+ "\t}\n"
+			+ "\t#endregion\n"
+			+ "}\n"
+			+ "function LinterRegionExplicitAccessOther() constructor {\n"
+			+ "\tstatic check = function(item:LinterRegionExplicitAccessBase) {\n"
+			+ "\t\titem.visible();\n"
+			+ "\t\titem.__hidden = true;\n"
+			+ "\t}\n"
+			+ "}\n"
+		, true, KGmlScript.inst);
+
+		Assert.areEqual(1, t.warnings.length, problemTexts(t));
+		Assert.isTrue(t.warnings[0].text.indexOf("private field `__hidden`") >= 0);
+
+		var ns = GmlAPI.gmlNamespaces["LinterRegionExplicitAccessBase"];
+		Assert.isFalse(ns.isInstPrivate("visible"));
+		Assert.isNotNull(ns.getInstKind("visible", 0, "LinterRegionExplicitAccessOther"));
+		Assert.isNotNull(ns.getInstCompItem("visible"));
+	}
+	
+	@Test public function testNestedRegionAccessOverridesOuterRegionAccess() {
+		runLinter23(
+			"function LinterNestedRegionBase() constructor {\n"
+			+ "\t#region @private\n"
+			+ "\t__hidden = false;\n"
+			+ "\t#region @public\n"
+			+ "\tvisible = true;\n"
+			+ "\t#endregion\n"
+			+ "\t#endregion\n"
+			+ "}\n"
+		, true, KGmlScript.inst);
+
+		var ns = GmlAPI.gmlNamespaces["LinterNestedRegionBase"];
+		Assert.isTrue(ns.isInstPrivate("__hidden"));
+		Assert.isFalse(ns.isInstPrivate("visible"));
+		Assert.isNull(ns.getInstCompItem("__hidden"));
+		Assert.isNotNull(ns.getInstCompItem("visible"));
+	}
 
 	@Test public function testPrivateInlineIsFieldWarnsInChildConstructor() {
 		var t = runLinter23(

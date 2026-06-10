@@ -96,7 +96,15 @@ class GmlSeekerParser {
 									return s;
 								}
 							};
-							case "#region", "#endregion": q.skipLine();
+							case "#region": {
+								var lineStart = q.pos;
+								q.skipLine();
+								seeker.enterRegion(q.substring(lineStart, q.pos));
+							};
+							case "#endregion": {
+								q.skipLine();
+								seeker.exitRegion();
+							};
 							case "#macro": if (flags.has(Macro)) return s;
 							default:
 						}

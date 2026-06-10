@@ -11,6 +11,7 @@ import gml.GmlFuncDoc;
 import gml.GmlGlobalField;
 import gml.GmlGlobalVar;
 import gml.GmlLocals;
+import gml.GmlNamespace.GmlFieldAccess;
 import gml.GmlVersion;
 import gml.Project;
 import gml.file.GmlFileKindTools;
@@ -86,6 +87,7 @@ class GmlSeekerImpl {
 	public var hasTryCatch:Bool;
 	public var jsDoc:GmlSeekerJSDoc = new GmlSeekerJSDoc();
 	public var isLibraryResource:Bool;
+	public var regionAccessStack:Array<Null<GmlFieldAccess>> = [];
 	
 	public var commentLineJumps = new IntDictionary<Int>();
 	
@@ -185,6 +187,32 @@ class GmlSeekerImpl {
 	public inline function flushDoc():Void {
 		GmlSeekerProcDoc.flush(this);
 	}
+	
+	public function getRegionAccess():Null<GmlFieldAccess> {
+		var i = regionAccessStack.length;
+		while (--i >= 0) {
+			var access = regionAccessStack[i];
+			if (access != null) return access;
+		}
+		return null;
+	}
+	
+	public function enterRegion(line:String):Void {
+		var access:Null<GmlFieldAccess> = null;
+		tools.RegExpTools.each(regionAccessTag, line, function(mt) {
+			switch (mt[1]) {
+				case "private": access = Private;
+				case "protected": access = Protected;
+				case "public": access = Public;
+			}
+		});
+		regionAccessStack.push(access);
+	}
+	
+	public function exitRegion():Void {
+		if (regionAccessStack.length > 0) regionAccessStack.pop();
+	}
+	private static var regionAccessTag = new RegExp("@(public|private|protected)\\b", "g");
 	
 	public function doLoop(?configOrExitAt:EitherType<GmlSeeker_doLoop, Int>) {
 		var exitAtCubDepth:Int = null;

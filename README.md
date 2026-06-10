@@ -216,6 +216,10 @@ members are visible to descendants, and public members are visible everywhere. I
 is marked `/// @private`, fields declared directly inside it default to private unless a member has an
 explicit `/// @public` or `/// @protected` tag.
 
+Access tags can also be placed on `#region` lines to set the default access for fields and methods
+inside the region. Region names are optional, so both `#region getters @public` and `#region @private`
+are valid. Nested regions override outer regions, and explicit member tags override region tags.
+
 ```gml
 /// @private
 function InventoryBase() constructor {
@@ -230,6 +234,18 @@ function InventoryBase() constructor {
 	static count = function()->int {
 		return array_length(__items);
 	}
+}
+
+function InventoryGrouped() constructor {
+	#region @private
+	__items = []; /// @is {Item[]}
+	#endregion
+
+	#region getters @public
+	static count = function()->int {
+		return array_length(__items);
+	}
+	#endregion
 }
 
 function InventoryChild() : InventoryBase() constructor {

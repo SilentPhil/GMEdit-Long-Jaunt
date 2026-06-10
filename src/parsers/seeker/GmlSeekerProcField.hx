@@ -22,6 +22,8 @@ class GmlSeekerProcField {
 	
 	public static function getEffectiveInstAccess(seeker:GmlSeekerImpl, field:String, hasExplicitFieldAccess:Bool):GmlFieldAccess {
 		if (hasExplicitFieldAccess) return seeker.jsDoc.access;
+		var regionAccess = seeker.getRegionAccess();
+		if (regionAccess != null) return regionAccess;
 		var doc = seeker.doc;
 		if (doc != null && doc.isConstructor && doc.defaultFieldAccess != Public) {
 			return doc.defaultFieldAccess;
