@@ -59,6 +59,9 @@ class GmlFuncDoc {
 	 */
 	public var isConstructor:Bool = false;
 	
+	/** Whether this constructor is abstract and cannot be instantiated directly. */
+	public var isAbstractClass:Bool = false;
+	
 	/** If this is a 2.3 constructor and it inherits from another, this is the name of that */
 	public var parentName:String = null;
 	

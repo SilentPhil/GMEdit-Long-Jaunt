@@ -448,20 +448,22 @@ class GmlLinter {
 				if (fnMatch != null) {
 					var ownName = pendingInterfaceName != null ? pendingInterfaceName : fnMatch[1];
 					current = getImpl(ownName);
-					current.setParentFromLine(line);
+					current.setConstructorLine(row, line);
 					if (pendingNames != null) for (i in 0 ... pendingNames.length) {
 						current.addInterface(pendingNames[i], pendingPositions[i]);
 					}
 					currentBrace = { depth: 0, started: false };
 				}
+				pendingMeta = null;
 				clearPending();
 			}
 			if (current == null) {
 				var fnMatch = functionDeclLineRx.exec(line);
 				if (fnMatch != null) {
 					current = getImpl(fnMatch[1]);
-					current.setParentFromLine(line);
+					current.setConstructorLine(row, line);
 					currentBrace = { depth: 0, started: false };
+					pendingMeta = null;
 				}
 			}
 			if (current != null) {
@@ -635,7 +637,7 @@ class GmlLinter {
 						|| namespaceHasOwnField(ns, field, isInst)
 						|| namespaceHasFieldBefore(ns.parent, q, field, isInst)
 					) continue;
-					var pos = { row: 0, column: 0 };
+					var pos = impl.pos != null ? impl.pos : { row: 0, column: 0 };
 					errors.push(new GmlLinterProblem(
 						'${impl.name} extends ${q.name} but is missing abstract member `$field`',
 						pos
@@ -988,6 +990,7 @@ class GmlLinter {
 			}
 			if (doc.isConstructor) {
 				if (!isNew) addWarning('`$currName` is a constructor, but is not being used via `new`');
+				if (isNew && doc.isAbstractClass) addError('`$currName` is abstract and cannot be instantiated');
 			} else {
 				if (isNew) {
 					addWarning('`$currName` is not a constructor, but is being used via `new`');
@@ -1730,6 +1733,7 @@ class GmlLinterProblem {
 }
 class GmlLinterInterfaceImplementation {
 	public var name:String;
+	public var pos:AcePos = null;
 	public var parentName:String = null;
 	public var interfaces:Array<String> = [];
 	public var positions:Dictionary<AcePos> = new Dictionary();
@@ -1746,7 +1750,9 @@ class GmlLinterInterfaceImplementation {
 			positions[interfaceName] = pos;
 		}
 	}
-	public function setParentFromLine(line:String):Void {
+	public function setConstructorLine(row:Int, line:String):Void {
+		var col = line.indexOf("function");
+		pos = { row: row, column: col >= 0 ? col : 0 };
 		var mt = GmlLinter.constructorParentLineRx.exec(line);
 		parentName = mt != null ? mt[1] : null;
 	}

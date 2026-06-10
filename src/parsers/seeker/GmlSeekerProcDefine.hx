@@ -281,6 +281,10 @@ class GmlSeekerProcDefine {
 					seeker.linkDoc();
 				}
 				doc.isConstructor = true;
+				if (jsDoc.isAbstract) {
+					doc.isAbstractClass = true;
+					jsDoc.isAbstract = false;
+				}
 				if (jsDoc.accessSet) {
 					doc.defaultFieldAccess = jsDoc.access;
 					jsDoc.access = Public;

@@ -515,6 +515,30 @@ class GmlLinterBasicTest {
 		Assert.areEqual(0, t.errors.length, problemTexts(t));
 	}
 
+	@Test public function testAbstractClassDoesNotMakeFirstMemberAbstract() {
+		var t = runLinter23(
+			"/// @abstract\n"
+			+ "function LinterAbstractConcreteBase() constructor {\n"
+			+ "\tstatic run = function()->void {}\n"
+			+ "}\n"
+			+ "function LinterAbstractConcreteChild() : LinterAbstractConcreteBase() constructor {\n"
+			+ "}"
+		, true, KGmlScript.inst);
+		Assert.areEqual(0, t.errors.length, problemTexts(t));
+	}
+
+	@Test public function testAbstractClassCannotBeInstantiated() {
+		var t = runLinter23(
+			"/// @abstract\n"
+			+ "function LinterAbstractNoNew() constructor {\n"
+			+ "}\n"
+			+ "var inst = new LinterAbstractNoNew();"
+		, true, KGmlScript.inst);
+		Assert.areEqual(1, t.errors.length, problemTexts(t));
+		Assert.isTrue(t.errors[0].text.indexOf("abstract") >= 0);
+		Assert.isTrue(t.errors[0].text.indexOf("instantiated") >= 0);
+	}
+
 	@Test public function testInterfaceImplementsStillWorksWithNewTagsNearby() {
 		var t = runLinter23(
 			"/// @interface {LinterTagInterface}\n"
