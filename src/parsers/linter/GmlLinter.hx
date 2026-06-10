@@ -525,9 +525,70 @@ class GmlLinter {
 		if (impl.parentName == null || currentImpls == null) return false;
 		return currentImplHasField(currentImpls, currentImpls[impl.parentName], field, isInst);
 	}
+	function findOverrideWarningPos(
+		source:String,
+		impl:GmlLinterInterfaceImplementation,
+		field:String,
+		isInst:Bool,
+		fallback:AcePos
+	):AcePos {
+		var lines = source.split("\n");
+		if (fallback != null && fallback.row > 0 && fallback.row < lines.length) {
+			var row = fallback.row;
+			while (--row >= 0) {
+				var prevLine = lines[row];
+				var trimmed = prevLine.trimBoth();
+				if (trimmed == "") continue;
+				if (trimmed.startsWith("///")) {
+					var memberMeta = GmlLinterMemberMeta.fromLine(prevLine, row);
+					if (memberMeta != null && memberMeta.isOverride) return memberMeta.pos;
+					continue;
+				}
+				break;
+			}
+		}
+		var currentName:String = null;
+		var currentBrace = { depth: 0, started: false };
+		var pendingMeta:GmlLinterMemberMeta = null;
+		for (row in 0 ... lines.length) {
+			var line = lines[row];
+			var trimmed = line.trimBoth();
+			if (currentName == null) {
+				var fnMatch = functionDeclLineRx.exec(line);
+				if (fnMatch != null) {
+					currentName = fnMatch[1];
+					currentBrace = { depth: 0, started: false };
+				}
+			}
+			if (currentName == impl.name) {
+				if (trimmed.startsWith("///")) {
+					var memberMeta = GmlLinterMemberMeta.fromLine(line, row);
+					if (memberMeta != null) pendingMeta = memberMeta;
+				} else if (trimmed != "") {
+					var staticMatch = staticFieldLineRx.exec(line);
+					if (staticMatch != null && staticMatch[1] == field) {
+						if (pendingMeta != null && pendingMeta.isOverride) return pendingMeta.pos;
+						var col = line.indexOf(field);
+						return { row: row, column: col >= 0 ? col : 0 };
+					}
+					pendingMeta = null;
+				}
+			}
+			if (currentName != null) {
+				updateBraceDepth(line, currentBrace);
+				if (currentBrace.started && currentBrace.depth <= 0) {
+					currentName = null;
+					pendingMeta = null;
+				}
+			}
+		}
+		var meta = isInst ? impl.instMeta[field] : impl.staticMeta[field];
+		return meta != null && meta.isOverride ? meta.pos : fallback;
+	}
 	function checkVirtualOverrideImplementation(
 		impl:GmlLinterInterfaceImplementation,
-		currentImpls:Dictionary<GmlLinterInterfaceImplementation>
+		currentImpls:Dictionary<GmlLinterInterfaceImplementation>,
+		source:String
 	):Void {
 		var ns = GmlAPI.gmlNamespaces[impl.name];
 		if (ns == null) return;
@@ -541,6 +602,7 @@ class GmlLinter {
 				found = currentImplHasField(currentImpls, currentImpls[impl.parentName], field, isInst);
 			}
 			if (!found) {
+				pos = findOverrideWarningPos(source, impl, field, isInst, pos);
 				errors.push(new GmlLinterProblem(
 					'Member `$field` is marked @override but no base/interface member was found',
 					pos
@@ -550,10 +612,10 @@ class GmlLinter {
 		for (field => meta in impl.instMeta) if (meta.isOverride) checkOverride(field, true, meta.pos);
 		for (field => meta in impl.staticMeta) if (meta.isOverride) checkOverride(field, false, meta.pos);
 		for (field => doc in ns.docInstMap) if (doc != null && doc.isOverride) {
-			checkOverride(field, true, { row: 0, column: 0 });
+			checkOverride(field, true, findOverrideWarningPos(source, impl, field, true, { row: 0, column: 0 }));
 		}
 		for (field => doc in ns.docStaticMap) if (doc != null && doc.isOverride) {
-			checkOverride(field, false, { row: 0, column: 0 });
+			checkOverride(field, false, findOverrideWarningPos(source, impl, field, false, { row: 0, column: 0 }));
 		}
 	}
 	function checkAbstractMembers(impl:GmlLinterInterfaceImplementation):Void {
@@ -586,10 +648,10 @@ class GmlLinter {
 		}
 		checkParent(ns.parent, 0);
 	}
-	function checkVirtualOverrideImplementations(currentImpls:Dictionary<GmlLinterInterfaceImplementation>):Void {
+	function checkVirtualOverrideImplementations(currentImpls:Dictionary<GmlLinterInterfaceImplementation>, source:String):Void {
 		if (prefs.suppressAll || isProperties || currentImpls == null) return;
 		for (_ => impl in currentImpls) {
-			checkVirtualOverrideImplementation(impl, currentImpls);
+			checkVirtualOverrideImplementation(impl, currentImpls, source);
 			checkAbstractMembers(impl);
 		}
 	}
@@ -696,7 +758,7 @@ class GmlLinter {
 	function checkInterfaceImplementations(source:String):Void {
 		if (prefs.suppressAll || isProperties) return;
 		var currentImpls = getCurrentInterfaceImplementations(source);
-		checkVirtualOverrideImplementations(currentImpls);
+		checkVirtualOverrideImplementations(currentImpls, source);
 		if (!currentImpls.isEmpty()) {
 			var checked = false;
 			for (ownName => impl in currentImpls) {

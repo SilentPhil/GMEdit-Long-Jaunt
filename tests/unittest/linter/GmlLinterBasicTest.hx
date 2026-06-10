@@ -348,6 +348,22 @@ class GmlLinterBasicTest {
 		Assert.isTrue(t.errors[0].text.indexOf("run") >= 0);
 	}
 
+	@Test public function testOverrideWithoutParentReportsMemberLineAfterEnum() {
+		var t = runLinter23(
+			"enum LinterOverrideMode {\n"
+			+ "\tQueue,\n"
+			+ "}\n"
+			+ "\n"
+			+ "function LinterOverrideNoParent() constructor {\n"
+			+ "\t/// @override\n"
+			+ "\tstatic run = function()->void {}\n"
+			+ "}"
+		, true, KGmlScript.inst);
+		Assert.areEqual(1, t.errors.length, problemTexts(t));
+		Assert.isTrue(t.errors[0].text.indexOf("@override") >= 0);
+		Assert.areEqual(6, t.errors[0].pos.row);
+	}
+
 	@Test public function testAbstractRequiresChildMethod() {
 		var t = runLinter23(
 			"function LinterAbstractBase() constructor {\n"
