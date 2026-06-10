@@ -446,6 +446,7 @@ class AceWrapCommonCompleters {
 		completers.push(globalCompleter);
 		
 		instCompleter = new AceWrapCompleter(GmlAPI.gmlInstFieldComp, excludeTokens, true, gmlOnly);
+		instCompleter.useSelfInstFields = true;
 		completers.push(instCompleter);
 	}
 	

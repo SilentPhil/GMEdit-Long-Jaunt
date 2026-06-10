@@ -152,6 +152,7 @@ class GmlSeekerJSDoc {
 		var out = seeker.out;
 		var q = seeker.reader;
 		var hasType = typeStr != null;
+		var type = hasType ? GmlTypeDef.parse(typeStr, full) : null;
 		var access:GmlFieldAccess = Public;
 		var accessMatch = null;
 		if (doc != null) {
@@ -167,7 +168,10 @@ class GmlSeekerJSDoc {
 		//
 		inline function procComp(comp:AceAutoCompleteItem):Void {
 			if (comp != null) {
-				if (hasType) comp.setDocTag("type", typeStr);
+				if (hasType) {
+					comp.meta = GmlSeekerProcField.getCompMeta(true, null, type);
+					comp.setDocTag("type", typeStr);
+				}
 				if (doc != null && doc.trimBoth() != "") comp.setDocTag("ℹ", doc);
 			}
 		}
@@ -177,7 +181,6 @@ class GmlSeekerJSDoc {
 		if (lineMatch == null) return false;
 		var kind = lineMatch[1];
 		var name:String;
-		var type = GmlTypeDef.parse(typeStr, full);
 		if (lineMatch[1] != null) {
 			tools.RegExpTools.each(JsTools.rx(~/\w+/g), lineMatch[1], function(mt) {
 				name = mt[0];

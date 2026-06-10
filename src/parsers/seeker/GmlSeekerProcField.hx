@@ -6,9 +6,9 @@ import gml.GmlField;
 import gml.GmlFuncDoc;
 import gml.GmlNamespace.GmlFieldAccess;
 import gml.type.GmlType;
-import gml.type.GmlTypeCanCastTo;
 import gml.type.GmlTypeDef;
 import gml.type.GmlTypeTemplateItem;
+import gml.type.GmlTypeTools;
 import parsers.GmlSeekData.GmlSeekDataHint;
 import tools.JsTools;
 import tools.NativeString;
@@ -19,6 +19,19 @@ import tools.NativeString;
  */
 class GmlSeekerProcField {
 	public static var addFieldHint_doc:GmlFuncDoc = null;
+	
+	public static function isFunctionType(type:GmlType):Bool {
+		if (type == null) return false;
+		return switch (type.resolve().unwrapNullable().getKind()) {
+			case KFunction | KConstructor: true;
+			default: false;
+		}
+	}
+	
+	public static function getCompMeta(isField:Bool, args:String, type:GmlType):String {
+		if (!isField) return "namespace";
+		return args != null || isFunctionType(type) ? "function" : "variable";
+	}
 	
 	public static function getEffectiveInstAccess(seeker:GmlSeekerImpl, field:String, hasExplicitFieldAccess:Bool):GmlFieldAccess {
 		if (hasExplicitFieldAccess) return seeker.jsDoc.access;
@@ -102,8 +115,7 @@ class GmlSeekerProcField {
 		info = NativeString.nzcct(info, "\n", 'from $namespace');
 		if (type != null) info = NativeString.nzcct(info, "\n", "type " + type.toString());
 		
-		var isFunc = args != null || GmlTypeCanCastTo.canCastTo(type, GmlTypeDef.anyFunction);
-		var compMeta = isField ? (isFunc ? "function" : "variable") : "namespace";
+		var compMeta = getCompMeta(isField, args, type);
 		var privateFieldRegex = seeker.privateFieldRegex;
 		if (isPrivate && access == Public) access = Private;
 		var comp = (privateFieldRegex == null || !privateFieldRegex.test(name)) && !(isInst && access == Private)

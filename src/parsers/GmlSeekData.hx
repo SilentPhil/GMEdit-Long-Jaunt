@@ -354,6 +354,7 @@ class GmlSeekDataHint {
 		} else if (hint.access != Public && !accessSet) access = hint.access;
 		if (hint.isPrivate) isPrivate = true;
 		if (access != Private && !isPrivate && comp == null && hint.comp != null) comp = hint.comp;
+		if (comp != null && hint.comp != null) comp.meta = hint.comp.meta;
 		var cd1:String = comp != null && hint.comp != null ? JsTools.ncf(hint.comp.doc) : null;
 		if (cd1 != null) {
 			var cd0 = JsTools.ncf(comp.doc);

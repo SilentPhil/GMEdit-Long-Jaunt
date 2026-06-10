@@ -365,6 +365,20 @@ class GmlLinterBasicTest {
 		Assert.isNull(child.getInstCompItem("__caption"));
 	}
 
+	@Test public function testEnumIntFieldCompletionStaysVariable() {
+		runLinter23(
+			"enum LinterAdviceTutorial {\n"
+			+ "\tNONE,\n"
+			+ "}\n"
+			+ "function LinterAdviceMetaBase() constructor {\n"
+			+ "\t__advanced_tutorial_to_launch = LinterAdviceTutorial.NONE; /// @is {int<LinterAdviceTutorial>}\n"
+			+ "}\n"
+		, true, KGmlScript.inst);
+
+		var ns = GmlAPI.gmlNamespaces["LinterAdviceMetaBase"];
+		Assert.areEqual("variable", ns.getInstCompItem("__advanced_tutorial_to_launch").meta);
+	}
+
 	@Test public function testProtectedFieldIsAvailableOnlyToChild() {
 		runLinter23(
 			"function LinterProtectedBase() constructor {\n"

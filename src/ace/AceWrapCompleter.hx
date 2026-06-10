@@ -42,6 +42,7 @@ using tools.NativeString;
 	public var dotKindMeta:Dynamic = null;
 	public var colKind:AceWrapCompletionColKind = CKNone;
 	public var sqbKind:AceWrapCompletionSqbKind = SKNone;
+	public var useSelfInstFields:Bool = false;
 	public var identifierRegexps:Array<RegExp>;
 	
 	public function new(
@@ -153,7 +154,56 @@ using tools.NativeString;
 		//
 		var tkf:Bool = tokenFilter.exists(JsTools.nca(tk, tk.type));
 		if (!tkf && tokenFilterComment && tk.type.startsWith("comment")) tkf = true;
+		if (useSelfInstFields && tkf != tokenFilterNot) {
+			if (getCompletions_selfInstFields(editor, session, pos, callback)) return;
+		}
 		proc(tkf != tokenFilterNot);
+	}
+
+	static var assignFieldRx = new RegExp("^\\s*(?:static\\s+)?([A-Za-z_][A-Za-z0-9_]*)\\s*=", "");
+	function getCompletions_selfInstFields(
+		editor:AceEditor, session:AceSession, pos:AcePos, callback:AceAutoCompleteCb
+	):Bool {
+		var scope = session.gmlScopes.get(pos.row);
+		if (scope == null || scope == "") return false;
+		var selfType = AceGmlTools.getSelfType({ session: session, scope: scope });
+		if (selfType == null) return false;
+		var accessContext = selfType.unwrapNullable().getNamespace();
+		if (accessContext == null) return false;
+		var ns = GmlAPI.gmlNamespaces[accessContext];
+		if (ns == null) return false;
+		
+		var assigned = getAssignedInstFieldsBeforePos(session, pos, scope);
+		var baseItems = ns.getInstComp(0, true, accessContext);
+		var freshItems:AceAutoCompleteItems = [];
+		var assignedItems:AceAutoCompleteItems = [];
+		var index = 0;
+		for (item in baseItems) {
+			var out = new AceAutoCompleteItem(item.name, item.meta, item.doc);
+			out.setTo(item);
+			if (assigned[item.name]) {
+				out.score = 50000 - index;
+				assignedItems.push(out);
+			} else {
+				out.score = 100000 - index;
+				freshItems.push(out);
+			}
+			index++;
+		}
+		callback(null, freshItems.concat(assignedItems));
+		return true;
+	}
+	function getAssignedInstFieldsBeforePos(session:AceSession, pos:AcePos, scope:String):Dictionary<Bool> {
+		var assigned = new Dictionary<Bool>();
+		var startRow = pos.row;
+		while (startRow > 0 && session.gmlScopes.get(startRow - 1) == scope) startRow--;
+		for (row in startRow ... pos.row + 1) {
+			var line = session.getLine(row);
+			if (row == pos.row) line = line.substring(0, pos.column);
+			var mt = assignFieldRx.exec(line);
+			if (mt != null) assigned[mt[1]] = true;
+		}
+		return assigned;
 	}
 	
 	function getCompletions_dotKind(
