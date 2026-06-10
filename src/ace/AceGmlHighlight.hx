@@ -161,6 +161,8 @@ using tools.NativeArray;
 			~/^(#moment[ \t]+)(\d+)(.*)/
 		);
 		var rSection = rxRule(["preproc.section", "sectionname"], ~/^(#section[ \t]*)(.*)/);
+		var rRegion = rxPush("preproc.region", ~/#region\b/, "gml.region");
+		var rEndRegion = rxPush("preproc.region", ~/#endregion\b/, "gml.region");
 		var rWith = rxRule(function(s, obj) {
 			var tt:AceTokenType;
 			if (obj == "self" || obj == "other") {
@@ -252,8 +254,8 @@ using tools.NativeArray;
 		]); //}
 		// regions
 		if (version.config.hasRegions) {
-			rBase.push(rxRule(["preproc.region", "regionname"], ~/(#region[ \t]*)(.*)/));
-			rBase.push(rxRule(["preproc.region", "regionname"], ~/(#endregion[ \t]*)(.*)/));
+			rBase.push(rRegion);
+			rBase.push(rEndRegion);
 		}
 		rBase.push(rSection); // only used in v2 for object info
 		if (version.config.hasEventSections) rBase.push(rWith);
@@ -603,6 +605,11 @@ using tools.NativeArray;
 			].concat(rBase),
 			"gml.mfunc.decl": rMFunc_decl,
 			"gml.mfunc": rMFunc,
+			"gml.region": [
+				rxRule("comment.meta", ~/@(?:public|private|protected)\b/),
+				rxRule("regionname", ~/$/, "pop"),
+				rdef("regionname"),
+			],
 			"gml.comment.line": rComment.concat([ //{
 				rxRule("comment.line", ~/$/, "pop"),
 				rdef("comment.line"),
