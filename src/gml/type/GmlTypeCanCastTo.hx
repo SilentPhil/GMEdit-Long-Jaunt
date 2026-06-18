@@ -23,6 +23,23 @@ class GmlTypeCanCastTo {
 		var long = imp.longen[name];
 		return long != null ? long : name;
 	}
+	static function canCastViaNamespace(fromName:String, toName:String, imp:GmlImports, checkBoolOp:Bool):Bool {
+		return AceGmlTools.findNamespace(fromName, imp, function(ns:GmlNamespace) {
+			var depth = 0;
+			var found = false;
+			while (ns != null && ++depth < GmlNamespace.maxDepth) {
+				if (checkBoolOp && ns.isObject) { found = true; break; }
+				for (itf in ns.interfaces) {
+					if (checkBoolOp && itf.isObject) { found = true; break; }
+					if (itf.name == toName) { found = true; break; }
+				}
+				if (found) break;
+				ns = ns.parent;
+				if (JsTools.nca(ns, ns.name == toName)) { found = true; break; }
+			}
+			return found;
+		});
+	}
 	
 	/** Whether this is an isExplicit cast (`val as Type`) */
 	public static var isExplicit:Bool = false;
@@ -205,26 +222,13 @@ class GmlTypeCanCastTo {
 					i = p2.length;
 					while (--i >= 0) if (p1[i] != null) break;
 					if (i < 0) return true;
-				}
-				
-				var checkBoolOp = kto == KBool && isBoolOp;
-				if (checkBoolOp && kfrom == KObject) return true;
-				if (AceGmlTools.findNamespace(in1, imp, function(ns:GmlNamespace) {
-					var depth = 0;
-					var found = false;
-					while (ns != null && ++depth < GmlNamespace.maxDepth) {
-						if (checkBoolOp && ns.isObject) { found = true; break; }
-						for (itf in ns.interfaces) {
-							if (checkBoolOp && itf.isObject) { found = true; break; }
-							if (itf.name == in2) { found = true; break; }
-						}
-						if (found) break;
-						ns = ns.parent;
-						if (JsTools.nca(ns, ns.name == in2)) { found = true; break; }
 					}
-					return found;
-				})) return true;
-			};
+
+					var checkBoolOp = kto == KBool && isBoolOp;
+					if (checkBoolOp && kfrom == KObject) return true;
+					if (canCastViaNamespace(in1, in2, imp, checkBoolOp)) return true;
+					if ((in1 != n1 || in2 != n2) && canCastViaNamespace(n1, n2, imp, checkBoolOp)) return true;
+				};
 			case [TAnon(a1), TInst(n2, [], KCustom)]: {
 				var ns = GmlAPI.gmlNamespaces[n2];
 				if (ns != null) {

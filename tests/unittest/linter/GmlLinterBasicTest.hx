@@ -311,6 +311,19 @@ class GmlLinterBasicTest {
 		);
 	}
 
+	@Test public function testTernaryUsesCommonParentType() {
+		var stringNs = GmlAPI.ensureNamespace("string");
+		var uuidNs = GmlAPI.ensureNamespace("UnitTestActorUUID");
+		uuidNs.parent = stringNs;
+
+		var t = runLinter23(
+			"function UnitTestTernaryUUID(uuid/*:UnitTestActorUUID*/) {\n"
+			+ "\tvar value = true ? uuid : \"\";\n"
+			+ "}\n"
+		, false, KGmlScript.inst);
+		Assert.areEqual(0, t.problems.length, problemTexts(t));
+	}
+
 	@Test public function testInheritedFieldAccessIsKeptWhenChildAssignsField() {
 		var t = runLinter23(
 			"function LinterInheritedAccessBase() constructor {\n"

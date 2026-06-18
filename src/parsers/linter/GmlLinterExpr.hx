@@ -644,7 +644,14 @@ class GmlLinterExpr extends GmlLinterHelper {
 								currType = GmlTypeDef.nullable(elseType);
 							}
 						} else {
-							self.checkTypeCast(this.currType, currType, "ternary else-value", this.currValue);
+							var imports = self.getImports();
+							if (!elseType.canCastTo(currType, null, imports)) {
+								if (currType.canCastTo(elseType, null, imports)) {
+									currType = elseType;
+								} else {
+									self.checkTypeCast(this.currType, currType, "ternary else-value", this.currValue);
+								}
+							}
 						}
 					} else currType = elseType;
 					nullSafety.postpatch(linter);

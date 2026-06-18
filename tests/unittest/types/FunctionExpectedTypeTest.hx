@@ -1,5 +1,6 @@
 package types;
 
+import gml.GmlAPI;
 import gml.GmlImports;
 import gml.type.GmlTypeCanCastTo;
 import gml.type.GmlTypeDef;
@@ -26,6 +27,20 @@ class FunctionExpectedTypeTest {
 		Assert.isTrue(GmlTypeCanCastTo.canCastTo(
 			GmlTypeDef.parse("Unit"),
 			GmlTypeDef.parse("gw_Unit|number"),
+			null,
+			imports
+		));
+	}
+	@Test public function testRawNamespaceHintCanCastWithImportedAliasContext() {
+		var stringNs = GmlAPI.ensureNamespace("string");
+		var uuidNs = GmlAPI.ensureNamespace("UnitTestUUID");
+		uuidNs.parent = stringNs;
+
+		var imports = new GmlImports();
+		imports.longen["UnitTestUUID"] = "pkg_UnitTestUUID";
+		Assert.isTrue(GmlTypeCanCastTo.canCastTo(
+			GmlTypeDef.parse("UnitTestUUID"),
+			GmlTypeDef.string,
 			null,
 			imports
 		));
