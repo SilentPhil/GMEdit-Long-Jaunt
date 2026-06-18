@@ -1,6 +1,7 @@
 package parsers.seeker;
 import ace.extern.AceAutoCompleteItem;
 import gml.GmlFuncDoc;
+import gml.GmlImports;
 import gml.GmlNamespace.GmlFieldAccess;
 import gml.type.GmlType;
 import gml.type.GmlTypeDef;
@@ -134,17 +135,35 @@ class GmlSeekerJSDoc {
 		templateItems = concatArrays(templateItems, q.templateItems);
 	}
 	
-	public function typesFlush(pre:Array<GmlTypeTemplateItem>, ctx:String):Array<GmlType> {
+	static function getImports(seeker:GmlSeekerImpl):GmlImports {
+		var imps = seeker.out.imports;
+		if (imps == null) {
+			var data = GmlSeekData.map[seeker.orig];
+			if (data != null) imps = data.imports;
+		}
+		if (imps == null) return null;
+		var ctx = seeker.sub != null ? seeker.sub : seeker.main;
+		var imp = ctx != null ? imps[ctx] : null;
+		return imp != null ? imp : imps[""];
+	}
+
+	static function parseType(seeker:GmlSeekerImpl, typeStr:String, ?ctx:String):GmlType {
+		var type = GmlTypeDef.parse(typeStr, ctx);
+		return GmlTypeTools.mapImportedNames(type, getImports(seeker));
+	}
+
+	public function typesFlush(pre:Array<GmlTypeTemplateItem>, ctx:String, ?seeker:GmlSeekerImpl):Array<GmlType> {
 		var tpl = pre != null && templateItems != null
 			? pre.concat(templateItems)
 			: JsTools.or(pre, templateItems);
+		var imp = seeker != null ? getImports(seeker) : null;
 		var rt = [];
 		if (tpl != null) {
 			for (s in types) {
 				s = GmlTypeTools.patchTemplateItems(s, tpl);
-				rt.push(GmlTypeDef.parse(s, ctx));
+				rt.push(GmlTypeTools.mapImportedNames(GmlTypeDef.parse(s, ctx), imp));
 			}
-		} else for (s in types) rt.push(GmlTypeDef.parse(s, ctx));
+		} else for (s in types) rt.push(GmlTypeTools.mapImportedNames(GmlTypeDef.parse(s, ctx), imp));
 		return rt;
 	}
 	
@@ -152,7 +171,7 @@ class GmlSeekerJSDoc {
 		var out = seeker.out;
 		var q = seeker.reader;
 		var hasType = typeStr != null;
-		var type = hasType ? GmlTypeDef.parse(typeStr, full) : null;
+		var type = hasType ? parseType(seeker, typeStr, full) : null;
 		var access:GmlFieldAccess = Public;
 		var accessMatch = null;
 		if (doc != null) {
@@ -273,7 +292,7 @@ class GmlSeekerJSDoc {
 			var paramsStr = mt[3];
 			var params = paramsStr != null ? GmlTypeTemplateItem.parseSplit(paramsStr) : null;
 			if (params != null) typeStr = GmlTypeTools.patchTemplateItems(typeStr, params);
-			var type = GmlTypeDef.parse(typeStr);
+			var type = parseType(seeker, typeStr);
 			out.typedefs[name] = type;
 			return;
 		}
@@ -380,7 +399,7 @@ class GmlSeekerJSDoc {
 			var info = hr.source.substring(hr.pos);
 			
 			GmlSeekerProcField.addFieldHint(seeker, isNew, nsName, isInst, fdName, args,
-				info, GmlTypeDef.parse(typeStr, mt[0]), null, false, null, false, null, access);
+				info, parseType(seeker, typeStr, mt[0]), null, false, null, false, null, access);
 			var addFieldHint_doc = GmlSeekerProcField.addFieldHint_doc;
 			if (addFieldHint_doc != null) {
 				if (ctrReturn != null) addFieldHint_doc.returnTypeString = ctrReturn;

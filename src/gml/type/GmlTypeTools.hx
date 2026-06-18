@@ -1,6 +1,7 @@
 package gml.type;
 import ace.AceGmlTools;
 import gml.GmlAPI;
+import gml.GmlImports;
 import gml.GmlNamespace;
 import gml.type.GmlType;
 import gml.type.GmlTypeCanCastTo;
@@ -97,7 +98,7 @@ import ace.extern.AceTokenType;
 			default: null;
 		}
 	}
-	
+
 	/**
 	 * Runs f on each element of array and returns an updated immutable array.
 	 * Unchanged elements will be reused and changing nothing will return back the array.
@@ -116,6 +117,66 @@ import ace.extern.AceTokenType;
 		return out != null ? out : arr;
 	}
 	
+	public static function mapImportedNames(self:GmlType, imp:GmlImports):GmlType {
+		if (self == null || imp == null) return self;
+		return switch (self) {
+			case TInst(name, params, kind): {
+				var nextParams = mapArray(params, (t) -> mapImportedNames(t, imp));
+				var nextName = kind == KCustom ? JsTools.or(imp.longen[name], name) : name;
+				nextName != name || nextParams != params ? TInst(nextName, nextParams, kind) : self;
+			};
+			case TEither(types): {
+				var nextTypes = mapArray(types, (t) -> mapImportedNames(t, imp));
+				nextTypes != types ? TEither(nextTypes) : self;
+			};
+			case TAnon(inf): {
+				var nextInf:GmlTypeAnon = null;
+				for (name => field in inf.fields) {
+					var nextType = mapImportedNames(field.type, imp);
+					if (nextType != field.type) {
+						if (nextInf == null) {
+							nextInf = new GmlTypeAnon();
+							for (prevName => prevField in inf.fields) nextInf.fields[prevName] = prevField;
+						}
+						nextInf.fields[name] = new GmlTypeAnonField(nextType, field.doc);
+					}
+				}
+				nextInf != null ? TAnon(nextInf) : self;
+			};
+			case TTemplate(name, ind, constraint): {
+				var nextConstraint = mapImportedNames(constraint, imp);
+				nextConstraint != constraint ? TTemplate(name, ind, nextConstraint) : self;
+			};
+			case THint(hint, type): {
+				var nextType = mapImportedNames(type, imp);
+				nextType != type ? THint(hint, nextType) : self;
+			};
+			case TSpecifiedMap(meta): {
+				var nextDefault = mapImportedNames(meta.defaultType, imp);
+				var nextFields = null;
+				var nextMap = null;
+				for (i => field in meta.fieldList) {
+					var nextType = mapImportedNames(field.type, imp);
+					var nextField = nextType != field.type ? new GmlTypeMapField(field.name, nextType) : field;
+					if (nextField != field && nextFields == null) {
+						nextFields = meta.fieldList.slice(0, i);
+					}
+					if (nextFields != null) nextFields.push(nextField);
+				}
+				if (nextFields != null || nextDefault != meta.defaultType) {
+					if (nextFields == null) nextFields = meta.fieldList.copy();
+					nextMap = new Dictionary<GmlTypeMapField>();
+					for (field in nextFields) nextMap[field.name] = field;
+					TSpecifiedMap(new GmlTypeMap(nextMap, nextFields, nextDefault));
+				} else self;
+			};
+			case TEnumTuple(name): {
+				var nextName = JsTools.or(imp.longenEnum[name], JsTools.or(imp.longen[name], name));
+				nextName != name ? TEnumTuple(nextName) : self;
+			};
+		}
+	}
+
 	/**
 	 * Runs f on each sub-type of t and returns the updated immutable type.
 	 * Unchanged elements will be reused and changing nothing will return back the input.

@@ -197,7 +197,7 @@ class GmlSeekerProcVar {
 					//
 					if (jsDocBeforeFunc.args != null) {
 						args = "(" + jsDocBeforeFunc.args.join(", ") + ")";
-						argTypes = jsDocBeforeFunc.typesFlush(templateItems, s);
+						argTypes = jsDocBeforeFunc.typesFlush(templateItems, s, seeker);
 					} else {
 						//args = null;
 						//argTypes = null;

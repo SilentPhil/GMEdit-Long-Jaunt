@@ -2,11 +2,16 @@ package linter;
 import file.FileKind;
 import file.kind.gml.KGmlScript;
 import gml.GmlAPI;
+import gml.GmlImports;
 import gml.GmlVersion;
 import gml.Project;
+import gml.type.GmlTypeTools;
+import parsers.linter.GmlLinter;
 import parsers.linter.GmlLinterPrefs;
+import test_helpers.GmlFileHelper;
 import test_helpers.LinterHelper;
 import massive.munit.Assert;
+import tools.Dictionary;
 
 class GmlLinterBasicTest {
 	function problemTexts(t:LinterHelper):String {
@@ -286,6 +291,24 @@ class GmlLinterBasicTest {
 
 		Assert.areEqual(1, t.warnings.length, problemTexts(t));
 		Assert.isTrue(t.warnings[0].text.indexOf("private field `__hidden`") >= 0);
+	}
+
+	@Test public function testInlineIsUsesImportedTypeAlias() {
+		var code = "canvas = undefined; /// @is {CanvasScroll}\n";
+		var file = GmlFileHelper.makeGmlFile(code, KGmlScript.inst);
+		var editor = file.codeEditor;
+		editor.imports = new Dictionary();
+		var imports = new GmlImports();
+		imports.longen["CanvasScroll"] = "gw_CanvasScroll";
+		editor.imports[""] = imports;
+
+		var linter = new GmlLinter();
+		var hasError = linter.run(code, editor, Project.current.version);
+		Assert.isFalse(hasError, linter.errorText);
+		Assert.areEqual(
+			"gw_CanvasScroll",
+			GmlTypeTools.toString(linter.getContextInstType("canvas"))
+		);
 	}
 
 	@Test public function testInheritedFieldAccessIsKeptWhenChildAssignsField() {

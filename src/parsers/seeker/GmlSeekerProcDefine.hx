@@ -146,7 +146,7 @@ class GmlSeekerProcDefine {
 					if (litArgs != null) patchMissingArgs(jsDoc.args, litArgs);
 					
 					args = "(" + jsDoc.args.join(", ") + ")";
-					argTypes = jsDoc.typesFlush(null, fname);
+					argTypes = jsDoc.typesFlush(null, fname, seeker);
 					jsDoc.args = null;
 					jsDoc.types = null;
 				}
@@ -234,7 +234,7 @@ class GmlSeekerProcDefine {
 					// `@param` override the parsed arguments
 					var doc = GmlFuncDoc.create(main, jsDoc.args, jsDoc.rest);
 					doc.argsAreFromJSDoc = true;
-					doc.argTypes = jsDoc.typesFlush(null, main);
+					doc.argTypes = jsDoc.typesFlush(null, main, seeker);
 					seeker.doc = doc;
 					jsDoc.args = null;
 					jsDoc.types = null;

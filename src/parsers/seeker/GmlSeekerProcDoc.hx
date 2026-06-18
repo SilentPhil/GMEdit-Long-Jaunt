@@ -47,7 +47,7 @@ class GmlSeekerProcDoc {
 		final out = seeker.out;
 		
 		if (jsDoc.args != null) {
-			var argTypesFlushed = jsDoc.typesFlush(null, doc.name);
+			var argTypesFlushed = jsDoc.typesFlush(null, doc.name, seeker);
 			if (doc.argsAreFromJSDoc) {
 				// append them
 				doc.args = GmlSeekerJSDoc.concatArrays(doc.args, jsDoc.args);
