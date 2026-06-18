@@ -358,6 +358,44 @@ https://stackoverflow.com/a/36247448/5578773
 	background: inherit;
 	color: inherit;
 }
+.problems-collapse-toggle {
+	position: relative;
+	display: block;
+	box-sizing: border-box;
+	width: 100%;
+	height: 14px;
+	flex: 0 0 14px;
+	margin: 0;
+	padding: 0;
+	border: 0;
+	border-top: 1px solid rgba(255, 255, 255, 0.12);
+	border-bottom: 1px solid rgba(0, 0, 0, 0.45);
+	background: #2d343b;
+	color: #85909b;
+	cursor: pointer;
+}
+.problems-collapse-toggle:hover {
+	background: #3b4650;
+	color: #c0cad4;
+}
+.problems-collapse-toggle:focus,
+.problems-collapse-toggle:focus-visible {
+	outline: none !important;
+}
+.problems-collapse-toggle:before {
+	content: "";
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	width: 7px;
+	height: 7px;
+	border-right: 1px solid currentColor;
+	border-bottom: 1px solid currentColor;
+	transform: translate(-50%, -65%) rotate(45deg);
+}
+.problems-collapse-toggle.collapsed:before {
+	transform: translate(-50%, -35%) rotate(225deg);
+}
 .problems-toolbar {
 	display: flex;
 	align-items: center;

@@ -56,6 +56,9 @@ class Problems {
 	static var editorProject:Project = null;
 	static var menu:DivElement;
 	static var menuTarget:ProblemItem;
+	static var collapseButton:ButtonElement;
+	static var isCollapsed:Bool = false;
+	static var lastPanelHeight:Float = 150;
 	
 	public static function init():Void {
 		element = Main.document.createDivElement();
@@ -110,11 +113,58 @@ class Problems {
 		element.appendChild(list);
 		initMenu();
 		Sidebar.add("Problems", element);
+		initCollapseButton();
 		renderMessage("No project problems checked yet.");
 	}
 	
 	public static function show():Void {
 		Sidebar.set("Problems");
+		if (isCollapsed) setCollapsed(false);
+	}
+
+	static function initCollapseButton():Void {
+		if (collapseButton != null) return;
+		var misc:DivElement = Main.document.querySelectorAuto("#misc-td");
+		var parent = misc.parentElement;
+		if (parent == null) return;
+		collapseButton = Main.document.createButtonElement();
+		collapseButton.type = "button";
+		collapseButton.className = "problems-collapse-toggle";
+		collapseButton.title = "Hide Problems panel";
+		collapseButton.setAttribute("aria-label", "Hide Problems panel");
+		collapseButton.onclick = function(_) setCollapsed(!isCollapsed);
+		parent.appendChild(collapseButton);
+	}
+
+	static function setCollapsed(collapsed:Bool):Void {
+		var misc:DivElement = Main.document.querySelectorAuto("#misc-td");
+		var splitter:DivElement = Main.document.querySelectorAuto("#misc-splitter-td");
+		isCollapsed = collapsed;
+		if (collapsed) {
+			if (misc.offsetHeight > 0) lastPanelHeight = misc.offsetHeight;
+			misc.style.display = "none";
+			splitter.style.display = "none";
+		} else {
+			misc.style.display = "";
+			splitter.style.display = "";
+			if (lastPanelHeight > 0) {
+				var height = Std.int(lastPanelHeight);
+				misc.style.height = height + "px";
+				misc.style.flex = "0 0 " + height + "px";
+			}
+		}
+		if (collapseButton != null) {
+			collapseButton.classList.setTokenFlag("collapsed", collapsed);
+			collapseButton.title = collapsed ? "Show Problems panel" : "Hide Problems panel";
+			collapseButton.setAttribute("aria-label", collapseButton.title);
+		}
+		dispatchResize();
+	}
+
+	static function dispatchResize():Void {
+		var e:js.html.UIEvent = cast Main.document.createEvent('UIEvents');
+		e.initUIEvent('resize', true, false, Main.window, 0);
+		Main.window.dispatchEvent(e);
 	}
 	
 	static function renderMessage(text:String):Void {
