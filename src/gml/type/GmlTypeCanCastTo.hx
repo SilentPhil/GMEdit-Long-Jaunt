@@ -18,6 +18,11 @@ class GmlTypeCanCastTo {
 		for (to in toArr) if (canCastTo(from, to, tpl, imp)) return true;
 		return false;
 	}
+	static function getImportName(name:String, imp:GmlImports):String {
+		if (imp == null) return name;
+		var long = imp.longen[name];
+		return long != null ? long : name;
+	}
 	
 	/** Whether this is an isExplicit cast (`val as Type`) */
 	public static var isExplicit:Bool = false;
@@ -125,6 +130,8 @@ class GmlTypeCanCastTo {
 			};
 			case [TInst(_, [], KMap), TSpecifiedMap(_)]: return true;
 			case [TInst(n1, p1, k1), TInst(n2, p2, k2)]: {
+				var in1 = k1 == KCustom ? getImportName(n1, imp) : n1;
+				var in2 = k2 == KCustom ? getImportName(n2, imp) : n2;
 				// allow function->script casts
 				if ((k1 == KFunction || k1 == KConstructor)
 					&& n2 == "script"
@@ -136,19 +143,19 @@ class GmlTypeCanCastTo {
 					case KBool: if (k1 == KNumber) return allowImplicitBoolIntCasts || isExplicit;
 					
 					case KArray: // var v:Enum should be allowed for array access
-						if (p2.length == 0 && GmlAPI.gmlEnums.exists(n1)) return true;
+						if (p2.length == 0 && GmlAPI.gmlEnums.exists(in1)) return true;
 					case KObject:
-						var ns = GmlAPI.gmlNamespaces[n1];
+						var ns = GmlAPI.gmlNamespaces[in1];
 						if (JsTools.nca(ns, ns.isObject)) return true;
-						if (GmlAPI.gmlKind[n1] == "asset.object") return true;
+						if (GmlAPI.gmlKind[in1] == "asset.object") return true;
 					case KAsset:
-						var ns = GmlAPI.gmlNamespaces[n1];
+						var ns = GmlAPI.gmlNamespaces[in1];
 						if (JsTools.nca(ns, ns.isObject)) return true;
-						var nk = GmlAPI.gmlKind[n1];
+						var nk = GmlAPI.gmlKind[in1];
 						if (nk != null && nk.startsWith("asset.")) return true;
 					case KFunction, KConstructor:
 						if (k1 == KCustom) {
-							return AceGmlTools.findNamespace(n1, imp, function(ns:GmlNamespace) {
+							return AceGmlTools.findNamespace(in1, imp, function(ns:GmlNamespace) {
 								var selfCall = ns.instTypes[""];
 								if (selfCall != null) {
 									switch (from) {
@@ -189,7 +196,7 @@ class GmlTypeCanCastTo {
 					default:
 				}
 				
-				if (k1 == k2 && (k1 != KCustom || n1 == n2)) {
+				if (k1 == k2 && (k1 != KCustom || in1 == in2)) {
 					// allow Array<T>->Array or Array<T>->Array<?>:
 					var i = p1.length;
 					while (--i >= 0) if (p2[i] != null) break;
@@ -202,18 +209,18 @@ class GmlTypeCanCastTo {
 				
 				var checkBoolOp = kto == KBool && isBoolOp;
 				if (checkBoolOp && kfrom == KObject) return true;
-				if (AceGmlTools.findNamespace(n1, imp, function(ns:GmlNamespace) {
+				if (AceGmlTools.findNamespace(in1, imp, function(ns:GmlNamespace) {
 					var depth = 0;
 					var found = false;
 					while (ns != null && ++depth < GmlNamespace.maxDepth) {
 						if (checkBoolOp && ns.isObject) { found = true; break; }
 						for (itf in ns.interfaces) {
 							if (checkBoolOp && itf.isObject) { found = true; break; }
-							if (itf.name == n2) { found = true; break; }
+							if (itf.name == in2) { found = true; break; }
 						}
 						if (found) break;
 						ns = ns.parent;
-						if (JsTools.nca(ns, ns.name == n2)) { found = true; break; }
+						if (JsTools.nca(ns, ns.name == in2)) { found = true; break; }
 					}
 					return found;
 				})) return true;
