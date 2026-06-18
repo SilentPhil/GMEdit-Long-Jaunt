@@ -104,6 +104,12 @@ using tools.NativeString;
 			default: return minLength;
 		}
 	}
+	public static function isAfterDotPrefix(session:AceSession, pos:AcePos, prefix:String):Bool {
+		if (prefix == null || prefix.length == 0) return false;
+		var col = pos.column - prefix.length;
+		if (col <= 0) return false;
+		return session.getLine(pos.row).fastCodeAt(col - 1) == ".".code;
+	}
 	// interface AceAutoCompleter
 	public function getCompletions(
 		editor:AceEditor, session:AceSession, pos:AcePos, prefix:String, callback:AceAutoCompleteCb
@@ -149,6 +155,10 @@ using tools.NativeString;
 		}
 		else if (sqbKind != SKNone) {
 			getCompletions_sqbKind(editor, session, pos, prefix, callback, tk);
+			return;
+		}
+		if (isAfterDotPrefix(session, pos, prefix)) {
+			proc(false);
 			return;
 		}
 		//
@@ -215,11 +225,22 @@ using tools.NativeString;
 		do { // once
 			if (tk == null) continue;
 			var iter:AceTokenIterator = null;
+			var dotPos:AcePos = null;
 			inline function initIter():AceTokenIterator {
 				return new AceTokenIterator(session, pos.row, pos.column);
 			}
 			if (tk.type != "punctuation.operator" || !tk.value.contains(".")) {
-				if (dotKind == DKEnum) {
+				if (dotKind == DKSmart && prefix.length > 0) {
+					var fieldStart = pos.column - prefix.length;
+					var line = session.getLine(pos.row);
+					if (fieldStart > 0 && line.fastCodeAt(fieldStart - 1) == ".".code) {
+						iter = new AceTokenIterator(session, pos.row, fieldStart + 1);
+						tk = iter.stepBackwardNonText();
+						if (tk != null && tk.type == "punctuation.operator" && tk.value.contains(".")) {
+							dotPos = iter.getCurrentTokenPosition();
+						}
+					}
+				} else if (dotKind == DKEnum) {
 					if (tk.type == "enumerror") {
 						iter = initIter();
 						tk = iter.stepBackward();
@@ -233,10 +254,9 @@ using tools.NativeString;
 			}
 			if (tk.type != "punctuation.operator" || !tk.value.contains(".")) continue;
 			
-			var dotPos:AcePos;
 			if (dotKind == DKSmart) {
 				if (iter == null) iter = initIter();
-				dotPos = iter.getCurrentTokenPosition();
+				if (dotPos == null) dotPos = iter.getCurrentTokenPosition();
 			} else dotPos = null;
 			
 			if (editor.completer.eraseSelfDot) {
