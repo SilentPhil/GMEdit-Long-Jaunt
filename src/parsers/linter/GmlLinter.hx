@@ -1683,6 +1683,9 @@ class GmlLinter {
 			}, 50);
 		}
 		session.setAnnotations(annotations);
+		if (opt != null && opt.annotations != null) {
+			for (ann in annotations) opt.annotations.push(ann);
+		}
 		return ohno;
 	}
 	
@@ -1717,6 +1720,7 @@ typedef GmlLinterOptions = {
 	?session:AceSession,
 	?setLocals:Bool,
 	?updateStatusBar:Bool,
+	?annotations:Array<AceAnnotation>,
 }
 typedef GmlLinterTypeInfo = {
 	type: GmlType,

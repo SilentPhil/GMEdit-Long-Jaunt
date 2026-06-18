@@ -240,6 +240,7 @@ class GmlFile {
 		savePost_shared(out, false);
 		// notify plugins:
 		PluginEvents.fileSave({file:this, code:out});
+		ui.Problems.updateFile(this, out);
 	}
 	public function save() {
 		return editor.save();

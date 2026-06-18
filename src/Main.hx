@@ -112,6 +112,7 @@ class Main {
 		GlobalLookup.init();
 		TagEditor.init();
 		Sidebar.init();
+		Problems.init();
 		MainMenu.init();
 		//
 		#if !lwedit

@@ -88,6 +88,7 @@ class ChromeTabs {
 			PluginEvents.fileOpen({file:gmlFile});
 		}
 		PluginEvents.activeFileChange({file:gmlFile});
+		Problems.onActiveFileChange();
 	}
 	public static function idleTick() {
 		var idleTime = Preferences.current.chromeTabs.idleTime;

@@ -77,6 +77,7 @@ function Splitter(sizer) {
 	this.minWidth = 0|(sizer.getAttribute("splitter-min-width")||50);
 	this.updateTabs = sizer.getAttribute("splitter-update-tabs");
 	this.isMisc = sizer.id != "splitter-td";
+	this.orientation = sizer.getAttribute("splitter-orientation") || (sizer.id == "misc-splitter-td" ? "horizontal" : "vertical");
 	this.parentEl = target.parentElement;
 	this.lsKey = sizer.getAttribute("splitter-lskey");
 	this.defaultWidth = 0|(sizer.getAttribute("splitter-default-width")||this.minWidth);
@@ -105,7 +106,9 @@ function Splitter(sizer) {
 	function setCollapsed(collapsed) {
 		if (q.collapsed == collapsed) return;
 		if (collapsed) {
-			var currentWidth = parseFloat(q.target.style.width) || q.target.offsetWidth || q.defaultWidth;
+			var currentWidth = parseFloat(q.target.style[q.orientation == "horizontal" ? "height" : "width"])
+				|| (q.orientation == "horizontal" ? q.target.offsetHeight : q.target.offsetWidth)
+				|| q.defaultWidth;
 			if (currentWidth > 0) q.lastWidth = currentWidth;
 			q.target.style.display = "none";
 			q.sizer.classList.add("tree-panel-collapsed");
@@ -139,7 +142,9 @@ function Splitter(sizer) {
 	sp_mousemove = function(e) {
 		var nx = e.pageX, dx = nx - sp_x; sp_x = nx;
 		var ny = e.pageY, dy = ny - sp_y; sp_y = ny;
-		var nw = parseFloat(q.target.style.width) + dx * (q.target.parentElement.children[0] == q.target ? 1 : -1);
+		var delta = q.orientation == "horizontal" ? dy : dx;
+		var nw = parseFloat(q.target.style[q.orientation == "horizontal" ? "height" : "width"])
+			+ delta * (q.target.parentElement.children[0] == q.target ? 1 : -1);
 		if (nw < q.minWidth) nw = q.minWidth;
 		q.setWidth(nw);
 		if (q.updateTabs && window.$gmedit) $gmedit["ui.ChromeTabs"].impl.layoutTabs()
@@ -150,7 +155,7 @@ function Splitter(sizer) {
 		document.removeEventListener("mousemove", sp_mousemove);
 		document.removeEventListener("mouseup", sp_mouseup);
 		mainEl.classList.remove("resizing");
-		var w = parseFloat(q.target.style.width);
+		var w = parseFloat(q.target.style[q.orientation == "horizontal" ? "height" : "width"]);
 		// save
 		var sub = getSessionSub(q.lsKey, true);
 		sub.width = w;
@@ -169,14 +174,22 @@ Splitter.syncMain = syncMain;
 Splitter.splitters = splitters;
 Splitter.prototype = {
 	getWidth: function() {
+		if (this.orientation == "horizontal") return 0;
 		var targetWidth = this.target.offsetWidth;
 		return (targetWidth > 0 ? (parseFloat(this.target.style.width) || targetWidth) : 0) + this.sizer.offsetWidth;
 	},
 	setWidth: function(nw) {
-		this.target.style.width = nw + "px";
-		this.target.style.flex = "0 0 " + nw + "px";
+		if (this.orientation == "horizontal") {
+			this.target.style.height = nw + "px";
+			this.target.style.width = "";
+			this.target.style.flex = "0 0 " + nw + "px";
+		} else {
+			this.target.style.width = nw + "px";
+			this.target.style.flex = "0 0 " + nw + "px";
+		}
 		if (this.setVars) {
-			mainEl.style.setProperty(this.widthVar, (nw + this.sizer.offsetWidth) + "px");
+			var sizerSize = this.orientation == "horizontal" ? this.sizer.offsetHeight : this.sizer.offsetWidth;
+			mainEl.style.setProperty(this.widthVar, (nw + sizerSize) + "px");
 			syncMain(nw);
 		}
 	}

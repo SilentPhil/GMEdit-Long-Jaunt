@@ -216,5 +216,6 @@ import js.html.Console;
 		//
 		registerTabStateLoader(KPreferences.tabStateKind, KPreferences.loadTabState);
 		registerTabStateLoader(KProjectProperties.tabStateKind, KProjectProperties.loadTabState);
+		registerTabStateLoader(KProblems.tabStateKind, KProblems.loadTabState);
 	}
 }

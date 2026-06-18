@@ -353,34 +353,35 @@ html #ace_settingsmenu {
 .popout-menu {
 	z-index: 1000;
 	position: absolute;
-	border: 1px solid #BABABA;
-	background: #fdfdfd;
+	border: 1px solid rgba(128, 128, 128, 0.45);
+	background: #2b2b2b;
 	white-space: nowrap;
-	color: black;
-	box-shadow: 1px 1px 3px rgba(0,0,0,0.3);
+	color: #d0d0d0;
+	box-shadow: 0 6px 18px rgba(0,0,0,0.45);
 	list-style: none;
 	margin: 0;
-	padding: 2px 0;
+	padding: 4px 0;
 	font: 9pt "Segoe UI", sans-serif;
 }
 .popout-menu li {
-	padding: 4px 20px;
+	padding: 6px 20px;
 	padding-left: 34px;
 	background-position: 8px center;
 	background-repeat: no-repeat;
 	cursor: default;
 }
 .popout-menu li[disabled] {
-	color: #999;
+	color: #777;
 }
 .popout-menu .popout-menu-separator {
-	background: #E9E9E9;
+	background: rgba(128, 128, 128, 0.35);
 	height: 1px;
 	padding: 0;
 	margin: 5px 1px;
 }
 .popout-menu li:not([disabled]):not(.popout-menu-separator):hover {
-	background-color: #EBEBEB;
+	background-color: rgba(128, 128, 128, 0.22);
+	color: #fff;
 }
 .popout-menu .popout-menu-submenu {
 	position: relative;
@@ -388,7 +389,7 @@ html #ace_settingsmenu {
 .popout-menu .popout-menu-submenu::after {
 	content: "";
 	border: 4px solid transparent;
-	border-left-color: #626365;
+	border-left-color: #d0d0d0;
 	position: absolute;
 	right: 3px;
 	top: 50%;

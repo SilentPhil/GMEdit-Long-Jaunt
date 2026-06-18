@@ -428,6 +428,7 @@ import ui.treeview.TreeViewElement;
 	public function finishedIndexing() {
 		nameNode.innerText = displayName;
 		if (current.hasGMLive) GMLive.updateAll();
+		ui.Problems.refreshProject();
 		//
 		fileCache.onSave();
 		//
