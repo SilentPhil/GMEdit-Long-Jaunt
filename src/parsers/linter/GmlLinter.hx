@@ -115,6 +115,26 @@ class GmlLinter {
 		return imp;
 	}
 
+	var nullSafetyLocalTypes:Dictionary<Array<GmlType>> = new Dictionary();
+	function pushNullSafetyLocalType(name:String, type:GmlType):Void {
+		var stack = nullSafetyLocalTypes[name];
+		if (stack == null) {
+			stack = [];
+			nullSafetyLocalTypes[name] = stack;
+		}
+		stack.push(type);
+	}
+	function popNullSafetyLocalType(name:String):Void {
+		var stack = nullSafetyLocalTypes[name];
+		if (stack == null) return;
+		stack.pop();
+		if (stack.length == 0) nullSafetyLocalTypes.remove(name);
+	}
+	function getNullSafetyLocalType(name:String):GmlType {
+		var stack = nullSafetyLocalTypes[name];
+		return stack != null && stack.length > 0 ? stack[stack.length - 1] : null;
+	}
+
 	static var inlineIsRx = new RegExp("\\/\\/\\/\\s*@is\\b\\s*(?:\\{(.+?)\\})?");
 	var contextInstTypes:Dictionary<GmlType> = new Dictionary();
 	var namespaceInstTypes:Dictionary<Dictionary<GmlType>> = new Dictionary();

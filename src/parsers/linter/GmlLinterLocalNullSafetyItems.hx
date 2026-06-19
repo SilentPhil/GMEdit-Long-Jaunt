@@ -31,6 +31,7 @@ from Array<GmlLinterLocalNullSafetyItem>
 			if (t.getKind() == KNullable) {
 				item.hasType = true;
 				item.type = t;
+				linter.pushNullSafetyLocalType(item.name, t);
 				imp.localTypes[item.name] = item.status ? t.unwrapParam() : GmlTypeDef.undefined;
 			}
 		}
@@ -51,6 +52,7 @@ from Array<GmlLinterLocalNullSafetyItem>
 		if (imp == null) return;
 		for (item in this) if (item.hasType) {
 			imp.localTypes[item.name] = item.type;
+			linter.popNullSafetyLocalType(item.name);
 			item.hasType = false;
 			item.type = null;
 		}

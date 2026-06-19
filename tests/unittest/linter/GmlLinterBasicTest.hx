@@ -324,6 +324,17 @@ class GmlLinterBasicTest {
 		Assert.areEqual(0, t.problems.length, problemTexts(t));
 	}
 
+	@Test public function testNullableLocalAssignmentAfterUndefinedCheck() {
+		var t = runLinter23(
+			"function UnitTestNullableAssignment(_xscale:number, _yscale:number? = undefined) {\n"
+			+ "\tif (_yscale == undefined) {\n"
+			+ "\t\t_yscale = _xscale;\n"
+			+ "\t}\n"
+			+ "}\n"
+		, false, KGmlScript.inst);
+		Assert.areEqual(0, t.problems.length, problemTexts(t));
+	}
+
 	@Test public function testInheritedFieldAccessIsKeptWhenChildAssignsField() {
 		var t = runLinter23(
 			"function LinterInheritedAccessBase() constructor {\n"

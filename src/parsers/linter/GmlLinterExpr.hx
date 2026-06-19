@@ -369,12 +369,16 @@ class GmlLinterExpr extends GmlLinterHelper {
 						statKind = LKSet;
 						var inlineIsType = self.readInlineIsType();
 						var targetType = inlineIsType != null ? inlineIsType : currType;
+						if (inlineIsType == null && currKind == LKIdent && isLocalIdent) {
+							var nullSafetyType = self.getNullSafetyLocalType(currName);
+							if (nullSafetyType != null) targetType = nullSafetyType;
+						}
 						rc(self.readExpr(newDepth, None, null, targetType));
 						if (inlineIsType != null && currKind == LKIdent && !isLocalIdent) {
 							self.setContextInstType(currName, inlineIsType);
 							currType = inlineIsType;
 						}
-						self.checkTypeCast(this.currType, currType, "assignment", this.currValue);
+						self.checkTypeCast(this.currType, targetType, "assignment", this.currValue);
 						currType = null;
 					} else {
 						if (hasFlag(NoOps)) break;
