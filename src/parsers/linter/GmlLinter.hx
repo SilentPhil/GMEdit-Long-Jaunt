@@ -338,6 +338,7 @@ class GmlLinter {
 	static var functionDeclLineRx = new RegExp("^\\s*function\\s+(\\w+)\\b");
 	public static var constructorParentLineRx = new RegExp("^\\s*function\\s+\\w+\\b[^\\n]*:\\s*(\\w+)\\s*\\(");
 	static var staticFieldLineRx = new RegExp("^\\s*static\\s+(\\w+)\\b\\s*=");
+	static var instanceFieldLineRx = new RegExp("^\\s*(\\w+)\\s*=");
 	function findImplementsWarningPos(source:String, ownName:String, interfaceName:String, ?preferred:AcePos):AcePos {
 		var lines = source.split("\n");
 		var fallback:AcePos = null;
@@ -445,7 +446,7 @@ class GmlLinter {
 			var trimmed = line.trimBoth();
 			if (trimmed.startsWith("///")) {
 				var memberMeta = GmlLinterMemberMeta.fromLine(line, row);
-				if (memberMeta != null) pendingMeta = memberMeta;
+				if (memberMeta != null) pendingMeta = GmlLinterMemberMeta.merge(pendingMeta, memberMeta);
 				var mtInterface = interfaceLineRx.exec(line);
 				if (mtInterface != null) {
 					pendingInterfaceName = mtInterface[1];
@@ -490,12 +491,31 @@ class GmlLinter {
 				}
 			}
 			if (current != null) {
+				// A tag may be on the preceding documentation line or after the member.
+				// Keep both so that e.g. @override and @private can be combined.
+				var lineMeta = GmlLinterMemberMeta.fromLine(line, row);
+				var memberMeta = GmlLinterMemberMeta.merge(pendingMeta, lineMeta);
 				var staticMatch = staticFieldLineRx.exec(line);
 				if (staticMatch != null) {
 					var field = staticMatch[1];
-					current.addField(field, true, row, line, pendingMeta);
-					current.addField(field, false, row, line, pendingMeta);
+					current.addField(field, true, row, line, memberMeta);
+					current.addField(field, false, row, line, memberMeta);
 					pendingMeta = null;
+				} else {
+					var instanceMatch = instanceFieldLineRx.exec(line);
+					if (instanceMatch != null) {
+						var prevRow = row;
+						while (--prevRow >= 0) {
+							var prevLine = lines[prevRow];
+							var prevTrimmed = prevLine.trimBoth();
+							if (prevTrimmed == "") continue;
+							if (!prevTrimmed.startsWith("///")) break;
+							memberMeta = GmlLinterMemberMeta.merge(
+								GmlLinterMemberMeta.fromLine(prevLine, prevRow), memberMeta);
+						}
+						current.addField(instanceMatch[1], true, row, line, memberMeta);
+						pendingMeta = null;
+					}
 				}
 				updateBraceDepth(line, currentBrace);
 				if (currentBrace.started && currentBrace.depth <= 0) {
@@ -588,11 +608,10 @@ class GmlLinter {
 			if (currentName == impl.name) {
 				if (trimmed.startsWith("///")) {
 					var memberMeta = GmlLinterMemberMeta.fromLine(line, row);
-					if (memberMeta != null) pendingMeta = memberMeta;
+					if (memberMeta != null) pendingMeta = GmlLinterMemberMeta.merge(pendingMeta, memberMeta);
 				} else if (trimmed != "") {
 					var staticMatch = staticFieldLineRx.exec(line);
 					if (staticMatch != null && staticMatch[1] == field) {
-						if (pendingMeta != null && pendingMeta.isOverride) return pendingMeta.pos;
 						var col = line.indexOf(field);
 						return { row: row, column: col >= 0 ? col : 0 };
 					}
@@ -1803,14 +1822,28 @@ class GmlLinterMemberMeta {
 		this.pos = pos;
 	}
 	public static function fromLine(line:String, row:Int):GmlLinterMemberMeta {
-		var isVirtual = GmlLinter.virtualLineRx.test(line);
-		var isAbstract = GmlLinter.abstractLineRx.test(line);
-		var isOverride = GmlLinter.overrideLineRx.test(line);
+		var isVirtual = line.indexOf("@virtual") >= 0;
+		var isAbstract = line.indexOf("@abstract") >= 0;
+		var isOverride = line.indexOf("@override") >= 0;
 		if (!isVirtual && !isAbstract && !isOverride) return null;
 		var col = line.indexOf("@override");
 		if (col < 0) col = line.indexOf("@abstract");
 		if (col < 0) col = line.indexOf("@virtual");
 		return new GmlLinterMemberMeta(isVirtual, isAbstract, isOverride, { row: row, column: col >= 0 ? col : 0 });
+	}
+	public static function merge(a:GmlLinterMemberMeta, b:GmlLinterMemberMeta):GmlLinterMemberMeta {
+		if (a == null) return b;
+		if (b == null) return a;
+		var pos = a.pos;
+		if (!a.isOverride && b.isOverride) pos = b.pos;
+		else if (!a.isAbstract && b.isAbstract) pos = b.pos;
+		else if (!a.isVirtual && b.isVirtual) pos = b.pos;
+		return new GmlLinterMemberMeta(
+			a.isVirtual || b.isVirtual,
+			a.isAbstract || b.isAbstract,
+			a.isOverride || b.isOverride,
+			pos
+		);
 	}
 	public function withFallbackPos(row:Int, line:String):GmlLinterMemberMeta {
 		if (pos != null) return this;

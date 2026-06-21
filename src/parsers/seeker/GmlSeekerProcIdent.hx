@@ -246,11 +246,9 @@ class GmlSeekerProcIdent {
 					addFieldHint_doc.templateItems = templateItems;
 				}
 			}
-			if (hasExplicitFieldAccess) {
-				seeker.jsDoc.isPrivate = false;
-				seeker.jsDoc.access = Public;
-				seeker.jsDoc.accessSet = false;
-			}
+			// The JSDoc has now been applied to this field. Do not let member tags
+			// (such as @override) leak into the next static member.
+			seeker.jsDoc.reset(false);
 		}
 		seeker.restoreReader();
 	}

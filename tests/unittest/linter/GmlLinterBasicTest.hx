@@ -307,7 +307,7 @@ class GmlLinterBasicTest {
 		Assert.isFalse(hasError, linter.errorText);
 		Assert.areEqual(
 			"gw_CanvasScroll",
-			GmlTypeTools.toString(linter.getContextInstType("canvas"))
+			GmlTypeTools.toString(@:privateAccess linter.getContextInstType("canvas"))
 		);
 	}
 
@@ -486,6 +486,26 @@ class GmlLinterBasicTest {
 			+ "}"
 		, true, KGmlScript.inst);
 		Assert.areEqual(0, t.errors.length, problemTexts(t));
+	}
+
+	@Test public function testOverrideFindsBaseInstanceField() {
+		var code =
+			"function LinterOverrideFieldBase() constructor {\n"
+			+ "\tquest = false;\n"
+			+ "\tother = false;\n"
+			+ "}\n"
+			+ "function LinterOverrideFieldChild() : LinterOverrideFieldBase() constructor {\n"
+			+ "\t/// @override\n"
+			+ "\t/// @private\n"
+			+ "\tquest = true;\n"
+			+ "\tstatic helper = function() {}\n"
+			+ "\tother = true; /// @override @private\n"
+			+ "\t/// @override\n"
+			+ "\tmissing = true;\n"
+			+ "}";
+		var t = runLinter23(code, true, KGmlScript.inst);
+		Assert.areEqual(1, t.errors.length, problemTexts(t));
+		Assert.isTrue(t.errors[0].text.indexOf("missing") >= 0, problemTexts(t));
 	}
 
 	@Test public function testOverrideRequiresBaseMethod() {
