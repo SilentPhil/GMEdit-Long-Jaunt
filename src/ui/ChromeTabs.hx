@@ -88,7 +88,8 @@ class ChromeTabs {
 			PluginEvents.fileOpen({file:gmlFile});
 		}
 		PluginEvents.activeFileChange({file:gmlFile});
-		if (!isNew) Problems.onActiveFileChange();
+		if (isNew) Problems.onTabsChanged();
+		else Problems.onActiveFileChange();
 	}
 	public static function idleTick() {
 		var idleTime = Preferences.current.chromeTabs.idleTime;
@@ -229,6 +230,7 @@ class ChromeTabs {
 				ui.ext.Bookmarks.onFileClose(closedFile);
 				PluginEvents.fileClose({ file: closedFile, tab: closedTab });
 			}
+			Problems.onTabsChanged();
 			//
 			if (impl.tabEls.length == 0) {
 				sync(WelcomePage.file);

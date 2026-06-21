@@ -470,6 +470,9 @@ https://stackoverflow.com/a/36247448/5578773
 .problems-filter.current-file {
 	color: #9fc7ff;
 }
+.problems-filter.open-tabs {
+	color: #a9d6ff;
+}
 .problems-filter.more {
 	color: #d0d0d0;
 	letter-spacing: 0;
@@ -489,6 +492,10 @@ https://stackoverflow.com/a/36247448/5578773
 }
 .problems-filter.active.current-file {
 	color: #9fc7ff;
+	border-color: #00c8a3;
+}
+.problems-filter.active.open-tabs {
+	color: #a9d6ff;
 	border-color: #00c8a3;
 }
 .problems-filter.active.search {

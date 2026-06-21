@@ -47,10 +47,12 @@ class Problems {
 	static var showErrorsButton:ButtonElement;
 	static var showWarningsButton:ButtonElement;
 	static var showCurrentFileButton:ButtonElement;
+	static var showOpenTabsButton:ButtonElement;
 	static var moreButton:ButtonElement;
 	static var showErrors:Bool = true;
 	static var showWarnings:Bool = true;
 	static var showCurrentFileOnly:Bool = false;
+	static var showOpenTabsOnly:Bool = false;
 	static var isRunning:Bool = false;
 	static var items:Array<ProblemItem> = [];
 	static var config:ProblemsConfig = null;
@@ -101,12 +103,14 @@ class Problems {
 		showErrorsButton = makeFilterButton("error", "Errors");
 		showWarningsButton = makeFilterButton("warning", "Warnings");
 		showCurrentFileButton = makeFilterButton("current-file", "Current file only");
+		showOpenTabsButton = makeFilterButton("open-tabs", "Open tabs only");
 		moreButton = makeMoreButton();
 		filters.appendChild(searchBox);
 		filters.appendChild(searchButton);
 		filters.appendChild(showErrorsButton);
 		filters.appendChild(showWarningsButton);
 		filters.appendChild(showCurrentFileButton);
+		filters.appendChild(showOpenTabsButton);
 		filters.appendChild(moreButton);
 		toolbar.appendChild(refreshButton);
 		toolbar.appendChild(summary);
@@ -249,12 +253,15 @@ class Problems {
 		button.setAttribute("aria-label", title);
 		if (type == "warning") button.innerText = "!";
 		if (type == "current-file") button.innerText = "\u25c9";
+		if (type == "open-tabs") button.innerText = "\u25a3";
 		button.onclick = function(_) {
 			switch (type) {
 				case "warning":
 					showWarnings = !showWarnings;
 				case "current-file":
 					showCurrentFileOnly = !showCurrentFileOnly;
+				case "open-tabs":
+					showOpenTabsOnly = !showOpenTabsOnly;
 				default:
 					showErrors = !showErrors;
 			}
@@ -306,9 +313,12 @@ class Problems {
 		showWarningsButton.disabled = warnings == 0;
 		showCurrentFileButton.classList.setTokenFlag("active", showCurrentFileOnly);
 		showCurrentFileButton.disabled = currentFilePath() == null;
+		showOpenTabsButton.classList.setTokenFlag("active", showOpenTabsOnly);
+		showOpenTabsButton.disabled = !hasOpenFileTabs();
 		showErrorsButton.title = "Show errors (" + errors + ")";
 		showWarningsButton.title = "Show warnings (" + warnings + ")";
 		showCurrentFileButton.title = showCurrentFileOnly ? "Showing current file only" : "Show current file only";
+		showOpenTabsButton.title = showOpenTabsOnly ? "Showing open tabs only" : "Show open tabs only";
 	}
 	
 	static function isVisibleType(type:String):Bool {
@@ -319,6 +329,7 @@ class Problems {
 		if (!isVisibleType(item.type)) return false;
 		if (isExcluded(item)) return false;
 		if (showCurrentFileOnly && item.path != currentFilePath()) return false;
+		if (showOpenTabsOnly && !isOpenFileTab(item.path)) return false;
 		return matchesSearch(item);
 	}
 	
@@ -337,6 +348,11 @@ class Problems {
 		}
 		if (showCurrentFileOnly) render();
 		else if (showCurrentFileButton != null) updateFilterButtons(countErrors(), countWarnings());
+	}
+
+	public static function onTabsChanged():Void {
+		if (showOpenTabsOnly) render();
+		else if (showOpenTabsButton != null) updateFilterButtons(countErrors(), countWarnings());
 	}
 	
 	static function makeRow(item:ProblemItem):Element {
@@ -945,6 +961,21 @@ class Problems {
 		var file = GmlFile.current;
 		if (file == null || file.path == null) return null;
 		return normalizeOpenPath(file.path);
+	}
+
+	static function hasOpenFileTabs():Bool {
+		for (tab in ChromeTabs.getTabs()) {
+			if (tab.gmlFile != null && tab.gmlFile.path != null) return true;
+		}
+		return false;
+	}
+
+	static function isOpenFileTab(path:String):Bool {
+		for (tab in ChromeTabs.getTabs()) {
+			var file = tab.gmlFile;
+			if (file != null && file.path != null && normalizeOpenPath(file.path) == path) return true;
+		}
+		return false;
 	}
 	
 	static function countErrors():Int {
