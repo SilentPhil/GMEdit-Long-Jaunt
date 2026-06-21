@@ -59,6 +59,7 @@ class Problems {
 	static var editorElement:DivElement = null;
 	static var editorProject:Project = null;
 	static var menu:DivElement;
+	static var refreshMenu:DivElement;
 	static var menuTarget:ProblemItem;
 	static var collapseButton:ButtonElement;
 	static var isCollapsed:Bool = false;
@@ -77,6 +78,11 @@ class Problems {
 		refreshButton.title = "Refresh project problems";
 		refreshButton.innerText = "Refresh";
 		refreshButton.onclick = function(_) refresh();
+		refreshButton.oncontextmenu = function(e:MouseEvent) {
+			e.preventDefault();
+			showRefreshMenu(e);
+			return false;
+		};
 		summary = Main.document.createSpanElement();
 		summary.className = "problems-summary";
 		var filters = Main.document.createDivElement();
@@ -155,13 +161,28 @@ class Problems {
 				refreshProject();
 				return;
 			}
-			var file = GmlFile.current;
-			if (file == null || file.path == null) {
-				renderMessage("Open a code file to refresh its problems.");
-				return;
-			}
-			updateFile(file, null, true);
+			refreshCurrentFile();
 		} else refreshProject();
+	}
+
+	static function refreshCurrentFile():Void {
+		var file = GmlFile.current;
+		if (file == null || file.path == null) {
+			renderMessage("Open a code file to refresh its problems.");
+			return;
+		}
+		updateFile(file, null, true);
+	}
+
+	static function refreshOpenTabs():Void {
+		var hasFiles = false;
+		for (tab in ChromeTabs.getTabs()) {
+			var file = tab.gmlFile;
+			if (file == null || file.path == null) continue;
+			hasFiles = true;
+			updateFile(file, null, true);
+		}
+		if (!hasFiles) renderMessage("Open a code file to refresh its problems.");
 	}
 
 	static function initCollapseButton():Void {
@@ -421,6 +442,49 @@ class Problems {
 			if (menu.contains(target)) return;
 			hideMenu();
 		});
+		initRefreshMenu();
+	}
+
+	static function initRefreshMenu():Void {
+		refreshMenu = Main.document.createDivElement();
+		refreshMenu.className = "problems-context-menu";
+		refreshMenu.style.display = "none";
+		addRefreshMenuItem("Current file", function() refreshCurrentFile());
+		addRefreshMenuItem("All tabs", function() refreshOpenTabs());
+		addRefreshMenuItem("Entire project", function() refreshProject());
+		Main.document.body.appendChild(refreshMenu);
+		Main.document.addEventListener("mousedown", function(e) {
+			if (refreshMenu.style.display == "none") return;
+			var target:Element = cast e.target;
+			if (refreshMenu.contains(target)) return;
+			refreshMenu.style.display = "none";
+		});
+	}
+
+	static function addRefreshMenuItem(label:String, action:Void->Void):Void {
+		var button = Main.document.createButtonElement();
+		button.type = "button";
+		button.className = "problems-context-menu-item refresh-menu-item";
+		button.innerText = label;
+		button.onclick = function(e) {
+			e.stopPropagation();
+			action();
+			refreshMenu.style.display = "none";
+		};
+		refreshMenu.appendChild(button);
+	}
+
+	static function showRefreshMenu(e:MouseEvent):Void {
+		hideMenu();
+		refreshMenu.style.display = "";
+		var left = e.clientX;
+		var top = e.clientY;
+		var maxLeft = Main.window.innerWidth - refreshMenu.offsetWidth - 4;
+		var maxTop = Main.window.innerHeight - refreshMenu.offsetHeight - 4;
+		if (left > maxLeft) left = Std.int(Math.max(4, maxLeft));
+		if (top > maxTop) top = Std.int(Math.max(4, maxTop));
+		refreshMenu.style.left = left + "px";
+		refreshMenu.style.top = top + "px";
 	}
 	
 	static function addMenuItem(label:String, icon:String, action:Void->Void):Void {

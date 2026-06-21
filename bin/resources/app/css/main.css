@@ -611,6 +611,9 @@ https://stackoverflow.com/a/36247448/5578773
 	white-space: nowrap;
 	cursor: default;
 }
+.problems-context-menu-item.refresh-menu-item {
+	padding-left: 14px;
+}
 .problems-context-menu-item.has-submenu {
 	display: flex;
 	align-items: center;
