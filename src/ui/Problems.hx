@@ -415,8 +415,8 @@ class Problems {
 		button.innerText = label;
 		button.onclick = function(e) {
 			e.stopPropagation();
-			hideMenu();
 			action();
+			hideMenu();
 		};
 		menu.appendChild(button);
 	}
