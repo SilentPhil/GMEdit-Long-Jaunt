@@ -428,7 +428,6 @@ import ui.treeview.TreeViewElement;
 	public function finishedIndexing() {
 		nameNode.innerText = displayName;
 		if (current.hasGMLive) GMLive.updateAll();
-		ui.Problems.refreshProject();
 		//
 		fileCache.onSave();
 		//
@@ -499,6 +498,9 @@ import ui.treeview.TreeViewElement;
 			if (activeFile != null) activeFile.tabEl.click();
 			//
 			PluginEvents.projectStateRestore({project:this, state:state});
+		}
+		if (Preferences.current.problemsScanMode == ui.preferences.PrefData.PrefProblemsScanMode.OnProjectOpen) {
+			ui.Problems.refreshAutomatic();
 		}
 	}
 	//

@@ -31,6 +31,13 @@ import haxe.DynamicAccess;
 		hashColorLiterals: true,
 		arrowFunctions: true,
 		showGMLive: Everywhere,
+		problemsScanMode: OnProjectOpen,
+		problemsScanScope: OpenTabs,
+		problemsStartExpanded: true,
+		problemsShowCurrentFileOnly: true,
+		problemsRefreshCurrentFileOnly: true,
+		problemsFirstRefreshFullProject: false,
+		problemsRefreshOnTabChange: true,
 		
 		fileSessionTime: 7,
 		projectSessionTime: 14,
@@ -141,6 +148,13 @@ typedef PrefDataImpl = {
 	singleClickOpen:Bool,
 	taskbarOverlays:Bool,
 	showGMLive:PrefGMLive,
+	problemsScanMode:PrefProblemsScanMode,
+	problemsScanScope:PrefProblemsScanScope,
+	problemsStartExpanded:Bool,
+	problemsShowCurrentFileOnly:Bool,
+	problemsRefreshCurrentFileOnly:Bool,
+	problemsFirstRefreshFullProject:Bool,
+	problemsRefreshOnTabChange:Bool,
 	
 	avoidYyChanges:Bool,
 	fileChangeAction:PrefFileChangeAction,
@@ -278,4 +292,14 @@ enum abstract PrefGMLive(Int) from Int to Int {
 	public inline function isActive():Bool {
 		return this > 0;
 	}
+}
+enum abstract PrefProblemsScanMode(Int) from Int to Int {
+	var OnProjectOpen = 0;
+	var OnProblemsShown = 1;
+	var Disabled = 2;
+}
+enum abstract PrefProblemsScanScope(Int) from Int to Int {
+	var WholeProject = 0;
+	var OpenTabs = 1;
+	var CurrentFile = 2;
 }

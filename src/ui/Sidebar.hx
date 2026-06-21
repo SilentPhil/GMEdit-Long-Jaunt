@@ -46,6 +46,7 @@ using tools.HtmlTools;
 		if (curr != null) panel.removeChild(curr);
 		panel.appendChild(item.el);
 		select.onchange = fn;
+		if (name == "Problems") Problems.onShown();
 		/*
 		if (panel.children[0] != null) {
 			panel.removeChild(panel.children[0]);

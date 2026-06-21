@@ -29,6 +29,8 @@ import parsers.linter.GmlLinter;
 import synext.GmlExtLambda;
 import tools.Dictionary;
 import ui.GlobalSearch.GlobalSearchOpt;
+import ui.preferences.PrefData.PrefProblemsScanMode;
+import ui.preferences.PrefData.PrefProblemsScanScope;
 using tools.HtmlTools;
 using tools.PathTools;
 
@@ -59,10 +61,12 @@ class Problems {
 	static var collapseButton:ButtonElement;
 	static var isCollapsed:Bool = false;
 	static var lastPanelHeight:Float = 150;
+	static var lastFullyScannedProject:Project = null;
 	
 	public static function init():Void {
 		element = Main.document.createDivElement();
 		element.className = "problems-panel";
+		showCurrentFileOnly = Preferences.current.problemsShowCurrentFileOnly;
 		var toolbar = Main.document.createDivElement();
 		toolbar.className = "problems-toolbar";
 		refreshButton = Main.document.createButtonElement();
@@ -70,7 +74,7 @@ class Problems {
 		refreshButton.className = "problems-refresh";
 		refreshButton.title = "Refresh project problems";
 		refreshButton.innerText = "Refresh";
-		refreshButton.onclick = function(_) refreshProject();
+		refreshButton.onclick = function(_) refresh();
 		summary = Main.document.createSpanElement();
 		summary.className = "problems-summary";
 		var filters = Main.document.createDivElement();
@@ -114,12 +118,46 @@ class Problems {
 		initMenu();
 		Sidebar.add("Problems", element);
 		initCollapseButton();
+		if (!Preferences.current.problemsStartExpanded) setCollapsed(true);
 		renderMessage("No project problems checked yet.");
 	}
 	
 	public static function show():Void {
 		Sidebar.set("Problems");
 		if (isCollapsed) setCollapsed(false);
+	}
+
+	public static function onShown():Void {
+		if (Preferences.current.problemsScanMode == PrefProblemsScanMode.OnProblemsShown) {
+			refreshAutomatic();
+		}
+	}
+
+	public static function refreshAutomatic():Void {
+		switch (Preferences.current.problemsScanScope) {
+			case WholeProject:
+				refreshProject();
+			case OpenTabs:
+				for (tab in ChromeTabs.getTabs()) updateFile(tab.gmlFile, null, true);
+			case CurrentFile:
+				updateFile(GmlFile.current, null, true);
+		}
+	}
+
+	public static function refresh():Void {
+		if (Preferences.current.problemsRefreshCurrentFileOnly) {
+			if (Preferences.current.problemsFirstRefreshFullProject
+				&& lastFullyScannedProject != Project.current) {
+				refreshProject();
+				return;
+			}
+			var file = GmlFile.current;
+			if (file == null || file.path == null) {
+				renderMessage("Open a code file to refresh its problems.");
+				return;
+			}
+			updateFile(file, null, true);
+		} else refreshProject();
 	}
 
 	static function initCollapseButton():Void {
@@ -159,6 +197,7 @@ class Problems {
 			collapseButton.setAttribute("aria-label", collapseButton.title);
 		}
 		dispatchResize();
+		if (!collapsed) onShown();
 	}
 
 	static function dispatchResize():Void {
@@ -293,6 +332,9 @@ class Problems {
 	}
 	
 	public static function onActiveFileChange():Void {
+		if (Preferences.current.problemsRefreshOnTabChange) {
+			refreshAutomatic();
+		}
 		if (showCurrentFileOnly) render();
 		else if (showCurrentFileButton != null) updateFilterButtons(countErrors(), countWarnings());
 	}
@@ -546,14 +588,15 @@ class Problems {
 			return code;
 		}, function() {
 			isRunning = false;
+			lastFullyScannedProject = project;
 			refreshButton.disabled = false;
 			sortItems();
 			render();
 		}, opt);
 	}
 	
-	public static function updateFile(file:GmlFile, ?code:String):Void {
-		if (isRunning || file == null || file.path == null || items.length == 0) return;
+	public static function updateFile(file:GmlFile, ?code:String, force:Bool = false):Void {
+		if (isRunning || file == null || file.path == null || (!force && items.length == 0)) return;
 		var path = normalizeOpenPath(file.path);
 		var hadItems = false;
 		var nextItems:Array<ProblemItem> = [];
@@ -562,7 +605,7 @@ class Problems {
 				hadItems = true;
 			} else nextItems.push(item);
 		}
-		if (!hadItems) return;
+		if (!hadItems && !force) return;
 		items = nextItems;
 		try {
 			if (code == null && file.codeEditor != null) code = file.codeEditor.session.getValue();
