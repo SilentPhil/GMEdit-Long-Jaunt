@@ -44,6 +44,17 @@ class AceTooltips {
 	}
 	
 	public static var getDocAt_extra:String;
+	static function getPubSubEventText(eventName:String):String {
+		var pubSubEvent = GmlAPI.gmlPubSubEvents[eventName];
+		if (pubSubEvent == null) return null;
+		var args:Array<String> = [];
+		for (i in 0 ... pubSubEvent.args.length) {
+			var arg = pubSubEvent.args[i];
+			var argType = pubSubEvent.argTypes[i];
+			args.push(argType != null ? arg + ":" + argType.toString() : arg);
+		}
+		return "pub/sub event " + pubSubEvent.name + "\npayload: [" + args.join(", ") + "]";
+	}
 	public static function getTypeAt(session:AceSession, pos:AcePos, token:AceToken):GmlType {
 		if (token == null) return null;
 		var scope = session.gmlScopes.get(pos.row);
@@ -280,7 +291,11 @@ class AceTooltips {
 			default: //r = t;
 		}
 		//
-		if (doc != null) r = doc.getAcText();
+		var pubSubText = getPubSubEventText(v);
+		if (pubSubText != null) {
+			r = pubSubText;
+			doc = null;
+		} else if (doc != null) r = doc.getAcText();
 		switch (t) {
 			case "globalvar": r = (r == null) ? "[globalvar]" : "[globalvar] " + r;
 		}
