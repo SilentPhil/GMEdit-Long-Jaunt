@@ -1204,16 +1204,35 @@ class GmlLinter {
 		return null;
 	}
 	
-	function readSwitch(oldDepth:Int):FoundError {
+	function readSwitch(oldDepth:Int, ?pubSubPayloadVar:String):FoundError {
 		var newDepth = oldDepth + 1;
 		rc(readCheckSkip(LKCubOpen, "an opening `{` for switch-block"));
 		//
 		var isInCase = false;
+		var casePayloadType:GmlType = null;
+		var casePayloadTypeSet = false;
 		inline function resetCase():Void {
 			if (isInCase) {
 				if (prefs.blockScopedCase) discardBlockScopes(newDepth);
 				isInCase = false;
 			}
+			if (pubSubPayloadVar != null && setLocalTypes && casePayloadTypeSet) {
+				var imp = getImports(true);
+				imp.localTypes[pubSubPayloadVar] = casePayloadType;
+				casePayloadType = null;
+				casePayloadTypeSet = false;
+			}
+		}
+		inline function setCasePubSubPayload(eventName:String):Void {
+			if (eventName == null || pubSubPayloadVar == null || !setLocalTypes) return;
+			var eventData = GmlAPI.gmlPubSubEvents[eventName];
+			if (eventData == null) return;
+			var imp = getImports(true);
+			if (!casePayloadTypeSet) {
+				casePayloadType = imp.localTypes[pubSubPayloadVar];
+				casePayloadTypeSet = true;
+			}
+			imp.localTypes[pubSubPayloadVar] = eventData.getTupleType();
 		}
 		//
 		seqStart.setTo(reader);
@@ -1241,6 +1260,7 @@ class GmlLinter {
 					rc(readExpr(newDepth));
 					rc(readCheckSkip(LKColon, "a colon after a case"));
 					resetCase();
+					setCasePubSubPayload(expr.currFieldName != null ? expr.currFieldName : expr.currName);
 				};
 				default: {
 					isInCase = true;
@@ -1538,9 +1558,25 @@ class GmlLinter {
 			case LKSwitch: {
 				z = canBreak;
 				canBreak = true;
+				var switchStart = reader.pos;
 				rc(readExpr(newDepth));
+				var switchExprSource = reader.source.substring(switchStart, reader.pos);
+				var switchExprRx = new RegExp("^\\s*\\(?\\s*(\\w+)\\s*\\)?\\s*$");
+				var switchExprMatch = switchExprRx.exec(switchExprSource);
+				var switchExprName = expr.currName != null
+					? expr.currName
+					: switchExprMatch != null ? switchExprMatch[1] : null;
+				var pubSubPayloadVar:String = null;
+				if (switchExprName != null && currFuncDoc != null && currFuncDoc.args != null) {
+					for (argInd in 0 ... currFuncDoc.args.length - 1) {
+						if (currFuncDoc.args[argInd] == switchExprName) {
+							pubSubPayloadVar = currFuncDoc.args[argInd + 1];
+							break;
+						}
+					}
+				}
 				checkParens();
-				if (readSwitch(newDepth)) {
+				if (readSwitch(newDepth, pubSubPayloadVar)) {
 					canBreak = z;
 					return true;
 				} else canBreak = z;

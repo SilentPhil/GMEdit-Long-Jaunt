@@ -22,6 +22,11 @@ class GmlSeekerJSDocRegex {
 		+ "(" + "(\\S+)" + "(\\s+=" + "(.+)" + ")?)" // `arg` or `arg=value` -> $2
 		// arg name -> $3, arg value wrap -> $4, arg value -> $5
 	);
+	public static var jsDoc_pubsub = new RegExp("^///\\s*"
+		+ "@pubsub\\b\\s*"
+		+ "\\{" + "(.*?)" + "\\}\\s*"
+		+ "(\\S+)"
+	);
 	public static var jsDoc_hint = new RegExp("^///\\s*"
 		+ "@hint\\b\\s*"
 		+ "(?:\\{(.+)?\\}\\s*)?" // type -> $1

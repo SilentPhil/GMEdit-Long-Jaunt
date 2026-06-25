@@ -93,13 +93,28 @@ class GmlLinterArrayLiteral {
 		if (!closed) return self.readSeqStartError("Unclosed [] literal");
 		
 		if (tupleTypes != null) {
-			var lastTupleType:GmlType = tupleTypes[tupleTypes.length - 1].resolve();
-			if (tupleHasRest) {
-				if (index < tupleTypes.length - 1) {
-					self.readSeqStartWarn('Expected a >=${tupleTypes.length-1}-value tuple, got a $index-value tuple');
+			function isOptionalTupleType(t:GmlType):Bool {
+				if (t == null) return true;
+				return switch (t.resolve().getKind()) {
+					case KNullable, KUndefined: true;
+					default: false;
 				}
-			} else if (index != tupleTypes.length) {
-				self.readSeqStartWarn('Expected a ${tupleTypes.length}-value tuple, got a $index-value tuple');
+			}
+			var fixedTupleLength = tupleHasRest ? tupleTypes.length - 1 : tupleTypes.length;
+			var minTupleLength = fixedTupleLength;
+			while (minTupleLength > 0 && isOptionalTupleType(tupleTypes[minTupleLength - 1])) {
+				minTupleLength -= 1;
+			}
+			if (tupleHasRest) {
+				if (index < minTupleLength) {
+					self.readSeqStartWarn('Expected a >=$minTupleLength-value tuple, got a $index-value tuple');
+				}
+			} else if (index < minTupleLength || index > fixedTupleLength) {
+				if (minTupleLength == fixedTupleLength) {
+					self.readSeqStartWarn('Expected a $fixedTupleLength-value tuple, got a $index-value tuple');
+				} else {
+					self.readSeqStartWarn('Expected a $minTupleLength..$fixedTupleLength-value tuple, got a $index-value tuple');
+				}
 			}
 			outType = targetType;
 		} else if (itemType != null) {

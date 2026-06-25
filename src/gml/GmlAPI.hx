@@ -3,6 +3,7 @@ import ui.preferences.PrefCode;
 import electron.FileSystem;
 import gml.GmlAPILoader;
 import gml.GmlEnum;
+import gml.GmlPubSubEvent;
 import gml.file.GmlFile;
 import gml.type.GmlType;
 import gml.type.GmlTypeTools;
@@ -253,6 +254,9 @@ class GmlAPI {
 	
 	public static var gmlNamespaceComp:ArrayMap<AceAutoCompleteItem> = new ArrayMap();
 	
+	/** pub/sub event name -> payload signature */
+	public static var gmlPubSubEvents:Dictionary<GmlPubSubEvent> = new Dictionary();
+	
 	public static function ensureNamespace(name:String, ?opt:GmlEnsureNamespaceOptions):GmlNamespace {
 		var ns = gmlNamespaces[name];
 		if (ns == null) {
@@ -305,6 +309,7 @@ class GmlAPI {
 		gmlLookupItems.resize(0);
 		gmlNamespaces = new Dictionary();
 		gmlNamespaceComp.clear();
+		gmlPubSubEvents = new Dictionary();
 		for (type in gmx.GmxLoader.assetTypes) {
 			gmlAssetIDs.set(type, new Dictionary());
 		}

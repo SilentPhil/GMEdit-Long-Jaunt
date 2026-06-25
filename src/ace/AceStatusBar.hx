@@ -91,7 +91,251 @@ class AceStatusBar {
 	private static var emptyToken:AceToken = { type:"", value:"" };
 	private function updateComp(editor:AceWrap, row:Int, col:Int, imports:GmlImports, lambdas:GmlExtLambda, scope:String) {
 		statusHint.innerHTML = "";
+		function renderDoc(doc:GmlFuncDoc, argCurr:Int):Void {
+			var args = doc.args;
+			var argc = args.length;
+			var out = document.createSpanElement();
+			out.className = "hint";
+			out.appendChild(document.createTextNode(doc.pre));
+			//
+			var currArg:SpanElement = null;
+			for (i in 0 ... argc) {
+				if (i > 0) out.appendChild(document.createTextNode(", "));
+				var span = document.createSpanElement();
+				span.classList.add("argument");
+				if (i == argCurr || i == argc - 1 && argCurr >= i) {
+					span.classList.add("current");
+					currArg = span;
+				}
+				span.appendChild(document.createTextNode(args[i]));
+				out.appendChild(span);
+			}
+			out.appendChild(document.createTextNode(doc.post));
+			statusHint.appendChild(out);
+			if (currArg != null) {
+				statusHint.scrollLeft = Std.int(currArg.offsetLeft + currArg.offsetWidth / 2 - statusHint.offsetWidth / 2);
+				//currArg.scrollIntoView();
+			}
+			statusHint.title = out.innerText;
+			statusHint.classList.remove("active");
+		}
 		var session = editor.session;
+		function isAtOrAfterCursor(pos:AcePos):Bool {
+			return pos.row > row || pos.row == row && pos.column >= col;
+		}
+		function pubSubPayloadArgIndex(funcName:String):Int {
+			return switch (funcName) {
+				case "perform_event", "pub_sub_event_perform": 1;
+				case "perform_event_with_delay": 2;
+				default: -1;
+			}
+		}
+		function renderPubSubPayloadDoc(eventName:String, argCurr:Int):Void {
+			var pubSubEvent = GmlAPI.gmlPubSubEvents[eventName];
+			if (pubSubEvent == null) return;
+			var pubSubArgs = [];
+			for (i in 0 ... pubSubEvent.args.length) {
+				var arg = pubSubEvent.args[i];
+				var argType = pubSubEvent.argTypes[i];
+				pubSubArgs.push(argType != null ? arg + ":" + argType.toString() : arg);
+			}
+			renderDoc(new GmlFuncDoc(pubSubEvent.name, pubSubEvent.name + "([", "])", pubSubArgs, false), argCurr);
+		}
+		function tryRenderPubSubPayloadFromLine():Bool {
+			var line = session.getLine(row);
+			var uptoCursor = line.substring(0, col);
+			var arrayOpenInd = uptoCursor.lastIndexOf("[");
+			if (arrayOpenInd < 0) return false;
+			var parOpenInd = uptoCursor.lastIndexOf("(", arrayOpenInd);
+			if (parOpenInd < 0) return false;
+			
+			var receiver = uptoCursor.substring(0, parOpenInd);
+			var funcRx = ~/(\w+)\s*$/;
+			var funcMatch = funcRx.match(receiver) ? funcRx.matched(1) : null;
+			var payloadArgIndex = pubSubPayloadArgIndex(funcMatch);
+			if (payloadArgIndex < 0) return false;
+			
+			var beforeArray = uptoCursor.substring(parOpenInd + 1, arrayOpenInd);
+			var roundDepth = 0;
+			var squareDepth = 0;
+			var curlyDepth = 0;
+			var commasBeforeArray = 0;
+			var i = 0;
+			while (i < beforeArray.length) {
+				switch (beforeArray.fastCodeAt(i)) {
+					case "(".code: roundDepth += 1;
+					case ")".code: if (roundDepth > 0) roundDepth -= 1;
+					case "[".code: squareDepth += 1;
+					case "]".code: if (squareDepth > 0) squareDepth -= 1;
+					case "{".code: curlyDepth += 1;
+					case "}".code: if (curlyDepth > 0) curlyDepth -= 1;
+					case ",".code if (roundDepth == 0 && squareDepth == 0 && curlyDepth == 0):
+						commasBeforeArray += 1;
+					default:
+				}
+				i += 1;
+			}
+			if (commasBeforeArray != payloadArgIndex) return false;
+			
+			var eventArg = beforeArray.split(",")[0];
+			var eventName:String = null;
+			for (name => _ in GmlAPI.gmlPubSubEvents) {
+				if (eventArg.contains(name)) {
+					eventName = name;
+					break;
+				}
+			}
+			if (eventName == null) return false;
+			
+			var payloadSoFar = uptoCursor.substring(arrayOpenInd + 1);
+			roundDepth = 0;
+			squareDepth = 0;
+			curlyDepth = 0;
+			var argCurr = 0;
+			i = 0;
+			while (i < payloadSoFar.length) {
+				switch (payloadSoFar.fastCodeAt(i)) {
+					case "(".code: roundDepth += 1;
+					case ")".code: if (roundDepth > 0) roundDepth -= 1;
+					case "[".code: squareDepth += 1;
+					case "]".code: if (squareDepth > 0) squareDepth -= 1;
+					case "{".code: curlyDepth += 1;
+					case "}".code: if (curlyDepth > 0) curlyDepth -= 1;
+					case ",".code if (roundDepth == 0 && squareDepth == 0 && curlyDepth == 0):
+						argCurr += 1;
+					default:
+				}
+				i += 1;
+			}
+			renderPubSubPayloadDoc(eventName, argCurr);
+			return true;
+		}
+		inline function isRoundOpen(tk:AceToken):Bool return tk.type == "paren.lparen";
+		inline function isRoundClose(tk:AceToken):Bool return tk.type == "paren.rparen";
+		inline function isSquareOpen(tk:AceToken):Bool return tk.type == "square.paren.lparen";
+		inline function isSquareClose(tk:AceToken):Bool return tk.type == "square.paren.rparen";
+		inline function isCurlyOpen(tk:AceToken):Bool return tk.type == "curly.paren.lparen";
+		inline function isCurlyClose(tk:AceToken):Bool return tk.type == "curly.paren.rparen";
+		inline function isComma(tk:AceToken):Bool return tk.type == "punctuation.operator" && tk.value.contains(",");
+		function tryRenderPubSubPayload():Bool {
+			var scan = new AceTokenIterator(session, row, col);
+			var tk = scan.getCurrentToken();
+			var squareDepth = 0;
+			var tries = 0;
+			while (tk != null && ++tries < 512) {
+				if (isSquareClose(tk)) {
+					squareDepth += 1;
+				} else if (isSquareOpen(tk)) {
+						if (squareDepth > 0) {
+							squareDepth -= 1;
+						} else {
+							var arrayOpen = scan.getCurrentTokenPosition();
+							var back = AceTokenIterator.createForPos(session, arrayOpen);
+							var commasBeforeArray = 0;
+							var roundDepth = 0;
+							var sqDepth = 0;
+							var curlyDepth = 0;
+							var foundOpen:AcePos = null;
+							var bt = back.stepBackward();
+							while (bt != null) {
+								if (isRoundClose(bt)) {
+									roundDepth += 1;
+								} else if (isSquareClose(bt)) {
+									sqDepth += 1;
+								} else if (isCurlyClose(bt)) {
+									curlyDepth += 1;
+								} else if (isRoundOpen(bt)) {
+										if (roundDepth > 0) {
+											roundDepth -= 1;
+										} else if (sqDepth == 0 && curlyDepth == 0) {
+											foundOpen = back.getCurrentTokenPosition();
+											break;
+										}
+								} else if (isSquareOpen(bt)) {
+									if (sqDepth > 0) sqDepth -= 1;
+								} else if (isCurlyOpen(bt)) {
+									if (curlyDepth > 0) curlyDepth -= 1;
+								} else if (isComma(bt) && roundDepth == 0 && sqDepth == 0 && curlyDepth == 0) {
+									commasBeforeArray += 1;
+								}
+								bt = back.stepBackward();
+							}
+							if (foundOpen != null) {
+								var funcIter = AceTokenIterator.createForPos(session, foundOpen);
+								var funcToken = funcIter.stepBackwardNonText();
+								var funcName = funcToken != null ? funcToken.value : null;
+								var payloadArgIndex = pubSubPayloadArgIndex(funcName);
+								if (payloadArgIndex == commasBeforeArray) {
+									var forward = AceTokenIterator.createForPos(session, foundOpen);
+									var ft = forward.stepForward();
+									var eventName:String = null;
+									roundDepth = 0;
+									sqDepth = 0;
+									curlyDepth = 0;
+									while (ft != null) {
+										if (isRoundOpen(ft)) {
+											roundDepth += 1;
+										} else if (isSquareOpen(ft)) {
+											sqDepth += 1;
+										} else if (isCurlyOpen(ft)) {
+											curlyDepth += 1;
+										} else if (isRoundClose(ft)) {
+											if (roundDepth > 0) roundDepth -= 1;
+										} else if (isSquareClose(ft)) {
+											if (sqDepth > 0) sqDepth -= 1;
+										} else if (isCurlyClose(ft)) {
+											if (curlyDepth > 0) curlyDepth -= 1;
+										} else if (isComma(ft) && roundDepth == 0 && sqDepth == 0 && curlyDepth == 0) {
+											break;
+										} else if (GmlAPI.gmlPubSubEvents.exists(ft.value)) {
+											eventName = ft.value;
+										}
+										ft = forward.stepForward();
+									}
+									if (eventName != null) {
+										var argIter = AceTokenIterator.createForPos(session, arrayOpen);
+										var at = argIter.stepForward();
+										var argCurr = 0;
+										sqDepth = 0;
+										roundDepth = 0;
+										curlyDepth = 0;
+										while (at != null) {
+											var atPos = argIter.getCurrentTokenPosition();
+											if (isAtOrAfterCursor(atPos)) break;
+											if (isRoundOpen(at)) {
+												roundDepth += 1;
+											} else if (isRoundClose(at)) {
+												if (roundDepth > 0) roundDepth -= 1;
+											} else if (isSquareOpen(at)) {
+												sqDepth += 1;
+											} else if (isSquareClose(at)) {
+												if (sqDepth > 0) {
+													sqDepth -= 1;
+												} else break;
+											} else if (isCurlyOpen(at)) {
+												curlyDepth += 1;
+											} else if (isCurlyClose(at)) {
+												if (curlyDepth > 0) curlyDepth -= 1;
+											} else if (isComma(at) && roundDepth == 0 && sqDepth == 0 && curlyDepth == 0) {
+												argCurr += 1;
+											}
+											at = argIter.stepForward();
+										}
+										renderPubSubPayloadDoc(eventName, argCurr);
+										return true;
+									}
+								}
+							}
+						}
+				}
+				tk = scan.stepBackward();
+			}
+			return false;
+		}
+		if (tryRenderPubSubPayloadFromLine() || tryRenderPubSubPayload()) {
+			statusHint.onclick = null;
+			return;
+		}
 		var iter:AceTokenIterator = new AceTokenIterator(session, row, col);
 		var sctx:AceStatusBarDocSearch = {
 			session: editor.session, scope: scope,
@@ -176,12 +420,41 @@ class AceStatusBar {
 		// go forward to verify that cursor token is inside that call:
 		depth = -1;
 		var argCurr = 0;
+		var pubSubPayloadArg = switch (doc != null ? doc.name : null) {
+			case "perform_event", "pub_sub_event_perform": 1;
+			case "perform_event_with_delay": 2;
+			default: -1;
+		}
+		var pubSubEventName:String = null;
+		var pubSubPayloadDepth = -1;
+		var pubSubPayloadCurr = 0;
 		tk = iter.stepForward(); // we should now be at `(`
 		while (tk != null) {
 			switch (tk.type) {
-				case "paren.lparen", "square.paren.lparen", "curly.paren.lparen": depth += tk.value.length;
-				case "paren.rparen", "square.paren.rparen", "curly.paren.rparen": depth -= tk.value.length;
-				case "punctuation.operator" if (tk.value.contains(",") && depth == 0): argCurr += 1;
+				case "paren.lparen", "curly.paren.lparen": depth += tk.value.length;
+				case "square.paren.lparen": {
+					if (pubSubPayloadArg >= 0 && argCurr == pubSubPayloadArg && depth == 0) {
+						pubSubPayloadDepth = depth + tk.value.length;
+						pubSubPayloadCurr = 0;
+					}
+					depth += tk.value.length;
+				};
+				case "paren.rparen", "curly.paren.rparen": depth -= tk.value.length;
+				case "square.paren.rparen": {
+					depth -= tk.value.length;
+					if (pubSubPayloadDepth >= 0 && depth < pubSubPayloadDepth) {
+						pubSubPayloadDepth = -1;
+					}
+				};
+				case "punctuation.operator" if (tk.value.contains(",")): {
+					if (pubSubPayloadDepth >= 0 && depth == pubSubPayloadDepth) {
+						pubSubPayloadCurr += 1;
+					} else if (depth == 0) argCurr += 1;
+				};
+				default:
+			}
+			if (pubSubPayloadArg >= 0 && argCurr == 0 && tk.value != null && GmlAPI.gmlPubSubEvents.exists(tk.value)) {
+				pubSubEventName = tk.value;
 			}
 			if (tk == ctk) break;
 			tk = iter.stepForward();
@@ -190,32 +463,15 @@ class AceStatusBar {
 		if ((tk == null ? ctk != emptyToken : tk != ctk) || depth < 0 && !parEmpty) return;
 		//
 		if (doc != null) {
-			var args = doc.args;
-			var argc = args.length;
-			var out = document.createSpanElement();
-			out.className = "hint";
-			out.appendChild(document.createTextNode(doc.pre));
-			//
-			var currArg:SpanElement = null;
-			for (i in 0 ... argc) {
-				if (i > 0) out.appendChild(document.createTextNode(", "));
-				var span = document.createSpanElement();
-				span.classList.add("argument");
-				if (i == argCurr || i == argc - 1 && argCurr >= i) {
-					span.classList.add("current");
-					currArg = span;
+			if (pubSubPayloadDepth >= 0 && pubSubEventName != null) {
+				var pubSubEvent = GmlAPI.gmlPubSubEvents[pubSubEventName];
+				if (pubSubEvent != null) {
+					renderPubSubPayloadDoc(pubSubEventName, pubSubPayloadCurr);
+					statusHint.onclick = null;
+					return;
 				}
-				span.appendChild(document.createTextNode(args[i]));
-				out.appendChild(span);
 			}
-			out.appendChild(document.createTextNode(doc.post));
-			statusHint.appendChild(out);
-			if (currArg != null) {
-				statusHint.scrollLeft = Std.int(currArg.offsetLeft + currArg.offsetWidth / 2 - statusHint.offsetWidth / 2);
-				//currArg.scrollIntoView();
-			}
-			statusHint.title = out.innerText;
-			statusHint.classList.remove("active");
+			renderDoc(doc, argCurr);
 		} else statusHint.title = "";
 		statusHint.onclick = null;
 	}

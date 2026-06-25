@@ -38,6 +38,9 @@ class GmlLinterExpr extends GmlLinterHelper {
 	/** If readExpr just parsed something starting with an identifier, this holds that.  */
 	public var currName:GmlName;
 	
+	/** If readExpr just parsed a field access, this holds the right-most field name. */
+	public var currFieldName:GmlName;
+	
 	/** Resulting type of last parsed expression. Often is null. */
 	public var currType:GmlType;
 	
@@ -100,6 +103,7 @@ class GmlLinterExpr extends GmlLinterHelper {
 		var statKind = nk;
 		var currKind = nk;
 		var currName = nk == LKIdent ? nextVal : null;
+		var currFieldName:GmlName = null;
 		var isLocalIdent = false;
 		var selfType:GmlType = null;
 		var currType:GmlType = null;
@@ -438,6 +442,7 @@ class GmlLinterExpr extends GmlLinterHelper {
 					self.skip();
 					rc(self.readCheckSkip(LKIdent, "field name after `.`"));
 					var field = self.nextVal;
+					currFieldName = field;
 					
 					// extract `Type` from `Type?` when doing `v.field`/`v?.field`
 					if (currType.isNullable()) currType = currType.unwrapNullable();
@@ -707,6 +712,7 @@ class GmlLinterExpr extends GmlLinterHelper {
 		}
 		//
 		this.currName = currKind == LKIdent ? currName : null;
+		this.currFieldName = currKind == LKField || currKind == LKNullField ? currFieldName : null;
 		this.isLocalIdent = currKind == LKIdent && isLocalIdent;
 		this.currKind = currKind;
 		this.currType = currType;

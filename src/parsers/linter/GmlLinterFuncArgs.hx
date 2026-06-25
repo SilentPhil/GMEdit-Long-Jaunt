@@ -1,4 +1,5 @@
 package parsers.linter;
+import gml.GmlAPI;
 import gml.GmlFuncDoc;
 import gml.type.GmlType;
 import gml.type.GmlTypeDef;
@@ -128,6 +129,17 @@ class GmlLinterFuncArgs extends GmlLinterHelper {
 		//
 		var coroutineStatus = 0; // [none, init, continue]
 		var coroutineResult:GmlType = null;
+		var arrayGetSafeTupleTypes:ReadOnlyArray<GmlType> = null;
+		var arrayGetSafeIndex:Null<Int> = null;
+		var pubSubPayloadArgInd = -1;
+		var pubSubPayloadType:GmlType = null;
+		if (doc != null) switch (doc.name) {
+			case "perform_event", "pub_sub_event_perform":
+				pubSubPayloadArgInd = 1;
+			case "perform_event_with_delay":
+				pubSubPayloadArgInd = 2;
+			default:
+		}
 		//
 		if (doc != null) {
 			if (argTypes != null) for (i in 0 ... argTypesLen) {
@@ -185,6 +197,9 @@ class GmlLinterFuncArgs extends GmlLinterHelper {
 					argType = argTypeInd >= argTypesLen ? null : argTypes[argTypeInd];
 				}
 			} else argType = null;
+			if (pubSubPayloadType != null && argc == pubSubPayloadArgInd) {
+				argType = pubSubPayloadType;
+			}
 			
 			// read the next argument:
 			var argExprType:GmlType, argExprValue:GmlLinterValue;
@@ -227,6 +242,14 @@ class GmlLinterFuncArgs extends GmlLinterHelper {
 				argExprValue = expr.currValue;
 			}
 			
+			if (pubSubPayloadArgInd >= 0 && argc == 0 && !isUndefined) {
+				var eventName = expr.currFieldName != null ? expr.currFieldName : expr.currName;
+				var pubSubEvent = eventName != null ? GmlAPI.gmlPubSubEvents[eventName] : null;
+				if (pubSubEvent != null) {
+					pubSubPayloadType = pubSubEvent.getTupleType();
+				}
+			}
+			
 			if (coroutineResult != null && argc == 0) {
 				if (isUndefined
 				|| argExprValue != null && argExprValue.match(GmlLinterValue.VNumber(_, _) | GmlLinterValue.VUndefined)
@@ -237,6 +260,22 @@ class GmlLinterFuncArgs extends GmlLinterHelper {
 					coroutineResult = GmlTypeDef.simpleOf(GmlExtCoroutines.arrayTypeName, [coroutineResult]);
 				} else {
 					coroutineResult = GmlTypeDef.bool;
+				}
+			}
+			
+			if (doc != null && doc.name == "array_get_safe" && !isUndefined) {
+				if (argc == 0) {
+					switch (argExprType.resolve()) {
+						case TInst(_, params, KTuple):
+							arrayGetSafeTupleTypes = params;
+						default:
+					}
+				} else if (argc == 1) {
+					switch (argExprValue) {
+						case VNumber(value, _):
+							arrayGetSafeIndex = Std.int(value);
+						default:
+					}
 				}
 			}
 			
@@ -261,7 +300,11 @@ class GmlLinterFuncArgs extends GmlLinterHelper {
 						default:
 					}
 					//
-					if (!linter.valueCanCastTo(argExprValue, argExprType, argType, templateTypes)) {
+					var suppressCastWarning = doc != null
+						&& doc.name == "array_get_safe"
+						&& argc == 0
+						&& arrayGetSafeTupleTypes != null;
+					if (!suppressCastWarning && !linter.valueCanCastTo(argExprValue, argExprType, argType, templateTypes)) {
 						var argName:String;
 						if (doc != null) {
 							argName = JsTools.or(doc.args[argTypeInd], "?");
@@ -308,7 +351,16 @@ class GmlLinterFuncArgs extends GmlLinterHelper {
 		
 		if (doc != null) {
 			var retType = fnTypeReturnType != null ? fnTypeReturnType : doc.returnType;
-			if (bufferAutoTypeRet) {
+			if (doc.name == "array_get_safe" && arrayGetSafeTupleTypes != null && arrayGetSafeIndex != null) {
+				var index = arrayGetSafeIndex;
+				if (index >= 0 && index < arrayGetSafeTupleTypes.length) {
+					retType = arrayGetSafeTupleTypes[index];
+					if (retType != null && !retType.isNullable()) {
+						retType = GmlTypeDef.nullable(retType);
+					}
+				}
+			}
+			else if (bufferAutoTypeRet) {
 				retType = bufferAutoType;
 			}
 			else if (lastParamRet) {

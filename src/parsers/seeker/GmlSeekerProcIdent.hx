@@ -6,6 +6,7 @@ import gml.GmlAPI;
 import gml.GmlAPI.GmlLookup;
 import gml.GmlFuncDoc;
 import gml.GmlNamespace.GmlFieldAccess;
+import gml.GmlPubSubEvent;
 import gml.type.GmlType;
 import gml.type.GmlTypeDef;
 import gml.type.GmlTypeTemplateItem;
@@ -196,6 +197,18 @@ class GmlSeekerProcIdent {
 			var templateSelf:GmlType = GmlSeekerProcExpr.templateSelf;
 			var templateItems:Array<GmlTypeTemplateItem> = GmlSeekerProcExpr.templateItems;
 			var fieldType:GmlType = GmlSeekerProcExpr.fieldType;
+			
+			if (seeker.jsDoc.pubSubArgs != null) {
+				var pubSubTypes:Array<GmlType> = [];
+				for (typeStr in seeker.jsDoc.pubSubTypes) {
+					pubSubTypes.push(GmlTypeDef.parse(typeStr, s));
+				}
+				seeker.out.pubSubEvents[s] = new GmlPubSubEvent(
+					s,
+					seeker.jsDoc.pubSubArgs.copy(),
+					pubSubTypes
+				);
+			}
 			
 			// when we have code like `arr[i] = 0`, we want `arr` to be `int[]`, not just `int`
 			var arrayAccInd = arrayAccessors.length;

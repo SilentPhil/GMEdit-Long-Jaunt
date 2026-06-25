@@ -40,6 +40,8 @@ class GmlSeekerJSDoc {
 	public var isVirtual:Bool = false;
 	public var isAbstract:Bool = false;
 	public var isOverride:Bool = false;
+	public var pubSubArgs:Array<String> = null;
+	public var pubSubTypes:Array<String> = null;
 	public var redirectCount = 0;
 	
 	public function reset(resetInterf = true):Void {
@@ -56,6 +58,8 @@ class GmlSeekerJSDoc {
 		isVirtual = false;
 		isAbstract = false;
 		isOverride = false;
+		pubSubArgs = null;
+		pubSubTypes = null;
 		if (resetInterf) resetInterface();
 	}
 	public function resetInterface() {
@@ -91,6 +95,8 @@ class GmlSeekerJSDoc {
 		r.isVirtual = isVirtual;
 		r.isAbstract = isAbstract;
 		r.isOverride = isOverride;
+		r.pubSubArgs = copyArray(pubSubArgs);
+		r.pubSubTypes = copyArray(pubSubTypes);
 		r.redirectCount = redirectCount;
 		return r;
 	}
@@ -131,6 +137,8 @@ class GmlSeekerJSDoc {
 		if (q.isVirtual) isVirtual = true;
 		if (q.isAbstract) isAbstract = true;
 		if (q.isOverride) isOverride = true;
+		pubSubArgs = concatArrays(pubSubArgs, q.pubSubArgs);
+		pubSubTypes = concatArrays(pubSubTypes, q.pubSubTypes);
 		implementsNames = concatArrays(implementsNames, q.implementsNames);
 		templateItems = concatArrays(templateItems, q.templateItems);
 	}
@@ -492,6 +500,17 @@ class GmlSeekerJSDoc {
 				types.push(argType);
 			}
 			return; // found!
+		}
+		
+		mt = jsDoc_pubsub.exec(s);
+		if (mt != null) {
+			if (pubSubArgs == null) {
+				pubSubArgs = [];
+				pubSubTypes = [];
+			}
+			pubSubTypes.push(mt[1]);
+			pubSubArgs.push(mt[2]);
+			return;
 		}
 		
 		if (seeker.hasFunctionLiterals) {

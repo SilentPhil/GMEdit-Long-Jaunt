@@ -5,6 +5,7 @@ import file.FileKind;
 import gml.GmlAPI;
 import gml.GmlNamespace.GmlFieldAccess;
 import gml.*;
+import gml.GmlPubSubEvent;
 import gml.type.GmlType;
 import synext.GmlExtCoroutines;
 import synext.GmlExtMFunc;
@@ -72,6 +73,9 @@ class GmlSeekData {
 	public var namespaceImplements:Dictionary<Array<String>> = new Dictionary();
 	
 	public var typedefs:ArrayMap<GmlType> = new ArrayMap();
+	
+	// pub/sub event payload signatures declared in this file
+	public var pubSubEvents:ArrayMap<GmlPubSubEvent> = new ArrayMap();
 	
 	// features
 	public var imports:Dictionary<GmlImports> = null;
@@ -267,6 +271,13 @@ class GmlSeekData {
 		next.typedefs.forEach((tn, td) -> {
 			GmlAPI.gmlTypedefs[tn] = td;
 			GmlAPI.ensureNamespace(tn);
+		});
+		
+		prev.pubSubEvents.forEach((eventName, _) -> {
+			if (!next.pubSubEvents.exists(eventName)) GmlAPI.gmlPubSubEvents.remove(eventName);
+		});
+		next.pubSubEvents.forEach((eventName, eventData) -> {
+			GmlAPI.gmlPubSubEvents[eventName] = eventData;
 		});
 		
 		for (hint in prev.fieldHints) {
