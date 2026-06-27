@@ -3,6 +3,10 @@ package ace;
 import ace.extern.AceAutoCompleteItem;
 import ace.extern.AceAutoCompleteItems;
 import ace.extern.AcePos;
+import ace.gml.AceGmlHighlightIdents;
+import gml.GmlAPI;
+import gml.GmlFuncDoc;
+import gml.type.GmlTypeTemplateItem;
 import massive.munit.Assert;
 import tools.Dictionary;
 
@@ -43,5 +47,23 @@ class AceWrapCompleterTest {
 		var line = "add";
 		var items = runCompleter(completer, line, line.length, "add");
 		Assert.areEqual(2, items.length);
+	}
+
+	@Test public function testConstructorTemplateParameterHighlighting() {
+		var name = "UnitTestGenericHighlight";
+		var previous = GmlAPI.gmlDoc[name];
+		var doc = GmlFuncDoc.create(name);
+		doc.templateItems = [new GmlTypeTemplateItem("TPlayer", "Player")];
+		GmlAPI.gmlDoc[name] = doc;
+		Assert.areEqual(
+			"variable",
+			AceGmlHighlightIdents.getTemplateType(name, "TPlayer")
+		);
+		Assert.isNull(AceGmlHighlightIdents.getTemplateType(name, "Player"));
+		if (previous != null) {
+			GmlAPI.gmlDoc[name] = previous;
+		} else {
+			GmlAPI.gmlDoc.remove(name);
+		}
 	}
 }

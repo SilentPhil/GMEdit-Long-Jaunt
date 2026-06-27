@@ -3,7 +3,9 @@ import ace.extern.AceAutoCompleteItem;
 import gml.GmlFuncDoc;
 import gml.GmlNamespace.GmlFieldAccess;
 import gml.GmlLocals;
+import gml.type.GmlTypeDef;
 import gml.type.GmlTypeTemplateItem;
+import gml.type.GmlTypeTools;
 import parsers.GmlSeekData.GmlSeekDataNamespaceHint;
 import parsers.linter.GmlLinter;
 import parsers.seeker.GmlSeekerImpl;
@@ -296,9 +298,38 @@ class GmlSeekerProcDefine {
 					s = seeker.find(Line | Cub0 | Ident);
 					if (s != null && (s.fastCodeAt(0):CharCode).isIdent0_ni()) {
 						doc.parentName = s;
+						doc.parentType = null;
+						var q = seeker.reader;
+						q.skipSpaces1_local();
+						var typeParams:String = null;
+						if (q.peekstr(3) == "/*<") {
+							var commentStart = q.pos;
+							q.skip(2);
+							q.skipComment();
+							if (q.substr(q.pos - 2, 2) == "*/") {
+								typeParams = q.substring(commentStart + 2, q.pos - 2);
+							}
+						} else if (q.peek() == "<".code) {
+							var paramsStart = q.pos;
+							if (q.skipTypeParams()) {
+								typeParams = q.substring(paramsStart, q.pos);
+							}
+						}
+						if (typeParams != null) {
+							var parentTypeStr = s + typeParams;
+							if (doc.templateItems != null) {
+								parentTypeStr = GmlTypeTools.patchTemplateItems(
+									parentTypeStr, doc.templateItems
+								);
+							}
+							var parsedParent = GmlTypeDef.parse(parentTypeStr);
+							if (parsedParent != null) doc.parentType = parsedParent;
+						}
 					}
 				}
-				out.namespaceHints[main] = new GmlSeekDataNamespaceHint(main, doc.parentName, false);
+				out.namespaceHints[main] = new GmlSeekDataNamespaceHint(
+					main, doc.parentName, false, doc.parentType
+				);
 			}
 		}
 	}

@@ -619,7 +619,9 @@ using tools.NativeArray;
 				rdef("comment.doc.line"),
 			]), //}
 			"gml.comment.doc.curly": [
-				rxRule(function(id) {
+				rxRule(function(id, state, stack, line, row) {
+					var templateType = AceGmlHighlightIdents.getTemplateTypeAt(editor, row, id);
+					if (templateType != null) return templateType;
 					if (GmlAPI.gmlNamespaces.exists(id)) return "namespace";
 					if (id == "function") return "namespace";
 					if (GmlAPI.gmlEnums.exists(id)) return "enum";

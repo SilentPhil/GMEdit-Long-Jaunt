@@ -58,7 +58,10 @@ class GmlNamespace {
 	 * Parent namespace, if any
 	 */
 	public var parent:GmlNamespace = null;
-	
+
+	/** Parent namespace with concrete template arguments, if specialized. */
+	public var parentType:GmlType = null;
+
 	/**
 	 * Interfaces that this namespace implements.
 	 */
@@ -97,17 +100,31 @@ class GmlNamespace {
 	public var instLookup:Dictionary<GmlLookup> = new Dictionary();
 	public function getInstType(field:String, depth:Int = 0, accessContext:String = null):GmlType {
 		var q = this, n = depth;
+		var parentTypes:Array<GmlType> = [];
+		inline function specialize(t:GmlType):GmlType {
+			var i = parentTypes.length;
+			while (--i >= 0) {
+				switch (parentTypes[i]) {
+					case TInst(_, params, _):
+						t = GmlTypeTools.specializeParentTemplates(t, params, params.length);
+					default:
+				}
+			}
+			return t;
+		}
 		while (q != null && ++n <= maxDepth) {
 			var t = q.instTypes[field];
-			if (t != null) return isAccessAllowed(q.getOwnInstAccess(field), q.name, accessContext) ? t : null;
+			if (t != null) return isAccessAllowed(q.getOwnInstAccess(field), q.name, accessContext)
+				? specialize(t) : null;
 			if (q.isObject) {
 				t = GmlAPI.stdInstType[field];
-				if (t != null) return t;
+				if (t != null) return specialize(t);
 			}
 			for (qi in q.interfaces.array) {
 				t = qi.getInstType(field, n, accessContext);
-				if (t != null) return t;
+				if (t != null) return specialize(t);
 			}
+			if (q.parent != null && q.parentType != null) parentTypes.push(q.parentType);
 			q = q.parent;
 		}
 		return null;
@@ -131,8 +148,20 @@ class GmlNamespace {
 	 */
 	public function getInstTypeText(field:String, depth:Int = 0, accessContext:String = null):String {
 		var q = this, n = depth;
+		var parentTypes:Array<GmlType> = [];
+		inline function specialize(t:GmlType):GmlType {
+			var i = parentTypes.length;
+			while (--i >= 0) {
+				switch (parentTypes[i]) {
+					case TInst(_, params, _):
+						t = GmlTypeTools.specializeParentTemplates(t, params, params.length);
+					default:
+				}
+			}
+			return t;
+		}
 		inline function fin(t:GmlType):String {
-			return "from " + q.name + "\ntype " + t.toString();
+			return "from " + q.name + "\ntype " + specialize(t).toString();
 		}
 		while (q != null && ++n <= maxDepth) {
 			var t = q.instTypes[field];
@@ -145,6 +174,7 @@ class GmlNamespace {
 				var s = qi.getInstTypeText(field, n, accessContext);
 				if (s != null) return s;
 			}
+			if (q.parent != null && q.parentType != null) parentTypes.push(q.parentType);
 			q = q.parent;
 		}
 		return null;
@@ -298,13 +328,19 @@ class GmlNamespace {
 	public var instAccessSet:Dictionary<Bool> = new Dictionary();
 	public function getInstDoc(field:String, depth:Int = 0, accessContext:String = null):GmlFuncDoc {
 		var q = this, n = depth;
+		var parentTypes:Array<GmlType> = [];
+		inline function specialize(d:GmlFuncDoc):GmlFuncDoc {
+			return d.specializeParents(parentTypes);
+		}
 		while (q != null && ++n <= maxDepth) {
 			var d = q.docInstMap[field];
-			if (d != null) return isAccessAllowed(q.getOwnInstAccess(field), q.name, accessContext) ? d : null;
+			if (d != null) return isAccessAllowed(q.getOwnInstAccess(field), q.name, accessContext)
+				? specialize(d) : null;
 			for (qi in q.interfaces.array) {
 				d = qi.getInstDoc(field, n, accessContext);
-				if (d != null) return d;
+				if (d != null) return specialize(d);
 			}
+			if (q.parent != null && q.parentType != null) parentTypes.push(q.parentType);
 			q = q.parent;
 		}
 		return null;

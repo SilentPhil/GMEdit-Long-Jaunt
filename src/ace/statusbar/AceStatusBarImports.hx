@@ -28,6 +28,7 @@ class AceStatusBarImports {
 			out.argsAreFromJSDoc = doc.argsAreFromJSDoc;
 			out.isConstructor = doc.isConstructor;
 			out.parentName = doc.parentName;
+			out.parentType = doc.parentType;
 			out.selfType = doc.selfType;
 			out.selfTypeIsAuto = doc.selfTypeIsAuto;
 			out.deprecated = doc.deprecated;

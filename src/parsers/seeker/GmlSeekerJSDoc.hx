@@ -179,6 +179,9 @@ class GmlSeekerJSDoc {
 		var out = seeker.out;
 		var q = seeker.reader;
 		var hasType = typeStr != null;
+		if (hasType && seeker.doc != null && seeker.doc.templateItems != null) {
+			typeStr = GmlTypeTools.patchTemplateItems(typeStr, seeker.doc.templateItems);
+		}
 		var type = hasType ? parseType(seeker, typeStr, full) : null;
 		var access:GmlFieldAccess = Public;
 		var accessMatch = null;

@@ -64,7 +64,10 @@ class GmlFuncDoc {
 	
 	/** If this is a 2.3 constructor and it inherits from another, this is the name of that */
 	public var parentName:String = null;
-	
+
+	/** Parent constructor type, including specialized template arguments. */
+	public var parentType:GmlType = null;
+
 	/** Type of `self` set via `/// @self` */
 	public var selfType:GmlType = null;
 	
@@ -257,6 +260,53 @@ class GmlFuncDoc {
 		if (isConstructor) {
 			return GmlType.TInst("constructor", params, KConstructor);
 		} else return GmlType.TInst("function", params, KFunction);
+	}
+
+	/** Returns a view of an inherited method with a chain of parent specializations applied. */
+	public function specializeParents(parentTypes:Array<GmlType>):GmlFuncDoc {
+		if (parentTypes == null || parentTypes.length == 0) return this;
+		var removedTemplateCount = 0;
+		function specialize(type:GmlType):GmlType {
+			var i = parentTypes.length;
+			while (--i >= 0) switch (parentTypes[i]) {
+				case TInst(_, params, _):
+					type = GmlTypeTools.specializeParentTemplates(type, params, params.length);
+				default:
+			}
+			return type;
+		}
+		for (parentType in parentTypes) switch (parentType) {
+			case TInst(_, params, _): removedTemplateCount += params.length;
+			default:
+		}
+		var out = new GmlFuncDoc(name, pre, post, args.copy(), rest);
+		out.argTypes = argTypes != null
+			? [for (t in argTypes) specialize(t)]
+			: null;
+		out.argsAreFromJSDoc = argsAreFromJSDoc;
+		out.hasReturn = hasReturn;
+		out.isConstructor = isConstructor;
+		out.isAbstractClass = isAbstractClass;
+		out.parentName = parentName;
+		out.parentType = this.parentType;
+		out.selfType = specialize(selfType);
+		out.selfTypeIsAuto = selfTypeIsAuto;
+		out.deprecated = deprecated;
+		out.isVirtual = isVirtual;
+		out.isAbstract = isAbstract;
+		out.isOverride = isOverride;
+		out.defaultFieldAccess = defaultFieldAccess;
+		out.lookup = lookup;
+		out.nav = nav;
+		out.templateItems = templateItems != null
+			? templateItems.slice(Std.int(Math.min(removedTemplateCount, templateItems.length)))
+			: null;
+		out.templateSelf = null;
+		var mappedReturn = specialize(returnType);
+		if (returnTypeString != null) {
+			out.returnTypeString = mappedReturn != null ? mappedReturn.toString() : returnTypeString;
+		}
+		return out;
 	}
 	
 	public static var nameTrimRegex = new RegExpCache();

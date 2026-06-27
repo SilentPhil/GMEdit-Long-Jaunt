@@ -235,6 +235,7 @@ class GmlSeekData {
 			if (nsh.parentSpace != null && (ns.parent == null || ns.parent.name != nsh.parentSpace)) {
 				ns.parent = GmlAPI.ensureNamespace(nsh.parentSpace);
 			}
+			ns.parentType = nsh.parentType;
 			if (nsh.isObject != null) {
 				ns.isObject = nsh.isObject;
 				GmlAPI.gmlNamespaceComp[nsh.namespace].meta = nsh.isObject ? "object" : "namespace";
@@ -317,11 +318,13 @@ typedef GmlSeekData_implement = { namespace:String, interfSpace:String };
 class GmlSeekDataNamespaceHint {
 	public var namespace:String;
 	public var parentSpace:String;
+	public var parentType:GmlType;
 	public var isObject:Bool;
-	public function new(namespace:String, parentSpace:String, isObject:Bool) {
+	public function new(namespace:String, parentSpace:String, isObject:Bool, ?parentType:GmlType) {
 		this.namespace = namespace;
 		this.parentSpace = parentSpace;
 		this.isObject = isObject;
+		this.parentType = parentType;
 	}
 }
 class GmlSeekDataHint {

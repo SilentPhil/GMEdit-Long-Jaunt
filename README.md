@@ -181,6 +181,31 @@ __phase_random.init(__generic.get_base_tickets());
 // accepts (int<GAME_DIRECTOR_PHASE>|number)[]
 ```
 
+### Specialized generic parents
+
+Template arguments can be attached to an inherited constructor without making
+the saved source invalid GML:
+
+```gml
+/// @template {Player} TPlayer
+function PlayerOperator() constructor {
+	players = []; /// @is {TPlayer[]}
+
+	static get_player = function(index/*:int*/)/*->TPlayer?*/ {
+		return array_get_safe(players, index);
+	}
+}
+
+function ServerPlayerOperator()
+	: PlayerOperator/*<ServerPlayer>*/() constructor {
+}
+```
+
+GMEdit displays the parent as `PlayerOperator<ServerPlayer>()`, while the
+on-disk comment remains invisible to GameMaker. Inherited field, argument, and
+return types are specialized, including through multiple inheritance levels.
+Type argument counts and `@template` constraints are checked by the linter.
+
 ### Interface implementation errors
 
 The linter checks `/// @implements {InterfaceName}` constructors against members declared in

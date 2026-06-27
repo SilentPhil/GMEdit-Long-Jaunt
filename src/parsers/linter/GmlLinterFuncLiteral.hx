@@ -1,5 +1,6 @@
 package parsers.linter;
 import tools.NativeArray;
+import gml.GmlAPI;
 import gml.type.GmlTypeDef;
 import gml.GmlFuncDoc;
 import gml.type.GmlType;
@@ -165,7 +166,30 @@ class GmlLinterFuncLiteral extends GmlLinterHelper {
 				nextFuncRetStatus = (doc.returnType.getKind() == KVoid ? WantNoReturn : WantReturn);
 			}
 			if (isFunc && skipIf(peek() == LKColon)) { // : <parent>(...super args)
-				rc(readCheckSkip(LKIdent, "a parent type name"));
+				rc(linter.readTypeName());
+				var parentTypeStr = GmlLinter.readTypeName_typeStr;
+				var parentType = GmlTypeDef.parse(parentTypeStr);
+				var parentName = parentType.getNamespace();
+				var parentDoc = parentName != null ? GmlAPI.gmlDoc[parentName] : null;
+				if (parentDoc != null && parentDoc.templateItems != null) {
+					var parentParams = parentType.unwrapParams();
+					var actualCount = parentParams != null ? parentParams.length : 0;
+					var expectedCount = parentDoc.templateItems.length;
+					if (actualCount > 0 && actualCount != expectedCount) {
+						linter.addError('Parent $parentName expects $expectedCount type argument'
+							+ (expectedCount == 1 ? "" : "s") + ', got $actualCount');
+					} else if (actualCount == expectedCount) for (i in 0 ... expectedCount) {
+						var constraintStr = parentDoc.templateItems[i].constraint;
+						var constraint = GmlTypeDef.parse(constraintStr);
+						if (constraint != null && !parentParams[i].canCastTo(
+							constraint, null, linter.getImports()
+						)) {
+							linter.addError('Parent type argument ${parentParams[i].toString()}'
+								+ ' does not satisfy ${constraint.toString()} for '
+								+ parentDoc.templateItems[i].name);
+						}
+					}
+				}
 				rc(readCheckSkip(LKParOpen, "opening bracket"));
 				rc(linter.funcArgs.read(oldDepth + 1) < 0);
 			}

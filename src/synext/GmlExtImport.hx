@@ -88,6 +88,12 @@ class GmlExtImport {
 		+ ":",
 		"\\)/\\*->" // func()->Type
 	].join("|") + ")");
+	private static var rxHasParentTypePost = new RegExp(
+		":\\s*\\w+\\s*<"
+	);
+	private static var rxHasParentTypePre = new RegExp(
+		":\\s*\\w+\\s*\\/\\*<"
+	);
 	
 	public static var errorText:String;
 	//
@@ -407,6 +413,7 @@ class GmlExtImport {
 		var globalExists = FileSystem.canSync && FileWrap.existsSync(globalPath);
 		if (code.indexOf("//!#import") < 0
 			&& !rxHasTypePre.test(code)
+			&& !rxHasParentTypePre.test(code)
 			&& !globalExists
 			&& !rxHasHint.test(code)
 		) return cancel();
@@ -539,6 +546,27 @@ class GmlExtImport {
 						default:
 					}
 				} // while (q.loop), can continue
+			}
+			q.skipSpaces1_local();
+			if (q.peek() == ":".code) {
+				q.skip();
+				q.skipSpaces1_local();
+				if (q.peek().isIdent0()) {
+					q.skipIdent1();
+					q.skipSpaces1_local();
+					if (q.peekstr(3) == "/*<") {
+						var typeStart = q.pos;
+						q.skip(2);
+						q.skipComment();
+						var typeEnd = q.pos;
+						if (q.substr(typeEnd - 2, 2) == "*/") {
+							flush(typeStart);
+							procSegment(typeStart + 2, typeEnd - 2, true);
+							start = typeEnd;
+						}
+						q.pos = typeEnd;
+					}
+				}
 			}
 		}
 		//
@@ -792,7 +820,8 @@ class GmlExtImport {
 		var imps = data != null ? data.imports : null;
 		var imp = imps != null ? imps[""] : null;
 		var impc = 0;
-		var mayHaveType = imps != null || rxHasTypePost.test(code);
+		var mayHaveType = imps != null || rxHasTypePost.test(code)
+			|| rxHasParentTypePost.test(code);
 		if (imp == null && mayHaveType) imp = new GmlImports();
 		var cubDepth = 0;
 		//
@@ -907,6 +936,27 @@ class GmlExtImport {
 						flush(q.pos);
 						out += "*/";
 						start = q.pos;
+				}
+			}
+			q.skipSpaces1_local();
+			if (q.peek() == ":".code) {
+				q.skip();
+				q.skipSpaces1_local();
+				if (q.peek().isIdent0()) {
+					q.skipIdent1();
+					q.skipSpaces1_local();
+					if (q.peek() == "<".code) {
+						var typeStart = q.pos;
+						if (q.skipTypeParams()) {
+							var typeEnd = q.pos;
+							flush(typeStart);
+							out += "/*";
+							procSegment(typeStart, typeEnd, true);
+							flush(typeEnd);
+							out += "*/";
+							start = typeEnd;
+						}
+					}
 				}
 			}
 		}

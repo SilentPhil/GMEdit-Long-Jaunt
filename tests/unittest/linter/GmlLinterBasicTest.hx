@@ -4,12 +4,15 @@ import file.kind.gml.KGmlScript;
 import gml.GmlAPI;
 import gml.GmlFuncDoc;
 import gml.GmlImports;
+import gml.GmlNamespace;
 import gml.GmlVersion;
 import gml.Project;
+import gml.type.GmlType;
 import gml.type.GmlTypeDef;
 import gml.type.GmlTypeTools;
 import parsers.linter.GmlLinter;
 import parsers.linter.GmlLinterPrefs;
+import synext.GmlExtImport;
 import test_helpers.GmlFileHelper;
 import test_helpers.LinterHelper;
 import massive.munit.Assert;
@@ -649,5 +652,98 @@ class GmlLinterBasicTest {
 			GmlAPI.gmlDoc.remove("array_get_safe");
 		}
 		Assert.areEqual(0, t.errors.length, problemTexts(t));
+	}
+
+	@Test public function testSpecializedGenericParentTypes() {
+		var code = "function LinterGenericPlayer() constructor {}\n"
+			+ "function LinterGenericPlayerSV() : LinterGenericPlayer() constructor {}\n"
+			+ "/// @template {LinterGenericPlayer} TPlayer\n"
+			+ "function LinterGenericOperator() constructor {\n"
+			+ "\tplayers = []; /// @is {TPlayer[]}\n"
+			+ "\tstatic get_player = function()/*->TPlayer*/ { return players[0]; }\n"
+			+ "\tstatic set_player = function(player/*:TPlayer*/)/*->void*/ {}\n"
+			+ "}\n"
+			+ "function LinterGenericOperatorSV()"
+			+ " : LinterGenericOperator/*<LinterGenericPlayerSV>*/() constructor {}\n"
+			+ "/// @template {LinterGenericPlayer} TMiddlePlayer\n"
+			+ "function LinterGenericOperatorMiddle()"
+			+ " : LinterGenericOperator/*<TMiddlePlayer>*/() constructor {}\n"
+			+ "function LinterGenericOperatorLeaf()"
+			+ " : LinterGenericOperatorMiddle/*<LinterGenericPlayerSV>*/() constructor {}\n";
+		var t = runLinter23(code, true, KGmlScript.inst);
+		Assert.areEqual(0, t.errors.length, problemTexts(t));
+
+		var ns:GmlNamespace = GmlAPI.gmlNamespaces["LinterGenericOperatorSV"];
+		Assert.isNotNull(ns);
+		Assert.areEqual(
+			"LinterGenericOperator<LinterGenericPlayerSV>",
+			ns.parentType.toString()
+		);
+		Assert.areEqual(
+			"Array<LinterGenericPlayerSV>",
+			ns.getInstType("players").toString()
+		);
+		var getter = ns.getInstDoc("get_player");
+		Assert.areEqual("LinterGenericPlayerSV", getter.returnType.toString());
+		var setter = ns.getInstDoc("set_player");
+		Assert.areEqual("LinterGenericPlayerSV", setter.argTypes[0].toString());
+
+		var leaf = GmlAPI.gmlNamespaces["LinterGenericOperatorLeaf"];
+		var middle = GmlAPI.gmlNamespaces["LinterGenericOperatorMiddle"];
+		Assert.areEqual(
+			1,
+			GmlAPI.gmlDoc["LinterGenericOperatorMiddle"].templateItems.length
+		);
+		Assert.isTrue(switch (middle.parentType.unwrapParams()[0]) {
+			case TTemplate(_, _, _): true;
+			default: false;
+		});
+		Assert.areEqual(
+			"LinterGenericPlayerSV",
+			leaf.getInstDoc("get_player").returnType.toString()
+		);
+
+		var badConstraint = runLinter23(
+			"function LinterGenericBadConstraint()"
+			+ " : LinterGenericOperator<string>() constructor {}",
+			false, KGmlScript.inst
+		);
+		Assert.areEqual(1, badConstraint.errors.length, problemTexts(badConstraint));
+		Assert.isTrue(badConstraint.errors[0].text.indexOf("does not satisfy") >= 0);
+
+		var badCount = runLinter23(
+			"function LinterGenericBadCount()"
+			+ " : LinterGenericOperator<LinterGenericPlayerSV,string>() constructor {}",
+			false, KGmlScript.inst
+		);
+		Assert.areEqual(1, badCount.errors.length, problemTexts(badCount));
+		Assert.isTrue(badCount.errors[0].text.indexOf("expects 1 type argument") >= 0);
+	}
+
+	@Test public function testGenericParentCommentDisplayRoundTrip() {
+		var source = "function LinterDisplayChild()"
+			+ " : LinterDisplayParent/*<array<LinterDisplayItem>>*/() constructor {}";
+		var file = GmlFileHelper.makeGmlFile(source, KGmlScript.inst);
+		var previousAPI = GmlAPI.version;
+		var previousProject = Project.current.version;
+		var v23 = GmlVersion.map["v23"];
+		GmlAPI.version = v23;
+		Project.current.version = v23;
+		var display = GmlExtImport.pre(source, file.codeEditor);
+		GmlAPI.version = previousAPI;
+		Project.current.version = previousProject;
+		Assert.isTrue(
+			display.indexOf("LinterDisplayParent<array<LinterDisplayItem>>()") >= 0,
+			display
+		);
+		GmlAPI.version = v23;
+		Project.current.version = v23;
+		var saved = GmlExtImport.post(display, file.codeEditor);
+		GmlAPI.version = previousAPI;
+		Project.current.version = previousProject;
+		Assert.isTrue(
+			saved.indexOf("LinterDisplayParent/*<array<LinterDisplayItem>>*/()") >= 0,
+			saved
+		);
 	}
 }

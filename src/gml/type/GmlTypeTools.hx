@@ -220,6 +220,36 @@ import ace.extern.AceTokenType;
 		}
 		return f(t);
 	}
+
+	/**
+	 * Applies the type arguments of a specialized parent namespace.
+	 * Template parameters that belong to a method declared on the parent
+	 * are shifted down after the parent's parameters are removed.
+	 */
+	public static function specializeParentTemplates(t:GmlType,
+		templateTypes:ReadOnlyArray<GmlType>, parentTemplateCount:Int
+	):GmlType {
+		if (t == null || templateTypes == null || parentTemplateCount <= 0) return t;
+		var depth = 0;
+		function f(t:GmlType):GmlType {
+			return switch (t) {
+				case null: null;
+				case TTemplate(name, ind, constraint):
+					if (ind < parentTemplateCount) {
+						var mapped = ind < templateTypes.length ? templateTypes[ind] : null;
+						mapped != null ? mapped : (constraint != null ? constraint : t);
+					} else {
+						TTemplate(name, ind - parentTemplateCount, constraint);
+					}
+				default:
+					if (++depth >= 200) throw "specialize parent template stack overflow";
+					var out = t.map(f);
+					depth--;
+					out;
+			}
+		}
+		return f(t);
+	}
 	
 	public static function resolve(self:GmlType, depth:Int = 0):GmlType {
 		if (++depth >= 128) return null;

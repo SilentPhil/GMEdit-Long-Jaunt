@@ -19,6 +19,21 @@ import tools.HighlightTools.*;
  * @author YellowAfterlife
  */
 class AceGmlHighlightIdents {
+	public static function getTemplateType(scope:String, name:String):AceTokenType {
+		if (scope == null) return null;
+		var doc = GmlAPI.gmlDoc[scope];
+		if (doc == null || doc.templateItems == null) return null;
+		for (item in doc.templateItems) {
+			if (item.name == name) return "variable";
+		}
+		return null;
+	}
+
+	public static function getTemplateTypeAt(editor:EditCode, row:Int, name:String):AceTokenType {
+		if (editor == null || editor.session == null || row == null) return null;
+		return getTemplateType(editor.session.gmlScopes.get(row), name);
+	}
+
 	public static inline function getGlobalType(name:String, fallback:String) {
 		return jsOrx(
 			GmlAPI.gmlKind[name],
@@ -31,6 +46,9 @@ class AceGmlHighlightIdents {
 	//
 	public static function getLocalType_1(editor:EditCode, name:String, scope:String, canLocal:Bool):String {
 		var kind:String;
+		//
+		kind = getTemplateType(scope, name);
+		if (kind != null) return kind;
 		//
 		var lambdas = editor.lambdas[scope];
 		if (lambdas != null && (kind = lambdas.kind[name]) != null) return kind;
