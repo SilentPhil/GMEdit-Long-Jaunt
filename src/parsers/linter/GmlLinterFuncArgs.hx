@@ -266,12 +266,14 @@ class GmlLinterFuncArgs extends GmlLinterHelper {
 			if (doc != null && doc.name == "array_get_safe" && !isUndefined) {
 				if (argc == 0) {
 					switch (argExprType.resolve()) {
+						case null:
 						case TInst(_, params, KTuple):
 							arrayGetSafeTupleTypes = params;
 						default:
 					}
 				} else if (argc == 1) {
 					switch (argExprValue) {
+						case null:
 						case VNumber(value, _):
 							arrayGetSafeIndex = Std.int(value);
 						default:

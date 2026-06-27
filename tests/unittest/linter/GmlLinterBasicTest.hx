@@ -2,9 +2,11 @@ package linter;
 import file.FileKind;
 import file.kind.gml.KGmlScript;
 import gml.GmlAPI;
+import gml.GmlFuncDoc;
 import gml.GmlImports;
 import gml.GmlVersion;
 import gml.Project;
+import gml.type.GmlTypeDef;
 import gml.type.GmlTypeTools;
 import parsers.linter.GmlLinter;
 import parsers.linter.GmlLinterPrefs;
@@ -618,6 +620,34 @@ class GmlLinterBasicTest {
 			+ "\tstatic run = function()->void {}\n"
 			+ "}"
 		, true, KGmlScript.inst);
+		Assert.areEqual(0, t.errors.length, problemTexts(t));
+	}
+
+	@Test public function testArrayGetSafeAcceptsVariableIndex() {
+		var previous = GmlAPI.gmlDoc["array_get_safe"];
+		var doc = GmlFuncDoc.create("array_get_safe", ["array", "index"]);
+		doc.argTypes = [GmlTypeDef.anyArray, GmlTypeDef.number];
+		GmlAPI.gmlDoc["array_get_safe"] = doc;
+		var t:LinterHelper;
+		try {
+			t = runLinter23(
+				"function LinterArrayGetSafe(arr/*:array*/, index/*:int*/) {\n"
+				+ "\treturn array_get_safe(arr, index);\n"
+				+ "}"
+			, false, KGmlScript.inst);
+		} catch (x:Dynamic) {
+			if (previous != null) {
+				GmlAPI.gmlDoc["array_get_safe"] = previous;
+			} else {
+				GmlAPI.gmlDoc.remove("array_get_safe");
+			}
+			throw x;
+		}
+		if (previous != null) {
+			GmlAPI.gmlDoc["array_get_safe"] = previous;
+		} else {
+			GmlAPI.gmlDoc.remove("array_get_safe");
+		}
 		Assert.areEqual(0, t.errors.length, problemTexts(t));
 	}
 }
