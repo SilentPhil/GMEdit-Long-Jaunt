@@ -1079,8 +1079,10 @@ class GmlLinter {
 		}
 	}
 	
-	@:keep inline function readExpr(oldDepth:Int, flags:GmlLinterReadFlags = None, ?_nk:GmlLinterKind, ?targetType:GmlType):FoundError {
-		return expr.read(oldDepth, flags, _nk, targetType);
+	@:keep inline function readExpr(oldDepth:Int, flags:GmlLinterReadFlags = None,
+		?_nk:GmlLinterKind, ?targetType:GmlType, ?targetDoc:GmlFuncDoc
+	):FoundError {
+		return expr.read(oldDepth, flags, _nk, targetType, null, targetDoc);
 	}
 	
 	function discardBlockScopes(newDepth:Int):Void {
@@ -1385,7 +1387,15 @@ class GmlLinter {
 					if (nk == LKSet) { // `name = val`
 						skip();
 						var setToken = nextVal;
-						rc(readExpr(newDepth, None, null, varType));
+						var targetDoc:GmlFuncDoc = null;
+						if (isStaticCtr) {
+							var ownerName = currFuncDoc.name;
+							var ownerNamespace = GmlAPI.gmlNamespaces[ownerName];
+							if (ownerNamespace != null) {
+								targetDoc = ownerNamespace.getInstDoc(varName, 0, ownerName);
+							}
+						}
+						rc(readExpr(newDepth, None, null, varType, targetDoc));
 						var varExprType = expr.currType;
 						if (mainKind == LKGlobalVar) {
 							// not today

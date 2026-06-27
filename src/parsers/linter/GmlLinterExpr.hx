@@ -80,7 +80,7 @@ class GmlLinterExpr extends GmlLinterHelper {
 	
 	public function read(
 		oldDepth:Int, flags:GmlLinterReadFlags = None, ?_nk:GmlLinterKind,
-		?targetType:GmlType, ?templateTypes:Array<GmlType>
+		?targetType:GmlType, ?templateTypes:Array<GmlType>, ?targetDoc:GmlFuncDoc
 	):FoundError {
 		var self = linter;
 		var newDepth = oldDepth + 1;
@@ -220,6 +220,7 @@ class GmlLinterExpr extends GmlLinterHelper {
 						},
 						targetType: targetType,
 						templateTypes: templateTypes,
+						targetDoc: targetDoc,
 					}));
 					currFunc = self.funcLiteral.doc;
 					currType = currFunc.getFunctionType();
@@ -281,6 +282,7 @@ class GmlLinterExpr extends GmlLinterHelper {
 				rc(self.funcLiteral.read(newDepth, nk == LKFunction, isStat(), {
 					targetType: targetType,
 					templateTypes: templateTypes,
+					targetDoc: targetDoc,
 				}));
 				currFunc = self.funcLiteral.doc;
 				if (isStat() && currFunc.name != "function") {
@@ -373,11 +375,20 @@ class GmlLinterExpr extends GmlLinterHelper {
 						statKind = LKSet;
 						var inlineIsType = self.readInlineIsType();
 						var targetType = inlineIsType != null ? inlineIsType : currType;
+						var targetDoc = currFunc;
+						if (currKind == LKIdent) {
+							var selfNamespace = self.getSelfNamespaceName();
+							var ns = selfNamespace != null ? GmlAPI.gmlNamespaces[selfNamespace] : null;
+							var declaredDoc = ns != null
+								? ns.getInstDoc(currName, 0, selfNamespace)
+								: null;
+							if (declaredDoc != null) targetDoc = declaredDoc;
+						}
 						if (inlineIsType == null && currKind == LKIdent && isLocalIdent) {
 							var nullSafetyType = self.getNullSafetyLocalType(currName);
 							if (nullSafetyType != null) targetType = nullSafetyType;
 						}
-						rc(self.readExpr(newDepth, None, null, targetType));
+						rc(self.readExpr(newDepth, None, null, targetType, targetDoc));
 						if (inlineIsType != null && currKind == LKIdent && !isLocalIdent) {
 							self.setContextInstType(currName, inlineIsType);
 							currType = inlineIsType;

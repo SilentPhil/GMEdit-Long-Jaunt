@@ -31,6 +31,7 @@ class GmlLinterFuncLiteral extends GmlLinterHelper {
 		var arrowOpts = options.arrowFunc;
 		var targetType = options.targetType;
 		var templateTypes = options.templateTypes;
+		var targetDoc = options.targetDoc;
 		var targetArgTypes:Array<GmlType> = null;
 		var targetReturnType:GmlType = null;
 		if (targetType != null) {
@@ -58,6 +59,7 @@ class GmlLinterFuncLiteral extends GmlLinterHelper {
 			globalDoc.post, GmlFuncDoc.parRetArrow + synext.GmlExtCoroutines.arrayTypeResultName
 		) ? 1 : 0;
 		var doc = new GmlFuncDoc(name, "(", ")", [], false);
+		if (targetDoc != null) doc.isAbstract = targetDoc.isAbstract;
 		var contextDoc = globalDoc;
 		if (contextDoc == null) {
 			var selfNamespace = linter.getSelfNamespaceName();
@@ -290,7 +292,9 @@ class GmlLinterFuncLiteral extends GmlLinterHelper {
 			case HasReturn:
 				if (nextFuncRetStatus == NoReturn) doc.returnTypeString = "";
 			case WantReturn:
-				addWarning("The function is marked as having a return but does not return anything.");
+				if (!doc.isAbstract) {
+					addWarning("The function is marked as having a return but does not return anything.");
+				}
 			case NoReturn:
 				doc.hasReturn = false;
 			default:
@@ -317,6 +321,7 @@ typedef GmlLinterFuncLiteralOptions = {
 	},
 	?targetType:GmlType,
 	?templateTypes:Array<GmlType>,
+	?targetDoc:GmlFuncDoc,
 };
 enum abstract GmlLinterFuncLiteralArgsArrowState(Int) {
 	var AfterColon;

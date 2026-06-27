@@ -570,6 +570,27 @@ class GmlLinterBasicTest {
 		Assert.areEqual(0, t.errors.length, problemTexts(t));
 	}
 
+	@Test public function testAbstractReturningMethodMayHaveEmptyBody() {
+		var t = runLinter23(
+			"/// @abstract\n"
+			+ "function LinterAbstractReturningBase() constructor {\n"
+			+ "\t/// @abstract\n"
+			+ "\tstatic create = function()->string {}\n"
+			+ "}",
+			true, KGmlScript.inst
+		);
+		Assert.areEqual(0, t.problems.length, problemTexts(t));
+
+		var concrete = runLinter23(
+			"function LinterConcreteReturningBase() constructor {\n"
+			+ "\tstatic create = function()->string {}\n"
+			+ "}",
+			true, KGmlScript.inst
+		);
+		Assert.areEqual(1, concrete.warnings.length, problemTexts(concrete));
+		Assert.isTrue(concrete.warnings[0].text.indexOf("does not return") >= 0);
+	}
+
 	@Test public function testAbstractImplementedByIntermediateParent() {
 		var t = runLinter23(
 			"function LinterAbstractChainBase() constructor {\n"
