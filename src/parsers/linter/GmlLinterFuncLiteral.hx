@@ -58,6 +58,19 @@ class GmlLinterFuncLiteral extends GmlLinterHelper {
 			globalDoc.post, GmlFuncDoc.parRetArrow + synext.GmlExtCoroutines.arrayTypeResultName
 		) ? 1 : 0;
 		var doc = new GmlFuncDoc(name, "(", ")", [], false);
+		var contextDoc = globalDoc;
+		if (contextDoc == null) {
+			var selfNamespace = linter.getSelfNamespaceName();
+			if (selfNamespace != null) contextDoc = GmlAPI.gmlDoc[selfNamespace];
+		}
+		var contextTemplateItems = contextDoc != null ? contextDoc.templateItems : null;
+		doc.templateItems = contextTemplateItems;
+		function parseContextType(typeStr:String):GmlType {
+			var parsed = contextTemplateItems != null
+				? GmlTypeTools.patchTemplateItems(typeStr, contextTemplateItems)
+				: typeStr;
+			return GmlTypeDef.parse(parsed);
+		}
 		var nextLocalType = isTopLevel ? "local" : "sublocal";
 		//
 		function procArgTypePost(argName:String, t:GmlType, argTypeStr:String) {
@@ -89,7 +102,7 @@ class GmlLinterFuncLiteral extends GmlLinterHelper {
 				if (arrowOpts.state == AfterColon) { // 
 					rc(linter.readTypeName());
 					var argTypeStr = GmlLinter.readTypeName_typeStr;
-					var t = GmlTypeDef.parse(argTypeStr);
+					var t = parseContextType(argTypeStr);
 					procArgTypePost(arrowOpts.firstArgName, t, argTypeStr);
 				} else {
 					var firstTargetArgType = targetArgTypes != null ? targetArgTypes[0] : null;
@@ -127,7 +140,7 @@ class GmlLinterFuncLiteral extends GmlLinterHelper {
 								// arg:type
 								rc(linter.readTypeName());
 								argTypeStr = GmlLinter.readTypeName_typeStr;
-								t = GmlTypeDef.parse(argTypeStr);
+								t = parseContextType(argTypeStr);
 							} else {
 								if (globalDocArgTypes != null) {
 									// no :type, but we have this hinted already

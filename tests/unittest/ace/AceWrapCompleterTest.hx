@@ -6,6 +6,9 @@ import ace.extern.AcePos;
 import ace.gml.AceGmlHighlightIdents;
 import gml.GmlAPI;
 import gml.GmlFuncDoc;
+import gml.type.GmlType;
+import gml.type.GmlTypeDef;
+import gml.type.GmlTypeTools;
 import gml.type.GmlTypeTemplateItem;
 import massive.munit.Assert;
 import tools.Dictionary;
@@ -60,6 +63,13 @@ class AceWrapCompleterTest {
 			AceGmlHighlightIdents.getTemplateType(name, "TPlayer")
 		);
 		Assert.isNull(AceGmlHighlightIdents.getTemplateType(name, "Player"));
+		var templateType = GmlType.TTemplate(
+			"TPlayer", 0, GmlTypeDef.simple("UnitTestPlayer")
+		);
+		Assert.areEqual(
+			"UnitTestPlayer",
+			GmlTypeTools.getNamespace(templateType)
+		);
 		if (previous != null) {
 			GmlAPI.gmlDoc[name] = previous;
 		} else {

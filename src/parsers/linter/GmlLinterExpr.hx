@@ -482,6 +482,7 @@ class GmlLinterExpr extends GmlLinterHelper {
 						selfType = currType;
 						isStatic = currType.isType();
 						nsType = isStatic ? currType.unwrapParam() : currType;
+						nsType = nsType.unwrapTemplateConstraint();
 					}
 					var ctn:String = null;
 					if (enumType != null) {

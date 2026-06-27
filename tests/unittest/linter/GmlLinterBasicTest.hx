@@ -746,4 +746,68 @@ class GmlLinterBasicTest {
 			saved
 		);
 	}
+
+	@Test public function testTemplateConstraintProvidesMethodSurface() {
+		var t = runLinter23(
+			"function LinterConstraintPlayer() constructor {\n"
+			+ "\tstatic destroy = function(reason:int)->void {}\n"
+			+ "}\n"
+			+ "/// @template {LinterConstraintPlayer} TPlayer\n"
+			+ "function LinterConstraintOperator() constructor {\n"
+			+ "\tstatic dispose = function(player:TPlayer)->void {\n"
+			+ "\t\tplayer.destroy(1);\n"
+			+ "\t\tplayer.destroy(\"bad\");\n"
+			+ "\t}\n"
+			+ "}",
+			true, KGmlScript.inst
+		);
+		var playerDoc = GmlAPI.gmlNamespaces["LinterConstraintPlayer"].getInstDoc("destroy");
+		Assert.isNotNull(playerDoc);
+		Assert.areEqual("int", playerDoc.argTypes[0].toString());
+		Assert.areEqual(1, t.warnings.length, problemTexts(t));
+		Assert.isTrue(t.warnings[0].text.indexOf("Can't cast string to int") >= 0);
+	}
+
+	@Test public function testClassTemplateWorksWithGenericCollections() {
+		var previous = GmlAPI.gmlDoc["array_push"];
+		GmlAPI.gmlDoc["array_push"] = GmlFuncDoc.parse(
+			"array_push<T>(array:T[],...values:T)->void"
+		);
+		var t:LinterHelper;
+		try {
+			t = runLinter23(
+				"function LinterCollectionValue() constructor {}\n"
+				+ "/// @template {LinterCollectionValue} TValue\n"
+				+ "function LinterGenericCollection() constructor {\n"
+				+ "\tvalues = []; /// @is {TValue[]}\n"
+				+ "\tvalue_map = ds_map_create(); /// @is {ds_map<string;TValue>}\n"
+				+ "\tstatic add = function(value:TValue)->void {\n"
+				+ "\t\tarray_push(values, value);\n"
+				+ "\t\tvalues[0] = value;\n"
+				+ "\t\tvalue_map[? \"id\"] = value;\n"
+				+ "\t}\n"
+				+ "}",
+				true, KGmlScript.inst
+			);
+		} catch (x:Dynamic) {
+			if (previous != null) {
+				GmlAPI.gmlDoc["array_push"] = previous;
+			} else {
+				GmlAPI.gmlDoc.remove("array_push");
+			}
+			throw x;
+		}
+		if (previous != null) {
+			GmlAPI.gmlDoc["array_push"] = previous;
+		} else {
+			GmlAPI.gmlDoc.remove("array_push");
+		}
+		var collection = GmlAPI.gmlNamespaces["LinterGenericCollection"];
+		var itemType = collection.getInstType("values").unwrapParam();
+		Assert.isTrue(switch (itemType) {
+			case TTemplate(_, _, _): true;
+			default: false;
+		}, itemType.toString());
+		Assert.areEqual(0, t.problems.length, problemTexts(t));
+	}
 }

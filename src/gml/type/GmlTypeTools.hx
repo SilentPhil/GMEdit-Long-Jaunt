@@ -41,6 +41,7 @@ import ace.extern.AceTokenType;
 		return switch (t) {
 			case null: null;
 			case TInst(name, _, _): name;
+			case TTemplate(_, _, constraint): getNamespace(constraint);
 			default: null;
 		}
 	}
@@ -87,6 +88,20 @@ import ace.extern.AceTokenType;
 	public static function unwrapNullable(t:GmlType):GmlType {
 		while (t != null && t.getKind() == KNullable) {
 			t = t.unwrapParam();
+		}
+		return t;
+	}
+
+	/** Resolves template parameters to the type surface guaranteed by their constraint. */
+	public static function unwrapTemplateConstraint(t:GmlType):GmlType {
+		var depth = 0;
+		while (t != null && ++depth < 128) {
+			switch (t) {
+				case TTemplate(_, _, constraint) if (constraint != null):
+					t = constraint;
+				default:
+					break;
+			}
 		}
 		return t;
 	}

@@ -169,7 +169,11 @@ class GmlLinter {
 		if (eol < 0) eol = reader.source.length;
 		var mt = inlineIsRx.exec(reader.source.substring(reader.pos, eol));
 		if (mt == null || mt[1] == null) return null;
-		var type = GmlTypeDef.parse(mt[1], "@is inline assignment");
+		var typeStr = mt[1];
+		if (currFuncDoc != null && currFuncDoc.templateItems != null) {
+			typeStr = GmlTypeTools.patchTemplateItems(typeStr, currFuncDoc.templateItems);
+		}
+		var type = GmlTypeDef.parse(typeStr, "@is inline assignment");
 		var imp = getImports();
 		if (imp == null) imp = editor.imports[""];
 		return GmlTypeTools.mapImportedNames(type, imp);
