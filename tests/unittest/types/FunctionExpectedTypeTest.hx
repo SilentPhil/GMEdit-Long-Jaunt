@@ -45,4 +45,19 @@ class FunctionExpectedTypeTest {
 			imports
 		));
 	}
+	@Test public function testEnumIntegerUnionSpellingsAreEquivalent() {
+		var outerUnion = GmlTypeDef.parse("int<PACKET_ID_SV>|int<PACKET_ID_CL>");
+		var innerUnion = GmlTypeDef.parse("int<PACKET_ID_SV|PACKET_ID_CL>");
+		var clientPacket = GmlTypeDef.parse("int<PACKET_ID_CL>");
+		var serverPacket = GmlTypeDef.parse("int<PACKET_ID_SV>");
+
+		Assert.isTrue(GmlTypeCanCastTo.canCastTo(clientPacket, outerUnion));
+		Assert.isTrue(GmlTypeCanCastTo.canCastTo(serverPacket, outerUnion));
+		Assert.isTrue(GmlTypeCanCastTo.canCastTo(clientPacket, innerUnion));
+		Assert.isTrue(GmlTypeCanCastTo.canCastTo(serverPacket, innerUnion));
+		Assert.isTrue(outerUnion.equals(innerUnion));
+
+		// A value that may belong to either branch must remain wider than one branch.
+		Assert.isFalse(GmlTypeCanCastTo.canCastTo(innerUnion, clientPacket));
+	}
 }

@@ -244,6 +244,19 @@ class GmlTypeParser {
 					if (ti == null) return parseError("Malformed index for " + GmlTypeTools.templateItemName);
 					result = TTemplate(tn, ti, params[2]);
 				}
+				else if ((name == "int" || name == "Int") && params.length == 1) {
+					// `int<A|B>` is the compact spelling of `int<A>|int<B>`.
+					// Keeping one canonical representation also makes casts to either
+					// tagged integer branch behave identically for both spellings.
+					result = switch (params[0]) {
+						case TEither(types):
+							var variants = [];
+							for (type in types) variants.push(TInst(name, [type], kind));
+							TEither(variants);
+						default:
+							TInst(name, params, kind);
+					};
+				}
 				else {
 					if (typeWarn != null
 						&& !GmlAPI.stdKind.exists(name)
