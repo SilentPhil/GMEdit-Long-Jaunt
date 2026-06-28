@@ -12,6 +12,7 @@ import gml.type.GmlTypeTools;
 import parsers.linter.GmlLinterArrayAccess;
 import parsers.linter.GmlLinterArrayLiteral;
 import parsers.linter.GmlLinterFuncLiteral;
+import parsers.linter.GmlLinterLocalNullSafetyItems.GmlLinterLocalNullSafetyItem;
 import parsers.linter.GmlLinterReadFlags;
 import tools.Aliases;
 import parsers.linter.GmlLinter;
@@ -419,6 +420,15 @@ class GmlLinterExpr extends GmlLinterHelper {
 					self.skip();
 					var argc = self.funcArgs.read(newDepth, currFunc, selfType, currType);
 					rc(argc < 0);
+					var narrowedType = switch (currName) {
+						case "is_string": GmlTypeDef.string;
+						default: null;
+					}
+					if (narrowedType != null && self.funcArgs.firstLocalName != null) {
+						nullSafety.push(new GmlLinterLocalNullSafetyItem(
+							self.funcArgs.firstLocalName, true, narrowedType
+						));
+					}
 					if (currFunc != null) {
 						self.checkCallArgs(currFunc, currName, argc, !isStat(), hasFlag(IsNew));
 

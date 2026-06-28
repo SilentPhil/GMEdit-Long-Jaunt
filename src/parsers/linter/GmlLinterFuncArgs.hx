@@ -20,6 +20,7 @@ using tools.NativeString;
 @:access(parsers.linter.GmlLinter)
 class GmlLinterFuncArgs extends GmlLinterHelper {
 	public var returnType:GmlType;
+	public var firstLocalName:String;
 	/**
 	 * 
 	 * @return number of arguments read, -1 on error
@@ -31,6 +32,7 @@ class GmlLinterFuncArgs extends GmlLinterHelper {
 		var closed = false;
 		var seenComma = true;
 		var argc = 0;
+		firstLocalName = null;
 		
 		var argTypes:ReadOnlyArray<GmlType>, argTypeClamp:Int, argTypesLen:Int;
 		var templateTypes:Array<GmlType> = null;
@@ -240,6 +242,9 @@ class GmlLinterFuncArgs extends GmlLinterHelper {
 				}
 				argExprType = expr.currType;
 				argExprValue = expr.currValue;
+				if (argc == 0 && expr.currKind == LKIdent) {
+					firstLocalName = expr.currName;
+				}
 			}
 			
 			if (pubSubPayloadArgInd >= 0 && argc == 0 && !isUndefined) {

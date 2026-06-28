@@ -66,6 +66,20 @@ class GmlLinterBasicTest {
 		Assert.isTrue(t.warnings[0].text.indexOf("__missing_field") >= 0);
 	}
 
+	@Test public function testConstructorStaticFieldAssignmentInStaticMethod() {
+		var t = runLinter23(
+			"function LinterStaticFieldAssignment() constructor {\n"
+			+ "\tstatic header_size = noone;\n"
+			+ "\tstatic get_header_size = function() {\n"
+			+ "\t\theader_size = 1;\n"
+			+ "\t\treturn header_size;\n"
+			+ "\t}\n"
+			+ "}"
+		);
+
+		Assert.areEqual(0, t.warnings.length, problemTexts(t));
+	}
+
 	@Test public function testDeprecatedFunctionWarnings() {
 		var t = runLinter23(
 			"/// @deprecated Use new_api instead\n"
@@ -673,6 +687,24 @@ class GmlLinterBasicTest {
 			GmlAPI.gmlDoc.remove("array_get_safe");
 		}
 		Assert.areEqual(0, t.errors.length, problemTexts(t));
+	}
+
+	@Test public function testIsStringNarrowsUnionTypeInsideIf() {
+		var t = runLinter23(
+			"function LinterNeedsString(value:string)->void {}\n"
+			+ "function LinterNeedsInt(value:int)->void {}\n"
+			+ "function LinterNeedsUnion(value:string|int)->void {}\n"
+			+ "function LinterNarrowString(value:string|int)->void {\n"
+			+ "\tif (is_string(value)) {\n"
+			+ "\t\tLinterNeedsString(value);\n"
+			+ "\t} else {\n"
+			+ "\t\tLinterNeedsInt(value);\n"
+			+ "\t}\n"
+			+ "\tLinterNeedsUnion(value);\n"
+			+ "}",
+			true, KGmlScript.inst
+		);
+		Assert.areEqual(0, t.problems.length, problemTexts(t));
 	}
 
 	@Test public function testSpecializedGenericParentTypes() {

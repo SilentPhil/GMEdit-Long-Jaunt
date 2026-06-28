@@ -1337,6 +1337,9 @@ class GmlLinter {
 					//
 					if (!skipIf(nk == LKIdent)) break;
 					var varName = nextVal;
+					if (isStaticCtr && constructorInstVars != null) {
+						constructorInstVars[varName] = true;
+					}
 					var allowTypeRedefinition = false;
 					if (mainKind != LKGlobalVar && mainKind != LKStatic) {
 						var lk = localKinds[varName];
