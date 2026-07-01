@@ -173,6 +173,9 @@ class GmlSeekerProcVar {
 				var hasExplicitFieldAccess = seeker.jsDoc.accessSet;
 				var fieldAccess = GmlSeekerProcField.getEffectiveInstAccess(seeker, name, hasExplicitFieldAccess);
 				var isPrivateField = seeker.jsDoc.isPrivate || fieldAccess == Private;
+				var isConstField = seeker.jsDoc.isConst || seeker.getRegionConst();
+				var isVirtualField = seeker.jsDoc.isVirtual || seeker.getRegionVirtual();
+				var isOverrideField = seeker.jsDoc.isOverride || seeker.getRegionOverride();
 				static var doLoopConfig = new GmlSeeker_doLoop();
 				if (exprIsFunction) {
 					jsDocBeforeFunc = seeker.jsDoc.copy();
@@ -212,7 +215,8 @@ class GmlSeekerProcVar {
 					// related: GmlSeekerProcIdent
 					GmlSeekerProcField.addFieldHint(seeker, exprIsConstructor, seeker.jsDoc.interfaceName,
 					asInst, name, args, null, fieldType, argTypes, true, templateItems,
-					isPrivateField, null, fieldAccess, hasExplicitFieldAccess);
+					isPrivateField, null, fieldAccess, hasExplicitFieldAccess, isConstField,
+					isVirtualField, isOverrideField);
 					
 					var addFieldHint_doc = GmlSeekerProcField.addFieldHint_doc;
 					if (addFieldHint_doc != null) {

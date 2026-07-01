@@ -10,10 +10,33 @@ import gml.type.GmlType;
 import gml.type.GmlTypeDef;
 import gml.type.GmlTypeTools;
 import gml.type.GmlTypeTemplateItem;
+import file.kind.gml.KGmlScript;
 import massive.munit.Assert;
+import test_helpers.GmlFileHelper;
 import tools.Dictionary;
 
 class AceWrapCompleterTest {
+	@Test public function testEndRegionHighlightDoesNotPushRegionState() {
+		var file = GmlFileHelper.makeGmlFile("#region @const\nvalue = 1;\n#endregion\nhint = \"ok\";",
+			KGmlScript.inst);
+		var rules = AceGmlHighlight.makeRules(file.codeEditor, gml.GmlVersion.map["v23"]);
+		var endRegionRule:Dynamic = null;
+		for (rule in rules["start"]) {
+			var regex:Dynamic = rule.regex;
+			if (regex == null) continue;
+			if (Std.string(regex).indexOf("#endregion") >= 0) {
+				var token:Dynamic = rule.token;
+				var tokenText = Std.string(token);
+				if (tokenText.indexOf("preproc.region") >= 0) {
+					endRegionRule = rule;
+					break;
+				}
+			}
+		}
+		Assert.isNotNull(endRegionRule);
+		Assert.isTrue(endRegionRule.push == null);
+	}
+
 	function runCompleter(completer:AceWrapCompleter, line:String, column:Int, prefix:String):AceAutoCompleteItems {
 		var out:AceAutoCompleteItems = null;
 		var session:Dynamic = {

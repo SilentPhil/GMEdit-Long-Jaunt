@@ -18,6 +18,11 @@ typedef GmlNamespaceAccessInfo = {
 	access:GmlFieldAccess,
 	owner:String,
 }
+typedef GmlNamespaceConstInfo = {
+	owner:String,
+	isVirtual:Bool,
+	isOverride:Bool,
+}
 
 /**
  * A namespace is a set of static and/or instance fields belonging to some context.
@@ -98,6 +103,12 @@ class GmlNamespace {
 	
 	public var instTypes:Dictionary<GmlType> = new Dictionary();
 	public var instLookup:Dictionary<GmlLookup> = new Dictionary();
+	public var instConst:Dictionary<Bool> = new Dictionary();
+	public var staticConst:Dictionary<Bool> = new Dictionary();
+	public var instVirtual:Dictionary<Bool> = new Dictionary();
+	public var staticVirtual:Dictionary<Bool> = new Dictionary();
+	public var instOverride:Dictionary<Bool> = new Dictionary();
+	public var staticOverride:Dictionary<Bool> = new Dictionary();
 	public function getInstType(field:String, depth:Int = 0, accessContext:String = null):GmlType {
 		var q = this, n = depth;
 		var parentTypes:Array<GmlType> = [];
@@ -388,6 +399,48 @@ class GmlNamespace {
 		}
 		return null;
 	}
+	function getOwnInstConst(field:String):GmlNamespaceConstInfo {
+		if (!instConst[field]) return null;
+		var effectiveVirtual = instVirtual[field];
+		if (!effectiveVirtual && instOverride[field]) {
+			var inherited = getInheritedInstConst(field);
+			effectiveVirtual = inherited != null && inherited.isVirtual;
+		}
+		return {
+			owner: name,
+			isVirtual: effectiveVirtual,
+			isOverride: instOverride[field],
+		};
+	}
+	public function getInheritedInstConst(field:String, depth:Int = 0):GmlNamespaceConstInfo {
+		var n = depth + 1;
+		if (n > maxDepth) return null;
+		for (qi in interfaces.array) {
+			var info = qi.getInstConst(field, n);
+			if (info != null) return info;
+		}
+		return parent != null ? parent.getInstConst(field, n) : null;
+	}
+	public function getInstConst(field:String, depth:Int = 0):GmlNamespaceConstInfo {
+		var q = this, n = depth;
+		while (q != null && ++n <= maxDepth) {
+			var own = q.getOwnInstConst(field);
+			if (own != null) return own;
+			for (qi in q.interfaces.array) {
+				var info = qi.getInstConst(field, n);
+				if (info != null) return info;
+			}
+			q = q.parent;
+		}
+		return null;
+	}
+	public function getStaticConst(field:String):GmlNamespaceConstInfo {
+		return staticConst[field] ? {
+			owner: name,
+			isVirtual: staticVirtual[field],
+			isOverride: staticOverride[field],
+		} : null;
+	}
 	public static function isAccessAllowed(access:GmlFieldAccess, owner:String, accessContext:String):Bool {
 		switch (access) {
 			case Private: return accessContext == owner;
@@ -410,7 +463,8 @@ class GmlNamespace {
 	}
 	
 	public function addFieldHint(field:String, isInst:Bool, comp:AceAutoCompleteItem, doc:GmlFuncDoc, type:GmlType,
-		isPrivate:Bool = false, ?lookup:GmlLookup, access:GmlFieldAccess = Public, accessSet:Bool = false) {
+		isPrivate:Bool = false, ?lookup:GmlLookup, access:GmlFieldAccess = Public, accessSet:Bool = false,
+		isConst:Bool = false, isVirtual:Bool = false, isOverride:Bool = false) {
 		var kind = isInst ? instKind : staticKind;
 		kind[field] = doc != null ? "asset.script" : "field";
 		if (isInst) {
@@ -424,6 +478,18 @@ class GmlNamespace {
 				default:
 			}
 			if (accessSet) instAccessSet[field] = true;
+		}
+		if (isConst) {
+			var constFields = isInst ? instConst : staticConst;
+			constFields[field] = true;
+		}
+		if (isVirtual) {
+			var virtualFields = isInst ? instVirtual : staticVirtual;
+			virtualFields[field] = true;
+		}
+		if (isOverride) {
+			var overrideFields = isInst ? instOverride : staticOverride;
+			overrideFields[field] = true;
 		}
 		
 		var types = isInst ? instTypes : staticTypes;
@@ -457,6 +523,13 @@ class GmlNamespace {
 			privateInst.remove(field);
 			instAccess.remove(field);
 			instAccessSet.remove(field);
+			instConst.remove(field);
+			instVirtual.remove(field);
+			instOverride.remove(field);
+		} else {
+			staticConst.remove(field);
+			staticVirtual.remove(field);
+			staticOverride.remove(field);
 		}
 		var lookups = isInst ? instLookup : staticLookup;
 		lookups.remove(field);

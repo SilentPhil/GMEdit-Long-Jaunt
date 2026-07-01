@@ -47,6 +47,12 @@ class GmlLinterExpr extends GmlLinterHelper {
 	
 	/** For `<expr>.field`, indicates type of `<expr>` */
 	public var selfType:GmlType;
+
+	/** Namespace owning the right-most resolved field access. */
+	public var fieldNamespace:String;
+
+	/** Whether the right-most resolved field access is static. */
+	public var fieldIsStatic:Bool;
 	
 	/** If the resulting expression is a function */
 	public var currFunc:GmlFuncDoc;
@@ -65,13 +71,24 @@ class GmlLinterExpr extends GmlLinterHelper {
 		return linter.readExpect(flags.has(AsStat) ? "a statement" : "an expression");
 	}
 	
-	function checkConst(currName:GmlName, currKind:GmlLinterKind) @:privateAccess {
+	function checkConst(currName:GmlName, currKind:GmlLinterKind, currFieldName:GmlName = null,
+		fieldNamespace:String = null, fieldIsStatic:Bool = false, isLocalIdent:Bool = false,
+		allowDeclaration:Bool = false, receiverType:GmlType = null) @:privateAccess {
 		switch (currKind) {
 			case LKIdent: {
 				if (linter.localKinds[currName] == LKConst) {
 					linter.addWarning('Assigning to a `const` local `$currName`');
+				} else if (!isLocalIdent) {
+					linter.checkConstField(linter.getSelfNamespaceName(), currName, false, allowDeclaration);
 				}
 			};
+			case LKField: {
+				if (fieldNamespace == null && receiverType != null) {
+					var nsType = fieldIsStatic ? receiverType.unwrapParam() : receiverType;
+					fieldNamespace = nsType.unwrapNullable().unwrapTemplateConstraint().getNamespace();
+				}
+				linter.checkConstField(fieldNamespace, currFieldName, fieldIsStatic);
+			}
 			case LKNullField, LKNullArray: {
 				linter.addError("Null-conditional values cannot be assigned to");
 			};
@@ -113,9 +130,17 @@ class GmlLinterExpr extends GmlLinterHelper {
 		var nullSafety:GmlLinterLocalNullSafetyItems = [];
 		var hasParens:Bool = false;
 		var missingInstanceFieldName:String = null;
+		var fieldNamespace:String = null;
+		var fieldIsStatic:Bool = false;
 		//
 		inline function checkConst():Void {
-			this.checkConst(currName, currKind);
+			this.checkConst(currName, currKind, currFieldName, fieldNamespace, fieldIsStatic, isLocalIdent,
+				false, selfType);
+		}
+		inline function checkConstDeclaration():Void {
+			this.checkConst(currName, currKind, currFieldName, fieldNamespace, fieldIsStatic, isLocalIdent,
+				currKind == LKIdent && self.takeInitialInstanceVarDeclaration(currName, oldDepth, isLocalIdent),
+				selfType);
 		}
 
 		//
@@ -272,6 +297,10 @@ class GmlLinterExpr extends GmlLinterHelper {
 			};
 			case LKInc, LKDec: {
 				rc(self.readExpr(newDepth, HasPrefix));
+				if (this.currKind == LKField) {
+					this.checkConst(this.currName, this.currKind, this.currFieldName,
+						this.fieldNamespace, this.fieldIsStatic, this.isLocalIdent, false, this.selfType);
+				}
 				self.checkTypeCast(this.currType, GmlTypeDef.number, nk == LKInc ? "++" : "--", this.currValue);
 				currType = GmlTypeDef.number;
 			};
@@ -365,12 +394,12 @@ class GmlLinterExpr extends GmlLinterHelper {
 			switch (nk) {
 				case LKSet: {
 					if (isStat()) {
+						checkConstDeclaration();
 						if (currKind == LKIdent) {
 							self.checkInstanceVarDeclaration(currName, oldDepth, isLocalIdent);
 						} else if (currKind == LKField && missingInstanceFieldName != null) {
 							self.checkInstanceVarDeclaration(missingInstanceFieldName, oldDepth, false);
 						}
-						checkConst();
 						self.skip();
 						flags.remove(AsStat);
 						statKind = LKSet;
@@ -480,6 +509,8 @@ class GmlLinterExpr extends GmlLinterHelper {
 					var isSelfField = currKind == LKIdent && currName == "self" && nk == LKDot;
 					currKind = nk == LKDot ? LKField : LKNullField;
 					var isStatic:Bool, nsType:GmlType = null;
+					fieldNamespace = null;
+					fieldIsStatic = false;
 					if (enumType != null) {
 						isStatic = true;
 						currType = GmlTypeDef.int;
@@ -541,6 +572,8 @@ class GmlLinterExpr extends GmlLinterHelper {
 						};
 					}
 					if (ctn != null) {
+						fieldNamespace = ctn;
+						fieldIsStatic = isStatic;
 						var wantWarn = false;
 						var found = false;
 						var localInstType = !isStatic ? self.getContextNamespaceInstType(ctn, field) : null;
@@ -739,6 +772,8 @@ class GmlLinterExpr extends GmlLinterHelper {
 		this.currKind = currKind;
 		this.currType = currType;
 		this.selfType = selfType;
+		this.fieldNamespace = fieldNamespace;
+		this.fieldIsStatic = fieldIsStatic;
 		this.currFunc = currFunc;
 		this.currValue = currValue;
 		this.hasParens = hasParens;

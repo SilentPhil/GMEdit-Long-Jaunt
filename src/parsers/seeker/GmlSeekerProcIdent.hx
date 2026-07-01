@@ -227,9 +227,13 @@ class GmlSeekerProcIdent {
 			var hasExplicitFieldAccess = seeker.jsDoc.accessSet;
 			var fieldAccess = GmlSeekerProcField.getEffectiveInstAccess(seeker, s, hasExplicitFieldAccess);
 			var isPrivateField = seeker.jsDoc.isPrivate || fieldAccess == Private;
+			var isConstField = seeker.jsDoc.isConst || seeker.getRegionConst();
+			var isVirtualField = seeker.jsDoc.isVirtual || seeker.getRegionVirtual();
+			var isOverrideField = seeker.jsDoc.isOverride || seeker.getRegionOverride();
 			GmlSeekerProcField.addFieldHint(seeker, isConstructor, seeker.jsDoc.interfaceName,
 				true, s, args, null, fieldType, argTypes, true, templateItems,
-				isPrivateField, nameLookup, fieldAccess, hasExplicitFieldAccess);
+				isPrivateField, nameLookup, fieldAccess, hasExplicitFieldAccess, isConstField,
+				isVirtualField, isOverrideField);
 			var addFieldHint_doc = GmlSeekerProcField.addFieldHint_doc;
 			if (addFieldHint_doc != null) {
 				// related: GmlSeekerProcVar

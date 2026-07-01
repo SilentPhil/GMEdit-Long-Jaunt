@@ -36,6 +36,7 @@ class GmlSeekerJSDoc {
 	public var isPrivate:Bool = false;
 	public var access:GmlFieldAccess = Public;
 	public var accessSet:Bool = false;
+	public var isConst:Bool = false;
 	public var deprecated:String = null;
 	public var isVirtual:Bool = false;
 	public var isAbstract:Bool = false;
@@ -54,6 +55,7 @@ class GmlSeekerJSDoc {
 		isPrivate = false;
 		access = Public;
 		accessSet = false;
+		isConst = false;
 		deprecated = null;
 		isVirtual = false;
 		isAbstract = false;
@@ -91,6 +93,7 @@ class GmlSeekerJSDoc {
 		r.isPrivate = isPrivate;
 		r.access = access;
 		r.accessSet = accessSet;
+		r.isConst = isConst;
 		r.deprecated = deprecated;
 		r.isVirtual = isVirtual;
 		r.isAbstract = isAbstract;
@@ -133,6 +136,7 @@ class GmlSeekerJSDoc {
 			access = q.access;
 			accessSet = true;
 		}
+		if (q.isConst) isConst = true;
 		if (q.deprecated != null) deprecated = q.deprecated;
 		if (q.isVirtual) isVirtual = true;
 		if (q.isAbstract) isAbstract = true;
@@ -185,9 +189,18 @@ class GmlSeekerJSDoc {
 		var type = hasType ? parseType(seeker, typeStr, full) : null;
 		var access:GmlFieldAccess = Public;
 		var accessMatch = null;
+		var hasConst = isConst;
+		var hasVirtual = isVirtual;
+		var hasOverride = isOverride;
 		if (doc != null) {
 			accessMatch = jsDoc_access_tag.exec(doc);
-			var publicDoc = doc.replaceExt(jsDoc_access_tag, "").trimBoth();
+			if (jsDoc_has_const_tag.test(doc)) hasConst = true;
+			if (jsDoc_has_virtual_tag.test(doc)) hasVirtual = true;
+			if (jsDoc_has_override_tag.test(doc)) hasOverride = true;
+			var publicDoc = doc
+				.replaceExt(jsDoc_access_tag, "")
+				.replaceExt(jsDoc_const_tag, "")
+				.trimBoth();
 			if (accessMatch != null) switch (accessMatch[1]) {
 				case "private": access = Private;
 				case "protected": access = Protected;
@@ -240,6 +253,9 @@ class GmlSeekerJSDoc {
 			}
 			if (hint != null) {
 				if (hasType) hint.type = type;
+				if (hasConst) hint.isConst = true;
+				if (hasVirtual) hint.isVirtual = true;
+				if (hasOverride) hint.isOverride = true;
 				if (accessMatch != null) {
 					hint.access = access;
 					hint.isPrivate = access == Private;
@@ -248,6 +264,9 @@ class GmlSeekerJSDoc {
 				}
 				procComp(hint.comp);
 			}
+			isConst = false;
+			isVirtual = false;
+			isOverride = false;
 		}
 		return true;
 	}
@@ -263,6 +282,9 @@ class GmlSeekerJSDoc {
 		*/
 		var out = seeker.out;
 		var q = seeker.reader;
+		if (jsDoc_has_const_tag.test(s)) isConst = true;
+		if (jsDoc_has_virtual_tag.test(s)) isVirtual = true;
+		if (jsDoc_has_override_tag.test(s)) isOverride = true;
 		
 		var mt = jsDoc_implements.exec(s);
 		if (mt != null) {
@@ -282,6 +304,14 @@ class GmlSeekerJSDoc {
 		mt = jsDoc_is.exec(s);
 		if (mt != null) {
 			procIs(seeker, s, mt[1], mt[2]);
+			return;
+		}
+
+		mt = jsDoc_const.exec(s);
+		if (mt != null) {
+			// Inline field tag (`field = value; /// @const`) can be applied now.
+			// Otherwise retain it for the next field declaration.
+			procIs(seeker, s, null, s.substring(3).trimBoth());
 			return;
 		}
 		
@@ -430,6 +460,7 @@ class GmlSeekerJSDoc {
 		
 		mt = jsDoc_virtual.exec(s);
 		if (mt != null) {
+			if (procIs(seeker, s, null, s.substring(3).trimBoth())) return;
 			isVirtual = true;
 			return;
 		}
@@ -442,6 +473,7 @@ class GmlSeekerJSDoc {
 		
 		mt = jsDoc_override.exec(s);
 		if (mt != null) {
+			if (procIs(seeker, s, null, s.substring(3).trimBoth())) return;
 			isOverride = true;
 			return;
 		}

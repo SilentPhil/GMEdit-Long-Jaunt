@@ -162,7 +162,10 @@ using tools.NativeArray;
 		);
 		var rSection = rxRule(["preproc.section", "sectionname"], ~/^(#section[ \t]*)(.*)/);
 		var rRegion = rxPush("preproc.region", ~/#region\b/, "gml.region");
-		var rEndRegion = rxPush("preproc.region", ~/#endregion\b/, "gml.region");
+		// Unlike #region, #endregion has no region name to parse. Pushing the
+		// region state here could leave an empty-line pop pending until the next
+		// line, causing that whole line to be highlighted as a region name.
+		var rEndRegion = rxRule(["preproc.region", "regionname"], ~/(#endregion\b)(.*)$/);
 		var rWith = rxRule(function(s, obj) {
 			var tt:AceTokenType;
 			if (obj == "self" || obj == "other") {
@@ -606,7 +609,7 @@ using tools.NativeArray;
 			"gml.mfunc.decl": rMFunc_decl,
 			"gml.mfunc": rMFunc,
 			"gml.region": [
-				rxRule("comment.meta", ~/@(?:public|private|protected)\b/),
+				rxRule("comment.meta", ~/@(?:public|private|protected|const|virtual|override)\b/),
 				rxRule("regionname", ~/$/, "pop"),
 				rdef("regionname"),
 			],

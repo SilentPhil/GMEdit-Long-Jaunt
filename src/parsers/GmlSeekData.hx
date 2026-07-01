@@ -292,7 +292,8 @@ class GmlSeekData {
 				ns.parent = GmlAPI.ensureNamespace(hint.parentSpace);
 			}
 			ns.addFieldHint(hint.field, hint.isInst, hint.comp, hint.doc, hint.type,
-				hint.isPrivate, hint.lookup, hint.access, hint.accessSet);
+				hint.isPrivate, hint.lookup, hint.access, hint.accessSet, hint.isConst,
+				hint.isVirtual, hint.isOverride);
 		}
 		
 		if (prev.hasGMLive || next.hasGMLive) {
@@ -339,13 +340,19 @@ class GmlSeekDataHint {
 	public var isPrivate:Bool;
 	public var access:GmlFieldAccess;
 	public var accessSet:Bool;
+	public var isConst:Bool;
+	public var isVirtual:Bool;
+	public var isOverride:Bool;
 	public var lookup:gml.GmlAPI.GmlLookup;
 	public function new(namespace:String, isInst:Bool, field:String,
 		comp:AceAutoCompleteItem, doc:GmlFuncDoc, parentSpace:String, type:GmlType,
 		isPrivate:Bool = false,
 		?lookup:gml.GmlAPI.GmlLookup,
 		access:GmlFieldAccess = Public,
-		accessSet:Bool = false
+		accessSet:Bool = false,
+		isConst:Bool = false,
+		isVirtual:Bool = false,
+		isOverride:Bool = false
 	) {
 		this.namespace = namespace;
 		this.parentSpace = parentSpace;
@@ -357,6 +364,9 @@ class GmlSeekDataHint {
 		this.isPrivate = isPrivate;
 		this.access = isPrivate && access == Public ? Private : access;
 		this.accessSet = accessSet;
+		this.isConst = isConst;
+		this.isVirtual = isVirtual;
+		this.isOverride = isOverride;
 		this.lookup = lookup;
 		this.key = namespace + (isInst ? ":" : ".") + field;
 	}
@@ -367,6 +377,9 @@ class GmlSeekDataHint {
 			isPrivate = access == Private;
 		} else if (hint.access != Public && !accessSet) access = hint.access;
 		if (hint.isPrivate) isPrivate = true;
+		if (hint.isConst) isConst = true;
+		if (hint.isVirtual) isVirtual = true;
+		if (hint.isOverride) isOverride = true;
 		if (access != Private && !isPrivate && comp == null && hint.comp != null) comp = hint.comp;
 		if (comp != null && hint.comp != null) comp.meta = hint.comp.meta;
 		var cd1:String = comp != null && hint.comp != null ? JsTools.ncf(hint.comp.doc) : null;

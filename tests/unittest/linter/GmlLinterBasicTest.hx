@@ -80,6 +80,182 @@ class GmlLinterBasicTest {
 		Assert.areEqual(0, t.warnings.length, problemTexts(t));
 	}
 
+	@Test public function testConstConstructorFieldTagsAndAssignments() {
+		var t = runLinter23(
+			"function LinterConstFields() constructor {\n"
+			+ "\t/// @const\n"
+			+ "\tpreceding = 1;\n"
+			+ "\tinline = 2; /// @const\n"
+			+ "\tcombined = 3; /// @is {int} @protected @const\n"
+			+ "\titems = [0]; /// @const\n"
+			+ "\tpreceding = 4;\n"
+			+ "}\n"
+			+ "function mutate_const_fields(value/*:LinterConstFields*/) {\n"
+			+ "\tvalue.preceding = 5;\n"
+			+ "\tvalue.inline += 1;\n"
+			+ "\tvalue.combined++;\n"
+			+ "\t++value.inline;\n"
+			+ "\tvalue.items[0] = 1;\n"
+			+ "}\n",
+			true,
+			KGmlScript.inst
+		);
+
+		var ns = GmlAPI.gmlNamespaces["LinterConstFields"];
+		Assert.isNotNull(ns);
+		Assert.isNotNull(ns.getInstConst("preceding"));
+		Assert.isNotNull(ns.getInstConst("inline"));
+		Assert.isNotNull(ns.getInstConst("combined"));
+		Assert.areEqual("protected", ns.getOwnInstAccess("combined"));
+		Assert.areEqual(5, t.errors.length, problemTexts(t));
+		for (error in t.errors) {
+			Assert.isTrue(error.text.indexOf("const field") >= 0, error.text);
+		}
+	}
+
+	@Test public function testConstConstructorFieldAssignmentFromMethod() {
+		var t = runLinter23(
+			"function LinterConstFieldMethod() constructor {\n"
+			+ "\tvalue = 1; /// @const\n"
+			+ "\tstatic mutate = function() {\n"
+			+ "\t\tvalue = 2;\n"
+			+ "\t\tself.value--;\n"
+			+ "\t}\n"
+			+ "}\n",
+			true,
+			KGmlScript.inst
+		);
+
+		Assert.areEqual(2, t.errors.length, problemTexts(t));
+	}
+
+	@Test public function testInheritedConstFieldCannotBeReinitialized() {
+		var t = runLinter23(
+			"function LinterConstParent() constructor {\n"
+			+ "\tvalue = 1; /// @const\n"
+			+ "}\n"
+			+ "function LinterConstChild() : LinterConstParent() constructor {\n"
+			+ "\tvalue = 2;\n"
+			+ "}\n",
+			true,
+			KGmlScript.inst
+		);
+
+		Assert.areEqual(1, t.errors.length, problemTexts(t));
+		Assert.isTrue(t.errors[0].text.indexOf("LinterConstParent") >= 0);
+	}
+
+	@Test public function testVirtualConstFieldCanBeOverriddenAsConst() {
+		var t = runLinter23(
+			"function LinterVirtualConstBase() constructor {\n"
+			+ "\tvalue = 1; /// @virtual @const\n"
+			+ "}\n"
+			+ "function LinterVirtualConstChild() : LinterVirtualConstBase() constructor {\n"
+			+ "\tvalue = 2; /// @override @const\n"
+			+ "}\n"
+			+ "function LinterVirtualConstGrandchild() : LinterVirtualConstChild() constructor {\n"
+			+ "\t/// @override @const\n"
+			+ "\tvalue = 3;\n"
+			+ "\tstatic mutate = function() {\n"
+			+ "\t\tvalue = 4;\n"
+			+ "\t}\n"
+			+ "}\n",
+			true,
+			KGmlScript.inst
+		);
+
+		Assert.areEqual(1, t.errors.length, problemTexts(t));
+		Assert.isTrue(t.errors[0].text.indexOf("Cannot assign to const field") >= 0);
+	}
+
+	@Test public function testConstOverrideRequiresVirtualBaseAndOverrideTag() {
+		var nonVirtual = runLinter23(
+			"function LinterNonVirtualConstBase() constructor {\n"
+			+ "\tvalue = 1; /// @const\n"
+			+ "}\n"
+			+ "function LinterNonVirtualConstChild() : LinterNonVirtualConstBase() constructor {\n"
+			+ "\tvalue = 2; /// @override @const\n"
+			+ "}\n",
+			true,
+			KGmlScript.inst
+		);
+		Assert.areEqual(1, nonVirtual.errors.length, problemTexts(nonVirtual));
+		Assert.isTrue(nonVirtual.errors[0].text.indexOf("not @virtual") >= 0);
+
+		var noOverride = runLinter23(
+			"function LinterVirtualConstNoOverrideBase() constructor {\n"
+			+ "\tvalue = 1; /// @virtual @const\n"
+			+ "}\n"
+			+ "function LinterVirtualConstNoOverrideChild() : LinterVirtualConstNoOverrideBase() constructor {\n"
+			+ "\tvalue = 2; /// @const\n"
+			+ "}\n",
+			true,
+			KGmlScript.inst
+		);
+		Assert.areEqual(1, noOverride.errors.length, problemTexts(noOverride));
+		Assert.isTrue(noOverride.errors[0].text.indexOf("must be marked @override") >= 0);
+	}
+
+	@Test public function testConstAndOverrideRegionTagsApplyToAllFields() {
+		var t = runLinter23(
+			"function LinterConstRegionBase() constructor {\n"
+			+ "\t#region connection fields @virtual @const\n"
+			+ "\tcaption = \"base\";\n"
+			+ "\tport = 6510;\n"
+			+ "\t#endregion\n"
+			+ "\tmutable = 0;\n"
+			+ "}\n"
+			+ "function LinterConstRegionChild() : LinterConstRegionBase() constructor {\n"
+			+ "\t#region @override @const\n"
+			+ "\tcaption = \"child\";\n"
+			+ "\tport = 6511;\n"
+			+ "\t#endregion\n"
+			+ "\tstatic mutate = function() {\n"
+			+ "\t\tcaption = \"changed\";\n"
+			+ "\t\tmutable = 1;\n"
+			+ "\t}\n"
+			+ "}\n",
+			true,
+			KGmlScript.inst
+		);
+
+		var base = GmlAPI.gmlNamespaces["LinterConstRegionBase"];
+		var child = GmlAPI.gmlNamespaces["LinterConstRegionChild"];
+		Assert.isTrue(base.getInstConst("caption").isVirtual);
+		Assert.isTrue(base.getInstConst("port").isVirtual);
+		Assert.isTrue(child.instOverride["caption"]);
+		Assert.isTrue(child.instOverride["port"]);
+		Assert.areEqual(1, t.errors.length, problemTexts(t));
+		Assert.isTrue(t.errors[0].text.indexOf("caption") >= 0);
+	}
+
+	@Test public function testNestedConstRegionsComposeAndEndRegionClearsTags() {
+		var t = runLinter23(
+			"function LinterNestedConstRegion() constructor {\n"
+			+ "\t#region @const\n"
+			+ "\tplain = 1;\n"
+			+ "\t#region @virtual\n"
+			+ "\tvirtual_value = 2;\n"
+			+ "\t#endregion\n"
+			+ "\tplain_after = 3;\n"
+			+ "\t#endregion\n"
+			+ "\tmutable = 4;\n"
+			+ "\tstatic mutate = function() {\n"
+			+ "\t\tmutable = 5;\n"
+			+ "\t}\n"
+			+ "}\n",
+			true,
+			KGmlScript.inst
+		);
+
+		var ns = GmlAPI.gmlNamespaces["LinterNestedConstRegion"];
+		Assert.isNotNull(ns.getInstConst("plain"));
+		Assert.isTrue(ns.getInstConst("virtual_value").isVirtual);
+		Assert.isNotNull(ns.getInstConst("plain_after"));
+		Assert.isNull(ns.getInstConst("mutable"));
+		Assert.areEqual(0, t.errors.length, problemTexts(t));
+	}
+
 	@Test public function testDeprecatedFunctionWarnings() {
 		var t = runLinter23(
 			"/// @deprecated Use new_api instead\n"

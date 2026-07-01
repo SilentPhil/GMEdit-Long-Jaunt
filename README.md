@@ -241,9 +241,43 @@ members are visible to descendants, and public members are visible everywhere. I
 is marked `/// @private`, fields declared directly inside it default to private unless a member has an
 explicit `/// @public` or `/// @protected` tag.
 
-Access tags can also be placed on `#region` lines to set the default access for fields and methods
-inside the region. Region names are optional, so both `#region getters @public` and `#region @private`
-are valid. Nested regions override outer regions, and explicit member tags override region tags.
+`/// @const` marks a constructor field as assignable only at its declaration. Later direct assignment,
+compound assignment, and increment/decrement operations are reported as red linter errors. The check
+is shallow: members of a const array or struct can still be modified. The tag can precede the field or
+share its inline documentation with other tags.
+
+```gml
+function ConnectionData(_port/*:int*/) constructor {
+	/// @const
+	server_port = _port;
+
+	connection_type = 0; /// @is {int} @protected @const
+}
+
+var data = new ConnectionData(6510);
+data.server_port = 8080; // Error: cannot assign to const field
+```
+
+A plain const field cannot be reinitialized by descendants. To opt into init-only overriding, combine
+`@virtual @const` on the base field with `@override @const` on each descendant declaration. The
+overridden field remains virtual further down the inheritance chain, while assignments from methods
+remain errors.
+
+```gml
+function BaseConnection() constructor {
+	server_port = 6510; /// @virtual @const
+}
+
+function TestConnection() : BaseConnection() constructor {
+	server_port = 6511; /// @override @const
+}
+```
+
+Member tags can also be placed on `#region` lines to apply them to every field or method inside the
+region. This supports access tags as well as `@const`, `@virtual`, and `@override`. Region names are
+optional, so both `#region connection fields @protected @const` and `#region @override @const` are
+valid. Nested regions compose their non-access tags; the nearest region or explicit member access tag
+determines access.
 
 ```gml
 /// @private

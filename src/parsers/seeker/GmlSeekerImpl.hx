@@ -87,7 +87,7 @@ class GmlSeekerImpl {
 	public var hasTryCatch:Bool;
 	public var jsDoc:GmlSeekerJSDoc = new GmlSeekerJSDoc();
 	public var isLibraryResource:Bool;
-	public var regionAccessStack:Array<Null<GmlFieldAccess>> = [];
+	public var regionMemberMetaStack:Array<GmlSeekerRegionMemberMeta> = [];
 	
 	public var commentLineJumps = new IntDictionary<Int>();
 	
@@ -189,12 +189,27 @@ class GmlSeekerImpl {
 	}
 	
 	public function getRegionAccess():Null<GmlFieldAccess> {
-		var i = regionAccessStack.length;
+		var i = regionMemberMetaStack.length;
 		while (--i >= 0) {
-			var access = regionAccessStack[i];
+			var access = regionMemberMetaStack[i].access;
 			if (access != null) return access;
 		}
 		return null;
+	}
+
+	public function getRegionConst():Bool {
+		for (meta in regionMemberMetaStack) if (meta.isConst) return true;
+		return false;
+	}
+
+	public function getRegionVirtual():Bool {
+		for (meta in regionMemberMetaStack) if (meta.isVirtual) return true;
+		return false;
+	}
+
+	public function getRegionOverride():Bool {
+		for (meta in regionMemberMetaStack) if (meta.isOverride) return true;
+		return false;
 	}
 	
 	public function enterRegion(line:String):Void {
@@ -206,13 +221,21 @@ class GmlSeekerImpl {
 				case "public": access = Public;
 			}
 		});
-		regionAccessStack.push(access);
+		regionMemberMetaStack.push({
+			access: access,
+			isConst: regionConstTag.test(line),
+			isVirtual: regionVirtualTag.test(line),
+			isOverride: regionOverrideTag.test(line),
+		});
 	}
 	
 	public function exitRegion():Void {
-		if (regionAccessStack.length > 0) regionAccessStack.pop();
+		if (regionMemberMetaStack.length > 0) regionMemberMetaStack.pop();
 	}
 	private static var regionAccessTag = new RegExp("@(public|private|protected)\\b", "g");
+	private static var regionConstTag = new RegExp("@const\\b");
+	private static var regionVirtualTag = new RegExp("@virtual\\b");
+	private static var regionOverrideTag = new RegExp("@override\\b");
 	
 	public function doLoop(?configOrExitAt:EitherType<GmlSeeker_doLoop, Int>) {
 		var exitAtCubDepth:Int = null;
@@ -378,4 +401,11 @@ class GmlSeeker_doLoop {
 		js.lib.Object.assign(this, empty);
 	}
 	public function new() {}
+}
+
+private typedef GmlSeekerRegionMemberMeta = {
+	access:Null<GmlFieldAccess>,
+	isConst:Bool,
+	isVirtual:Bool,
+	isOverride:Bool,
 }

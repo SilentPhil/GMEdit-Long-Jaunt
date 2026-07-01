@@ -8,6 +8,7 @@ import gml.GmlImports;
 import gml.GmlLocals;
 import gml.GmlNamespace;
 import gml.GmlNamespace.GmlNamespaceAccessInfo;
+import gml.GmlNamespace.GmlNamespaceConstInfo;
 import gml.file.GmlFileKindTools;
 import gml.type.GmlType;
 import gml.Project;
@@ -200,6 +201,43 @@ class GmlLinter {
 		return t != null ? t.unwrapNullable().getNamespace() : null;
 	}
 
+	function getConstFieldInfo(namespace:String, field:String, isStatic:Bool):GmlNamespaceConstInfo {
+		if (namespace == null || field == null) return null;
+		return AceGmlTools.findNamespace(namespace, getImports(), function(ns) {
+			return isStatic ? ns.getStaticConst(field) : ns.getInstConst(field);
+		});
+	}
+
+	function getInheritedConstFieldInfo(namespace:String, field:String):GmlNamespaceConstInfo {
+		if (namespace == null || field == null) return null;
+		return AceGmlTools.findNamespace(namespace, getImports(), function(ns) {
+			return ns.getInheritedInstConst(field);
+		});
+	}
+
+	function checkConstField(namespace:String, field:String, isStatic:Bool, allowDeclaration:Bool = false):Void {
+		var info = getConstFieldInfo(namespace, field, isStatic);
+		if (info == null) return;
+		if (!allowDeclaration) {
+			addError('Cannot assign to const field `$field` of ${info.owner}');
+			return;
+		}
+		if (namespace != info.owner) {
+			addError('Cannot reinitialize const field `$field` of ${info.owner}');
+			return;
+		}
+		if (!isStatic) {
+			var inherited = getInheritedConstFieldInfo(namespace, field);
+			if (inherited != null) {
+				if (!info.isOverride) {
+					addError('Const field `$field` must be marked @override to override ${inherited.owner}');
+				} else if (!inherited.isVirtual) {
+					addError('Cannot override const field `$field` of ${inherited.owner} because it is not @virtual');
+				}
+			}
+		}
+	}
+
 	
 	
 	var __otherType_set = false;
@@ -331,6 +369,15 @@ class GmlLinter {
 		if (isMissingInstanceField(name)) {
 			addWarning('Instance variable `$name` is declared outside the class body');
 		}
+	}
+
+	function takeInitialInstanceVarDeclaration(name:String, oldDepth:Int, isLocal:Bool):Bool {
+		if (isLocal || name == null || constructorInstVars == null || !isInstanceVarDeclarationBody(oldDepth)) {
+			return false;
+		}
+		if (constructorInstVars.exists(name)) return false;
+		constructorInstVars[name] = true;
+		return true;
 	}
 
 	static var implementsLineRx = new RegExp("\\b@implement(?:s)?(?:\\b\\s*\\{(\\w+)\\}|\\b\\s+(\\w+))?");
@@ -659,6 +706,12 @@ class GmlLinter {
 		}
 		for (field => meta in impl.instMeta) if (meta.isOverride) checkOverride(field, true, meta.pos);
 		for (field => meta in impl.staticMeta) if (meta.isOverride) checkOverride(field, false, meta.pos);
+		for (field => isOverride in ns.instOverride) if (isOverride) {
+			checkOverride(field, true, findOverrideWarningPos(source, impl, field, true, impl.pos));
+		}
+		for (field => isOverride in ns.staticOverride) if (isOverride) {
+			checkOverride(field, false, findOverrideWarningPos(source, impl, field, false, impl.pos));
+		}
 		for (field => doc in ns.docInstMap) if (doc != null && doc.isOverride) {
 			checkOverride(field, true, findOverrideWarningPos(source, impl, field, true, { row: 0, column: 0 }));
 		}
