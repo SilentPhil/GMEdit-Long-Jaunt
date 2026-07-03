@@ -484,6 +484,19 @@ using tools.NativeArray;
 			rxRule("string", ~/.*?["]/, "pop"),
 			rxRule("string", ~/.+/),
 		];
+		// If a macro value ends in a closing quote, Ace switches from the string
+		// state back to gml.mfunc at the end of the line and does not run the
+		// latter state's zero-width EOL rule. Pop both states in that case.
+		var stringEscEndsMFunc = false;
+		function rStringEscEndNext(current:AceLangRuleState, stack:Array<AceLangRuleState>) {
+			stack.shift();
+			var next = JsTools.or(stack.shift(), "start");
+			if (stringEscEndsMFunc && next == "gml.mfunc") {
+				stack.shift();
+				return JsTools.or(stack.shift(), "start");
+			}
+			return next;
+		}
 		var rString_esc = [ //{ GMS2 strings with escape characters
 			rule("string.escape", "\\\\(?:"
 				+ "x[0-9a-fA-F]{2}|" // \x41
@@ -492,7 +505,16 @@ using tools.NativeArray;
 			+ ".)"),
 			// (this is to allow escaping linebreaks, which is honestly a strange thing)
 			({ token : "string", regex : "\\\\$", consumeLineEnd : true }:AceLangRule),
-			rule("string", '"|$', "pop"),
+			({
+				regex: '"|$',
+				onMatch: function(value:String, currentState:AceLangRuleState,
+					stack:Array<AceLangRuleState>, line:String, row:Int
+				) {
+					stringEscEndsMFunc = value == '"' && line.endsWith('"');
+					return "string";
+				},
+				next: rStringEscEndNext,
+			}:AceLangRule),
 			rdef("string"),
 		]; //}
 		var rString_tpl_id:AceLangRule = {

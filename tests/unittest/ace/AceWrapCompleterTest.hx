@@ -16,6 +16,53 @@ import test_helpers.GmlFileHelper;
 import tools.Dictionary;
 
 class AceWrapCompleterTest {
+	@Test public function testStringMacrosExitMFuncHighlightState() {
+		var code = "#macro CLIENT CORE.get_client()\n"
+			+ "#macro SERVER CORE.get_server()\n"
+			+ "\n"
+			+ "#macro DEBUG_REALM_NONE \"[NONE]\"\n"
+			+ "#macro DEBUG_REALM_CL \"[CL]\"\n"
+			+ "#macro DEBUG_REALM_SV \"[SV]\"\n"
+			+ "\n"
+			+ "enum APP_STATE {\n"
+			+ "\tUNKNOWN,\n"
+			+ "\tLOADING,\n"
+			+ "\tMAIN_MENU,\n"
+			+ "\tROOM_LOADING,\n"
+			+ "\tROOM_INGAME,\n"
+			+ "\tROOM_UNLOADING\n"
+			+ "}\n"
+			+ "\n"
+			+ "function AppCore() : PubSubHandler() constructor {\n"
+			+ "\t__is_global_render_disabled = true; /// @is {bool}\n";
+		var file = GmlFileHelper.makeGmlFile(code, KGmlScript.inst);
+		file.codeEditor.session = cast {
+			gmlScopes: {
+				get: function(row:Int) return row >= 16 ? "AppCore" : ""
+			}
+		};
+		var rules = AceGmlHighlight.makeRules(file.codeEditor, gml.GmlVersion.map["v23"]);
+		var TextHighlightRules:Dynamic =
+			AceWrap.require("ace/mode/text_highlight_rules").TextHighlightRules;
+		var normalizer:Dynamic = Type.createInstance(TextHighlightRules, []);
+		Reflect.setField(normalizer, "$rules", rules);
+		normalizer.normalizeRules();
+		var Tokenizer:Dynamic = AceWrap.require("ace/tokenizer").Tokenizer;
+		var tokenizer:Dynamic = Type.createInstance(Tokenizer, [rules]);
+		var state:Dynamic = "start";
+		var lines = code.split("\n");
+		for (row in 0 ... lines.length) {
+			var data:Dynamic = tokenizer.getLineTokens(lines[row], state, row);
+			state = data.state;
+			if (row == 3 || row == 4 || row == 5) {
+				Assert.areEqual("start", state);
+			}
+			if (row == 17) {
+				Assert.areEqual("localfield", data.tokens[1].type);
+			}
+		}
+	}
+
 	@Test public function testRegionHighlightDoesNotPushRegionState() {
 		var file = GmlFileHelper.makeGmlFile("#region @private\nvalue = 1;\n#endregion",
 			KGmlScript.inst);
