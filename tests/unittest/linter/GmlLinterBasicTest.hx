@@ -314,6 +314,8 @@ class GmlLinterBasicTest {
 		var child = GmlAPI.gmlNamespaces["LinterPrivateChild"];
 		Assert.isNull(child.getInstKind("secret", 0, "LinterPrivateChild"));
 		Assert.isNotNull(base.getInstKind("secret", 0, "LinterPrivateBase"));
+		Assert.isNull(base.getInstCompItem("secret"));
+		Assert.isNotNull(base.getInstCompItem("secret", 0, "LinterPrivateBase"));
 	}
 
 	@Test public function testPrivateConstructorMarksFieldsPrivateByDefault() {
@@ -330,6 +332,14 @@ class GmlLinterBasicTest {
 		Assert.isTrue(ns.isInstPrivate("secret"));
 		Assert.isNull(ns.getInstCompItem("__hidden"));
 		Assert.isNull(ns.getInstCompItem("secret"));
+		Assert.isNotNull(ns.getInstCompItem("__hidden", 0, "LinterPrivateDefaultBase"));
+		Assert.isNotNull(ns.getInstCompItem("secret", 0, "LinterPrivateDefaultBase"));
+		var ownCompletions = [for (item in ns.getInstComp(0, true, "LinterPrivateDefaultBase")) item.name];
+		var outsideCompletions = [for (item in ns.getInstComp()) item.name];
+		Assert.isTrue(ownCompletions.indexOf("__hidden") >= 0);
+		Assert.isTrue(ownCompletions.indexOf("secret") >= 0);
+		Assert.isTrue(outsideCompletions.indexOf("__hidden") < 0);
+		Assert.isTrue(outsideCompletions.indexOf("secret") < 0);
 	}
 
 	@Test public function testPrivateConstructorDefaultWarnsInChild() {

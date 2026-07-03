@@ -121,7 +121,10 @@ class GmlSeekerProcField {
 		var compMeta = getCompMeta(isField, args, type);
 		var privateFieldRegex = seeker.privateFieldRegex;
 		if (isPrivate && access == Public) access = Private;
-		var comp = (privateFieldRegex == null || !privateFieldRegex.test(name)) && !(isInst && access == Private)
+		// Instance completions are filtered by GmlNamespace using the current
+		// access context. Keep their items here so that private members can be
+		// suggested inside the declaring constructor.
+		var comp = isInst || ((privateFieldRegex == null || !privateFieldRegex.test(name)) && access != Private)
 			? new AceAutoCompleteItem(name, compMeta, info) : null;
 		var hint = new GmlSeekDataHint(namespace, isInst, field, comp, hintDoc, parentSpace,
 			type, isPrivate, lookup, access, accessSet, isConst, isVirtual, isOverride);
