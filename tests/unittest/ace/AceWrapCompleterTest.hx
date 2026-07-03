@@ -16,6 +16,35 @@ import test_helpers.GmlFileHelper;
 import tools.Dictionary;
 
 class AceWrapCompleterTest {
+	@Test public function testRegionHighlightDoesNotPushRegionState() {
+		var file = GmlFileHelper.makeGmlFile("#region @private\nvalue = 1;\n#endregion",
+			KGmlScript.inst);
+		var rules = AceGmlHighlight.makeRules(file.codeEditor, gml.GmlVersion.map["v23"]);
+		var regionRule:Dynamic = null;
+		for (rule in rules["start"]) {
+			var regex:Dynamic = rule.regex;
+			if (regex == null) continue;
+			var regexText = Std.string(regex);
+			if (regexText.indexOf("#region") >= 0 && regexText.indexOf("#endregion") < 0) {
+				regionRule = rule;
+				break;
+			}
+		}
+		Assert.isNotNull(regionRule);
+		Assert.isTrue(regionRule.push == null);
+		Assert.isNotNull(regionRule.onMatch);
+
+		var taggedTokens:Array<Dynamic> = regionRule.onMatch("#region @private", "start", [], "#region @private", 0);
+		Assert.areEqual(3, taggedTokens.length);
+		Assert.areEqual("preproc.region", taggedTokens[0].type);
+		Assert.areEqual("regionname", taggedTokens[1].type);
+		Assert.areEqual("comment.meta", taggedTokens[2].type);
+
+		var plainTokens:Array<Dynamic> = regionRule.onMatch("#region", "start", [], "#region", 0);
+		Assert.areEqual(1, plainTokens.length);
+		Assert.areEqual("preproc.region", plainTokens[0].type);
+	}
+
 	@Test public function testEndRegionHighlightDoesNotPushRegionState() {
 		var file = GmlFileHelper.makeGmlFile("#region @const\nvalue = 1;\n#endregion\nhint = \"ok\";",
 			KGmlScript.inst);

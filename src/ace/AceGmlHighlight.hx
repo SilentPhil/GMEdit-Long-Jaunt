@@ -161,7 +161,18 @@ using tools.NativeArray;
 			~/^(#moment[ \t]+)(\d+)(.*)/
 		);
 		var rSection = rxRule(["preproc.section", "sectionname"], ~/^(#section[ \t]*)(.*)/);
-		var rRegion = rxPush("preproc.region", ~/#region\b/, "gml.region");
+		var regionTagRx = JsTools.rx(~/@(?:public|private|protected|const|virtual|override)\b/g);
+		var rRegion = rxMatch(function(value, state, stack, line, row) {
+			var tokens:Array<AceToken> = [rtk("preproc.region", "#region")];
+			var pos = "#region".length;
+			tools.RegExpTools.each(regionTagRx, value, function(mt) {
+				if (mt.index > pos) tokens.push(rtk("regionname", value.substring(pos, mt.index)));
+				tokens.push(rtk("comment.meta", mt[0]));
+				pos = regionTagRx.lastIndex;
+			}, pos);
+			if (pos < value.length) tokens.push(rtk("regionname", value.substring(pos)));
+			return tokens;
+		}, ~/#region\b.*$/);
 		// Unlike #region, #endregion has no region name to parse. Pushing the
 		// region state here could leave an empty-line pop pending until the next
 		// line, causing that whole line to be highlighted as a region name.
@@ -608,11 +619,6 @@ using tools.NativeArray;
 			].concat(rBase),
 			"gml.mfunc.decl": rMFunc_decl,
 			"gml.mfunc": rMFunc,
-			"gml.region": [
-				rxRule("comment.meta", ~/@(?:public|private|protected|const|virtual|override)\b/),
-				rxRule("regionname", ~/$/, "pop"),
-				rdef("regionname"),
-			],
 			"gml.comment.line": rComment.concat([ //{
 				rxRule("comment.line", ~/$/, "pop"),
 				rdef("comment.line"),
