@@ -560,6 +560,36 @@ class GmlLinterBasicTest {
 		);
 	}
 
+	@Test public function testImportedTypeAliasSurvivesPreprocessForLinter() {
+		var previousAPI = GmlAPI.version;
+		var previousProject = Project.current.version;
+		var v23 = GmlVersion.map["v23"];
+		GmlAPI.version = v23;
+		Project.current.version = v23;
+		GmlAPI.gmlKind["gw_Canvas"] = "namespace";
+		var code = "//!#import gw.*\n"
+			+ "function FamilyEditor(_canvas:gw_Canvas) constructor {\n"
+			+ "\t__gui_family_editor_instance = undefined; /// @is {Canvas?}\n"
+			+ "\t__gui_family_editor_instance = _canvas;\n"
+			+ "}";
+		var file = GmlFileHelper.makeGmlFile(code, KGmlScript.inst);
+		var editor = file.codeEditor;
+		editor.imports = new Dictionary();
+		var displayCode = GmlExtImport.pre(code, editor);
+		// Project-wide Problems refresh can leave behind a detached function scope.
+		// The linter must reconnect it to the root #import context.
+		editor.imports["FamilyEditor"] = new GmlImports();
+
+		var linter = new GmlLinter();
+		var hasError = linter.run(displayCode, editor, Project.current.version);
+		GmlAPI.gmlKind.remove("gw_Canvas");
+		GmlAPI.version = previousAPI;
+		Project.current.version = previousProject;
+		Assert.isFalse(hasError, linter.errorText);
+		Assert.areEqual(0, linter.warnings.length, [for (warning in linter.warnings) warning.text].join("\n"));
+		Assert.areEqual("gw_Canvas", editor.imports["FamilyEditor"].longen["Canvas"]);
+	}
+
 	@Test public function testTernaryUsesCommonParentType() {
 		var stringNs = GmlAPI.ensureNamespace("string");
 		var uuidNs = GmlAPI.ensureNamespace("UnitTestActorUUID");
