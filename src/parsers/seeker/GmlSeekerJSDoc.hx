@@ -282,19 +282,26 @@ class GmlSeekerJSDoc {
 		*/
 		var out = seeker.out;
 		var q = seeker.reader;
-		if (jsDoc_has_const_tag.test(s)) isConst = true;
-		if (jsDoc_has_virtual_tag.test(s)) isVirtual = true;
-		if (jsDoc_has_abstract_tag.test(s)) isAbstract = true;
-		if (jsDoc_has_override_tag.test(s)) isOverride = true;
+		var lineStart = q.source.lastIndexOf("\n", q.pos - 1) + 1;
+		var lineText = q.source.substring(lineStart, q.pos);
+		var isInlineFieldDoc = jsDoc_is_line.exec(lineText) != null;
 		// Modifier handlers return after the first tag, so access modifiers on
 		// the same documentation line must be collected before dispatching.
-		if (jsDoc_private.exec(s) != null
+		// Inline field tags are applied by procIs and must not leak to the next
+		// member declaration.
+		if (!isInlineFieldDoc) {
+			if (jsDoc_has_const_tag.test(s)) isConst = true;
+			if (jsDoc_has_virtual_tag.test(s)) isVirtual = true;
+			if (jsDoc_has_abstract_tag.test(s)) isAbstract = true;
+			if (jsDoc_has_override_tag.test(s)) isOverride = true;
+		}
+		if (!isInlineFieldDoc && (jsDoc_private.exec(s) != null
 			|| jsDoc_protected.exec(s) != null
 			|| jsDoc_public.exec(s) != null
 			|| jsDoc_virtual.exec(s) != null
 			|| jsDoc_abstract.exec(s) != null
 			|| jsDoc_override.exec(s) != null
-		) {
+		)) {
 			var accessMatch = jsDoc_find_access_tag.exec(s);
 			if (accessMatch != null) {
 				switch (accessMatch[1]) {

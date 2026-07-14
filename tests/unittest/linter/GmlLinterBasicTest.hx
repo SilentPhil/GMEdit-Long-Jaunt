@@ -344,6 +344,24 @@ class GmlLinterBasicTest {
 		Assert.isTrue(base.getInstDoc("second", 0, base.name).isAbstract);
 	}
 
+	@Test public function testInlinePrivateDoesNotLeakToFollowingStaticMethod() {
+		var t = runLinter23(
+			"function LinterInlinePrivateBase() constructor {\n"
+			+ "\t__weak_ref = noone; /// @private\n"
+			+ "\tstatic perform = function() {}\n"
+			+ "}\n"
+			+ "function LinterInlinePrivateChild() : LinterInlinePrivateBase() constructor {\n"
+			+ "\tstatic perform = function() {}\n"
+			+ "}"
+		, true, KGmlScript.inst);
+
+		Assert.areEqual(0, t.warnings.length, problemTexts(t));
+		Assert.areEqual(0, t.errors.length, problemTexts(t));
+		var base = GmlAPI.gmlNamespaces["LinterInlinePrivateBase"];
+		Assert.isTrue(base.isInstPrivate("__weak_ref"));
+		Assert.isFalse(base.isInstPrivate("perform"));
+	}
+
 	@Test public function testPrivateConstructorMarksFieldsPrivateByDefault() {
 		runLinter23(
 			"/// @private\n"
