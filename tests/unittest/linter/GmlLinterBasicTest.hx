@@ -755,6 +755,8 @@ class GmlLinterBasicTest {
 		var t = runLinter23(code, true, KGmlScript.inst);
 		Assert.areEqual(1, t.errors.length, problemTexts(t));
 		Assert.isTrue(t.errors[0].text.indexOf("missing") >= 0, problemTexts(t));
+		Assert.areEqual(11, t.errors[0].pos.row);
+		Assert.areEqual(1, t.errors[0].pos.column);
 	}
 
 	@Test public function testOverrideRequiresBaseMethod() {

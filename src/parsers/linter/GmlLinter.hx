@@ -666,6 +666,11 @@ class GmlLinter {
 						var col = line.indexOf(field);
 						return { row: row, column: col >= 0 ? col : 0 };
 					}
+					var instanceMatch = instanceFieldLineRx.exec(line);
+					if (isInst && instanceMatch != null && instanceMatch[1] == field) {
+						var col = line.indexOf(field);
+						return { row: row, column: col >= 0 ? col : 0 };
+					}
 					pendingMeta = null;
 				}
 			}
