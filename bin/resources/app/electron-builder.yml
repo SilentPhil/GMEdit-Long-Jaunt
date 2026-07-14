@@ -4,6 +4,9 @@ win:
   target: zip
   asar: false
   icon: icons/icon.ico
+  extraFiles:
+    - from: gmedit-lint.cmd
+      to: gmedit-lint.cmd
 linux:
   artifactName: GMEdit-${version}-${os}.${ext}
   target: zip

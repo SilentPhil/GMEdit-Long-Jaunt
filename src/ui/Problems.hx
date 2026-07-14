@@ -617,7 +617,7 @@ class Problems {
 		]);
 	}
 	
-	public static function refreshProject():Void {
+	public static function refreshProject(?onComplete:Array<ProblemItem>->Void):Void {
 		if (isRunning) return;
 		var project = Project.current;
 		if (project == null || project.version == gml.GmlVersion.none) {
@@ -672,6 +672,11 @@ class Problems {
 			refreshButton.disabled = false;
 			sortItems();
 			render();
+			if (onComplete != null) {
+				var visibleItems = [];
+				for (item in items) if (!isExcluded(item)) visibleItems.push(item);
+				onComplete(visibleItems);
+			}
 		}, opt);
 	}
 	

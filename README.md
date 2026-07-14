@@ -156,6 +156,58 @@ function Battle() constructor {
 }
 ```
 
+### Command-line GML linting
+
+The existing GMEdit project indexer and linter can be run in a hidden Electron process:
+
+```powershell
+npm.cmd run lint:gml -- path\to\project.yyp
+npm.cmd run lint:gml -- path\to\project.yyp --json
+npm.cmd run lint:gml -- path\to\project.yyp --file scripts/player/player.gml
+```
+
+Packaged Windows builds include `gmedit-lint.cmd` next to `GMEdit.exe` and do not require a separate
+Node.js installation:
+
+```powershell
+gmedit-lint.cmd path\to\project.yyp --json
+gmedit-lint.cmd path\to\project.yyp --file scripts/player/player.gml
+```
+
+A project directory can be passed instead of a `.yyp` path. The CLI searches up to three directory
+levels for a single `.yyp`; if none or multiple are found, it exits with an explanatory error.
+
+The hidden lint process uses a temporary Electron profile to avoid conflicts with an open GMEdit
+window, but copies the current GMEdit configuration into it first. Consequently, linter preferences
+such as `implicitNullableCasts` match the diagnostics shown by the Problems panel.
+
+Multiple files can be supplied with repeated `--file` options or as positional arguments after the
+project. Other options are `--errors-only`, `--warnings-as-errors`, and `--format text|json`.
+
+```cmd
+gmedit-lint.cmd path\to\project ^
+  --file scripts/player/player.gml ^
+  --file scripts/inventory/inventory.gml ^
+  --file objects/obj_game/obj_game.yy ^
+  --json
+```
+
+The same files can be passed positionally:
+
+```cmd
+gmedit-lint.cmd path\to\project ^
+  scripts/player/player.gml ^
+  scripts/inventory/inventory.gml ^
+  objects/obj_game/obj_game.yy ^
+  --json
+```
+
+In Windows CMD, `^` continues a command on the next line. It can be omitted when the whole command
+is written on one line. File paths are relative to the directory containing the `.yyp` file.
+
+Exit code `0` means that no errors were found, `1` means that lint errors were found (or warnings
+with `--warnings-as-errors`), and `2` means that the CLI itself could not complete the scan.
+
 ### Template propagation for methods
 
 Template arguments on constructor instances are propagated into method return types and method

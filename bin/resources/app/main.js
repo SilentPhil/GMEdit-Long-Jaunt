@@ -1,5 +1,9 @@
 const electron = require('electron')
 
+const lintOptions = process.env.GMEDIT_LINT_OPTIONS
+	? JSON.parse(process.env.GMEDIT_LINT_OPTIONS)
+	: null
+
 const electronVersion = (() => {
 	let version = process.versions.electron
 	let pos = version.indexOf(".")
@@ -25,6 +29,7 @@ if (electronVersion < minVersion) {
 
 // Module to control application life.
 const app = electron.app
+if (lintOptions != null) app.setPath('userData', lintOptions.userDataDir)
 // Module to create native browser window.
 const BrowserWindow = electron.BrowserWindow
 
@@ -128,7 +133,7 @@ function createWindow(first) {
 			nodeIntegration: true,
 			contextIsolation: false,
 		},
-		show: !showOnceReady,
+		show: lintOptions == null && !showOnceReady,
 		icon: appIconPath
 	})
 
@@ -139,6 +144,16 @@ function createWindow(first) {
 	})
 
 	activeWindows.push(wnd)
+	if (lintOptions != null) {
+		wnd.webContents.on('did-fail-load', (_event, code, description) => {
+			fs.writeFileSync(lintOptions.errorFile, `GMEdit lint could not load: ${description} (${code}).\n`, 'utf8')
+			app.exit(2)
+		})
+		wnd.webContents.on('render-process-gone', (_event, details) => {
+			fs.writeFileSync(lintOptions.errorFile, `GMEdit lint renderer stopped: ${details.reason}.\n`, 'utf8')
+			app.exit(2)
+		})
+	}
 	if (showOnceReady) {
 		wnd.once('ready-to-show', () => wnd.show())
 	}
@@ -164,7 +179,14 @@ function createWindow(first) {
 	
 	let params = []
 	if (windowFrame) params.push("electron-window-frame")
-	if (first) {
+	if (first && lintOptions != null) {
+		params.push("lint")
+		params.push("lint-format=" + encodeURIComponent(lintOptions.format))
+		params.push("lint-files=" + encodeURIComponent(JSON.stringify(lintOptions.files)))
+		if (lintOptions.errorsOnly) params.push("lint-errors-only")
+		if (lintOptions.warningsAsErrors) params.push("lint-warnings-as-errors")
+		params.push("open=" + encodeURIComponent(lintOptions.project))
+	} else if (first) {
 		let args = process.argv
 		
 		//
@@ -227,6 +249,27 @@ app.on('ready', function () {
 	
 	createWindow(true)
 })
+
+if (lintOptions != null) {
+	let lintFinished = false
+	function finishLint(code, output, error) {
+		if (lintFinished) return
+		lintFinished = true
+		try {
+			if (output != null) fs.writeFileSync(lintOptions.outputFile, output, 'utf8')
+			if (error) fs.writeFileSync(lintOptions.errorFile, error, 'utf8')
+			app.exit(code)
+		} catch (writeError) {
+			fs.writeFileSync(lintOptions.errorFile, `Could not write lint output: ${writeError.message}\n`, 'utf8')
+			app.exit(2)
+		}
+	}
+
+	electron.ipcMain.once('gmedit-lint-result', (_event, result) => {
+		finishLint(Number.isInteger(result?.code) ? result.code : 2, result?.output ?? '')
+	})
+	setTimeout(() => finishLint(2, '', 'GMEdit lint timed out.\n'), 120000).unref()
+}
 
 app.on('activate', function () {
 	// On OS X it's common to re-create a window in the app when the

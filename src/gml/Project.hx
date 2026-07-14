@@ -499,7 +499,9 @@ import ui.treeview.TreeViewElement;
 			//
 			PluginEvents.projectStateRestore({project:this, state:state});
 		}
-		if (Preferences.current.problemsScanMode == ui.preferences.PrefData.PrefProblemsScanMode.OnProjectOpen) {
+		if (Main.moduleArgs.exists("lint")) {
+			cli.GmlLintCli.run();
+		} else if (Preferences.current.problemsScanMode == ui.preferences.PrefData.PrefProblemsScanMode.OnProjectOpen) {
 			ui.Problems.refreshAutomatic();
 		}
 	}
