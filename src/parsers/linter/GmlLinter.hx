@@ -14,6 +14,7 @@ import gml.type.GmlType;
 import gml.Project;
 import gml.type.GmlTypeCanCastTo;
 import gml.type.GmlTypeDef;
+import gml.type.GmlTypeParser;
 import gml.type.GmlTypeTools;
 import haxe.ds.ReadOnlyArray;
 import js.lib.RegExp;
@@ -72,9 +73,9 @@ class GmlLinter {
 		warnings.push(new GmlLinterProblem(text + reader.getStack(), reader.getTopPos()));
 	}
 	public var errors:Array<GmlLinterProblem> = [];
-	function addError(text:String):Void {
+	function addError(text:String, ?pos:AcePos):Void {
 		if (prefs.suppressAll || isProperties) return;
-		errors.push(new GmlLinterProblem(text + reader.getStack(), reader.getTopPos()));
+		errors.push(new GmlLinterProblem(text + reader.getStack(), pos != null ? pos : reader.getTopPos()));
 	}
 	//
 	
@@ -168,13 +169,19 @@ class GmlLinter {
 	function readInlineIsType():GmlType {
 		var eol = reader.source.indexOf("\n", reader.pos);
 		if (eol < 0) eol = reader.source.length;
-		var mt = inlineIsRx.exec(reader.source.substring(reader.pos, eol));
+		var lineTail = reader.source.substring(reader.pos, eol);
+		var mt = inlineIsRx.exec(lineTail);
 		if (mt == null || mt[1] == null) return null;
 		var typeStr = mt[1];
+		var typeOffset = reader.pos + mt.index + mt[0].indexOf(typeStr);
 		if (currFuncDoc != null && currFuncDoc.templateItems != null) {
 			typeStr = GmlTypeTools.patchTemplateItems(typeStr, currFuncDoc.templateItems);
 		}
 		var type = GmlTypeDef.parse(typeStr, "@is inline assignment");
+		if (GmlTypeParser.lastErrorText != null) {
+			var errorOffset = typeOffset + Std.int(Math.max(0, GmlTypeParser.lastErrorPos));
+			addError("Invalid @is type: " + GmlTypeParser.lastErrorText, reader.getPos(errorOffset));
+		}
 		var imp = getImports();
 		if (imp == null) imp = editor.imports[""];
 		return GmlTypeTools.mapImportedNames(type, imp);
@@ -1466,6 +1473,7 @@ class GmlLinter {
 					if (nk == LKSet) { // `name = val`
 						skip();
 						var setToken = nextVal;
+						readInlineIsType();
 						var targetDoc:GmlFuncDoc = null;
 						if (isStaticCtr) {
 							var ownerName = currFuncDoc.name;

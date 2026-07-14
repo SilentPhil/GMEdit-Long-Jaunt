@@ -759,6 +759,19 @@ class GmlLinterBasicTest {
 		Assert.areEqual(1, t.errors[0].pos.column);
 	}
 
+	@Test public function testMalformedInlineIsTypeIsReported() {
+		var t = runLinter23(
+			"function SoulStore() constructor {\n"
+			+ "\tstatic __map_of_soul_templates = ds_map_create(); /// @is {ds_map<SoulTemplateUUID;SoulTemplate}\n"
+			+ "}"
+		);
+		Assert.areEqual(1, t.errors.length, problemTexts(t));
+		Assert.isTrue(t.errors[0].text.indexOf("Invalid @is type") >= 0, problemTexts(t));
+		Assert.isTrue(t.errors[0].text.indexOf("Expected a `,`/`;` or a `>` in `<>`") >= 0, problemTexts(t));
+		Assert.areEqual(1, t.errors[0].pos.row);
+		Assert.isTrue(t.errors[0].pos.column > 0);
+	}
+
 	@Test public function testOverrideRequiresBaseMethod() {
 		var t = runLinter23(
 			"function LinterOverrideMissingBase() constructor {\n"
