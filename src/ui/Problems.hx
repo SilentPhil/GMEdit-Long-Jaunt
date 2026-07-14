@@ -934,10 +934,35 @@ class Problems {
 		if (Path.isAbsolute(path)) return fileKey(path);
 		return path.ptNoBS();
 	}
+
+	static function cloneImports(source:Dictionary<GmlImports>):Dictionary<GmlImports> {
+		if (source == null) return null;
+		var result = new Dictionary<GmlImports>();
+		for (context => imports in source) {
+			if (imports != null) result[context] = imports.createLink();
+		}
+		return result;
+	}
+
+	static function findKnownImports(path:String):Dictionary<GmlImports> {
+		if (path == null) return null;
+		var normalizedPath = normalizeOpenPath(path);
+		for (tab in ChromeTabs.getTabs()) {
+			var openFile = tab.gmlFile;
+			if (openFile == null || openFile.codeEditor == null || openFile.path == null) continue;
+			if (normalizeOpenPath(openFile.path) == normalizedPath) {
+				return cloneImports(openFile.codeEditor.imports);
+			}
+		}
+		var data = GmlSeekData.map[path];
+		if (data == null && normalizedPath != path) data = GmlSeekData.map[normalizedPath];
+		return data != null ? cloneImports(data.imports) : null;
+	}
 	
 	static function lintCode(name:String, path:String, code:String):Void {
 		var kind = getKind(name, path);
 		if (!Std.is(kind, KGml) || !(cast kind:KGml).canSyntaxCheck) return;
+		var knownImports = findKnownImports(path);
 		var seekPath = path != null ? path + "#problems" : "#problems/" + name;
 		var file:GmlFile = cast {};
 		file.name = name;
@@ -963,6 +988,7 @@ class Problems {
 		file.code = displayCode;
 		var data = GmlSeekData.map[seekPath];
 		if (data != null && data.imports != null) editor.imports = data.imports;
+		if (knownImports != null) editor.imports = knownImports;
 		GmlSeekData.map.remove(seekPath);
 		var session:AceSession = AceTools.createSession(displayCode, {
 			path: "ace/mode/gml",

@@ -697,6 +697,7 @@ class GmlExtImport {
 			GmlSeekData.map.set(path, seekData);
 		}
 		if (seekData != null) seekData.imports = imps;
+		editor.imports = imps;
 		return out;
 	}
 	

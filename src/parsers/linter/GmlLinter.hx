@@ -14,6 +14,7 @@ import gml.type.GmlType;
 import gml.Project;
 import gml.type.GmlTypeCanCastTo;
 import gml.type.GmlTypeDef;
+import gml.type.GmlTypeParser;
 import gml.type.GmlTypeTools;
 import haxe.ds.ReadOnlyArray;
 import js.lib.RegExp;
@@ -72,9 +73,9 @@ class GmlLinter {
 		warnings.push(new GmlLinterProblem(text + reader.getStack(), reader.getTopPos()));
 	}
 	public var errors:Array<GmlLinterProblem> = [];
-	function addError(text:String):Void {
+	function addError(text:String, ?pos:AcePos):Void {
 		if (prefs.suppressAll || isProperties) return;
-		errors.push(new GmlLinterProblem(text + reader.getStack(), reader.getTopPos()));
+		errors.push(new GmlLinterProblem(text + reader.getStack(), pos != null ? pos : reader.getTopPos()));
 	}
 	//
 	
@@ -109,7 +110,13 @@ class GmlLinter {
 	
 	function getImports(?force:Bool):GmlImports {
 		var imp = editor.imports[context];
-		if (imp == null && force) {
+		var root = context != "" ? editor.imports[""] : null;
+		if (root != null && (imp == null || imp.longen != root.longen)) {
+			var localTypes = imp != null ? imp.localTypes : null;
+			imp = root.createLink();
+			if (localTypes != null) imp.localTypes = localTypes;
+			editor.imports[context] = imp;
+		} else if (imp == null && force) {
 			imp = new GmlImports();
 			editor.imports[context] = imp;
 		}
@@ -168,13 +175,19 @@ class GmlLinter {
 	function readInlineIsType():GmlType {
 		var eol = reader.source.indexOf("\n", reader.pos);
 		if (eol < 0) eol = reader.source.length;
-		var mt = inlineIsRx.exec(reader.source.substring(reader.pos, eol));
+		var lineTail = reader.source.substring(reader.pos, eol);
+		var mt = inlineIsRx.exec(lineTail);
 		if (mt == null || mt[1] == null) return null;
 		var typeStr = mt[1];
+		var typeOffset = reader.pos + mt.index + mt[0].indexOf(typeStr);
 		if (currFuncDoc != null && currFuncDoc.templateItems != null) {
 			typeStr = GmlTypeTools.patchTemplateItems(typeStr, currFuncDoc.templateItems);
 		}
 		var type = GmlTypeDef.parse(typeStr, "@is inline assignment");
+		if (GmlTypeParser.lastErrorText != null) {
+			var errorOffset = typeOffset + Std.int(Math.max(0, GmlTypeParser.lastErrorPos));
+			addError("Invalid @is type: " + GmlTypeParser.lastErrorText, reader.getPos(errorOffset));
+		}
 		var imp = getImports();
 		if (imp == null) imp = editor.imports[""];
 		return GmlTypeTools.mapImportedNames(type, imp);
@@ -663,6 +676,11 @@ class GmlLinter {
 				} else if (trimmed != "") {
 					var staticMatch = staticFieldLineRx.exec(line);
 					if (staticMatch != null && staticMatch[1] == field) {
+						var col = line.indexOf(field);
+						return { row: row, column: col >= 0 ? col : 0 };
+					}
+					var instanceMatch = instanceFieldLineRx.exec(line);
+					if (isInst && instanceMatch != null && instanceMatch[1] == field) {
 						var col = line.indexOf(field);
 						return { row: row, column: col >= 0 ? col : 0 };
 					}
@@ -1461,6 +1479,7 @@ class GmlLinter {
 					if (nk == LKSet) { // `name = val`
 						skip();
 						var setToken = nextVal;
+						readInlineIsType();
 						var targetDoc:GmlFuncDoc = null;
 						if (isStaticCtr) {
 							var ownerName = currFuncDoc.name;

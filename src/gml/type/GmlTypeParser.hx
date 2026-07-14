@@ -73,8 +73,15 @@ class GmlTypeParser {
 		return r;
 	})();
 	public static var warnAboutMissing:Array<String> = null;
+	/** Details for the most recent `parse` call, for callers that surface diagnostics. */
+	public static var lastErrorText(default, null):String = null;
+	public static var lastErrorPos(default, null):Int = -1;
 	static function parseError(s:String, q:GmlReader, ctx:String, ?pos:Int):GmlType {
 		if (pos == null) pos = q.pos - 1;
+		if (lastErrorText == null) {
+			lastErrorText = s;
+			lastErrorPos = pos;
+		}
 		Console.warn("Type parse error in `" + q.source.insert(pos, '¦') + '` (`$ctx`): ' + s);
 		return null;
 	}
@@ -482,15 +489,23 @@ class GmlTypeParser {
 	
 	static var cache:Dictionary<GmlType> = new Dictionary();
 	public static function parse(s:String, ctx:String):GmlType {
+		lastErrorText = null;
+		lastErrorPos = -1;
 		if (s == null) return null;
 		var t = cache[s];
 		if (t != null) return t;
 		var q = new GmlReader(s);
 		t = parseRec(q, ctx);
 		q.skipSpaces0();
-		if (q.loopLocal) Console.warn("Type parse warning in `"
-			+ s.insert(q.pos, "¦") + '` (`$ctx`): Trailing data');
-		cache[s] = t;
+		if (q.loopLocal) {
+			if (lastErrorText == null) {
+				lastErrorText = "Trailing data";
+				lastErrorPos = q.pos;
+			}
+			Console.warn("Type parse warning in `"
+				+ s.insert(q.pos, "¦") + '` (`$ctx`): Trailing data');
+		}
+		if (lastErrorText == null) cache[s] = t;
 		return t;
 	}
 	public static function clear():Void {
