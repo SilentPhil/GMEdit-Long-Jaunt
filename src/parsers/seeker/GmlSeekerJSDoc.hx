@@ -193,7 +193,7 @@ class GmlSeekerJSDoc {
 		var hasVirtual = isVirtual;
 		var hasOverride = isOverride;
 		if (doc != null) {
-			accessMatch = jsDoc_access_tag.exec(doc);
+			accessMatch = jsDoc_find_access_tag.exec(doc);
 			if (jsDoc_has_const_tag.test(doc)) hasConst = true;
 			if (jsDoc_has_virtual_tag.test(doc)) hasVirtual = true;
 			if (jsDoc_has_override_tag.test(doc)) hasOverride = true;
@@ -284,7 +284,33 @@ class GmlSeekerJSDoc {
 		var q = seeker.reader;
 		if (jsDoc_has_const_tag.test(s)) isConst = true;
 		if (jsDoc_has_virtual_tag.test(s)) isVirtual = true;
+		if (jsDoc_has_abstract_tag.test(s)) isAbstract = true;
 		if (jsDoc_has_override_tag.test(s)) isOverride = true;
+		// Modifier handlers return after the first tag, so access modifiers on
+		// the same documentation line must be collected before dispatching.
+		if (jsDoc_private.exec(s) != null
+			|| jsDoc_protected.exec(s) != null
+			|| jsDoc_public.exec(s) != null
+			|| jsDoc_virtual.exec(s) != null
+			|| jsDoc_abstract.exec(s) != null
+			|| jsDoc_override.exec(s) != null
+		) {
+			var accessMatch = jsDoc_find_access_tag.exec(s);
+			if (accessMatch != null) {
+				switch (accessMatch[1]) {
+					case "private":
+						isPrivate = true;
+						access = Private;
+					case "protected":
+						isPrivate = false;
+						access = Protected;
+					default:
+						isPrivate = false;
+						access = Public;
+				}
+				accessSet = true;
+			}
+		}
 		
 		var mt = jsDoc_implements.exec(s);
 		if (mt != null) {
@@ -569,7 +595,7 @@ class GmlSeekerJSDoc {
 				return;
 			}
 		}
-		
+
 		mt = jsDoc_static.exec(s);
 		if (mt != null) {
 			isStatic = true;

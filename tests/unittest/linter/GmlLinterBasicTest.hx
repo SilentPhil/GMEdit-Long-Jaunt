@@ -318,6 +318,32 @@ class GmlLinterBasicTest {
 		Assert.isNotNull(base.getInstCompItem("secret", 0, "LinterPrivateBase"));
 	}
 
+	@Test public function testCombinedAbstractPrivateTagsAreOrderIndependent() {
+		var t = runLinter23(
+			"function LinterAbstractPrivateBase() constructor {\n"
+			+ "\t/// @private @abstract\n"
+			+ "\tstatic first = function() {}\n"
+			+ "\t/// @abstract @private\n"
+			+ "\tstatic second = function() {}\n"
+			+ "}\n"
+			+ "function LinterAbstractPrivateChild() : LinterAbstractPrivateBase() constructor {\n"
+			+ "\tstatic first = function() {}\n"
+			+ "\tstatic second = function() {}\n"
+			+ "}"
+		, true, KGmlScript.inst);
+
+		Assert.areEqual(2, t.warnings.length, problemTexts(t));
+		Assert.isTrue(problemTexts(t).indexOf("private field `first`") >= 0);
+		Assert.isTrue(problemTexts(t).indexOf("private field `second`") >= 0);
+		Assert.areEqual(0, t.errors.length, problemTexts(t));
+
+		var base = GmlAPI.gmlNamespaces["LinterAbstractPrivateBase"];
+		Assert.isTrue(base.isInstPrivate("first"));
+		Assert.isTrue(base.isInstPrivate("second"));
+		Assert.isTrue(base.getInstDoc("first", 0, base.name).isAbstract);
+		Assert.isTrue(base.getInstDoc("second", 0, base.name).isAbstract);
+	}
+
 	@Test public function testPrivateConstructorMarksFieldsPrivateByDefault() {
 		runLinter23(
 			"/// @private\n"

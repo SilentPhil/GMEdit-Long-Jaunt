@@ -99,6 +99,7 @@ class GmlSeekerJSDocRegex {
 	public static var jsDoc_public = new RegExp("^///\\s*"
 		+ "@public\\b\\s*"
 	);
+	public static var jsDoc_find_access_tag = new RegExp("(?:^|\\s+)@(public|private|protected)\\b\\s*");
 	public static var jsDoc_access_tag = new RegExp("(?:^|\\s+)@(public|private|protected)\\b\\s*", "g");
 	public static var jsDoc_private_tag = jsDoc_access_tag;
 	public static var jsDoc_const = new RegExp("^///\\s*"
@@ -117,6 +118,7 @@ class GmlSeekerJSDocRegex {
 	public static var jsDoc_abstract = new RegExp("^///\\s*"
 		+ "@abstract\\b\\s*"
 	);
+	public static var jsDoc_has_abstract_tag = new RegExp("(?:^|\\s+)@abstract\\b");
 	public static var jsDoc_override = new RegExp("^///\\s*"
 		+ "@override\\b\\s*"
 	);

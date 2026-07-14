@@ -752,6 +752,24 @@ class GmlLinter {
 	function checkVirtualOverrideImplementations(currentImpls:Dictionary<GmlLinterInterfaceImplementation>, source:String):Void {
 		if (prefs.suppressAll || isProperties || currentImpls == null) return;
 		for (_ => impl in currentImpls) {
+			var ns = GmlAPI.gmlNamespaces[impl.name];
+			if (ns != null && ns.parent != null) {
+				for (field => _ in impl.staticFields) {
+					var access = ns.parent.getInstAccess(field);
+					if (access == null || GmlNamespace.isAccessAllowed(access.access, access.owner, ns.name)) continue;
+					var pos = impl.staticPositions[field];
+					if (pos == null) pos = impl.pos;
+					switch (access.access) {
+						case Private:
+							warnings.push(new GmlLinterProblem(
+								'Trying to access private field `$field` of ${access.owner}', pos));
+						case Protected:
+							warnings.push(new GmlLinterProblem(
+								'Trying to access protected field `$field` of ${access.owner}', pos));
+						default:
+					}
+				}
+			}
 			checkVirtualOverrideImplementation(impl, currentImpls, source);
 			checkAbstractMembers(impl);
 		}
@@ -1891,6 +1909,7 @@ class GmlLinterInterfaceImplementation {
 	public var positions:Dictionary<AcePos> = new Dictionary();
 	public var instFields:Dictionary<Bool> = new Dictionary();
 	public var staticFields:Dictionary<Bool> = new Dictionary();
+	public var staticPositions:Dictionary<AcePos> = new Dictionary();
 	public var instMeta:Dictionary<GmlLinterMemberMeta> = new Dictionary();
 	public var staticMeta:Dictionary<GmlLinterMemberMeta> = new Dictionary();
 	public function new(name:String) {
@@ -1911,6 +1930,10 @@ class GmlLinterInterfaceImplementation {
 	public function addField(field:String, isInst:Bool, row:Int, line:String, meta:GmlLinterMemberMeta):Void {
 		var fields = isInst ? instFields : staticFields;
 		fields[field] = true;
+		if (!isInst) {
+			var col = line.indexOf(field);
+			staticPositions[field] = { row: row, column: col >= 0 ? col : 0 };
+		}
 		if (meta == null) return;
 		var metas = isInst ? instMeta : staticMeta;
 		metas[field] = meta.withFallbackPos(row, line);
