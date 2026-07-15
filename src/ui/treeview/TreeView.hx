@@ -13,6 +13,9 @@ import js.html.DragEvent;
 import js.html.Element;
 import js.html.DivElement;
 import js.html.Event;
+import js.html.InputElement;
+import js.html.ButtonElement;
+import js.html.KeyboardEvent;
 import js.html.Console;
 import js.html.MouseEvent;
 import Main.*;
@@ -48,8 +51,83 @@ using tools.PathTools;
 	public static inline var clDir:String = "dir";
 	public static inline var clItem:String = "item";
 	public static inline var clOpen:String = "open";
+	public static inline var clFilterHidden:String = "tree-filter-hidden";
 	//
 	public static var element:DivElement;
+	static var filterInput:InputElement;
+	static var filterClear:ButtonElement;
+	static var filterWholeWord:ButtonElement;
+	static var filterCaseSensitive:ButtonElement;
+	static var filterObserver:MutationObserver;
+	static var filterUpdatePending:Bool = false;
+	static inline function isWordChar(code:Int):Bool {
+		return (code >= 48 && code <= 57)
+			|| (code >= 65 && code <= 90)
+			|| (code >= 97 && code <= 122)
+			|| code == 95;
+	}
+	public static function filterMatches(name:String, query:String, wholeWord:Bool, caseSensitive:Bool):Bool {
+		if (query == "") return true;
+		if (!caseSensitive) {
+			name = name.toLowerCase();
+			query = query.toLowerCase();
+		}
+		var at = name.indexOf(query);
+		if (!wholeWord) return at >= 0;
+		while (at >= 0) {
+			var beforeOK = at == 0 || !isWordChar(name.charCodeAt(at - 1));
+			var after = at + query.length;
+			var afterOK = after == name.length || !isWordChar(name.charCodeAt(after));
+			if (beforeOK && afterOK) return true;
+			at = name.indexOf(query, at + 1);
+		}
+		return false;
+	}
+	static function filterNode(node:Element, query:String, wholeWord:Bool, caseSensitive:Bool):Bool {
+		if (node.classList.contains(clItem)) {
+			var name = node.getAttribute(attrIdent);
+			if (name == null) name = node.innerText;
+			var visible = filterMatches(name, query, wholeWord, caseSensitive);
+			node.classList.toggle(clFilterHidden, !visible);
+			return visible;
+		}
+		if (!node.classList.contains(clDir)) return false;
+		var visible = false;
+		var children = (cast node:TreeViewDir).treeItems.children;
+		for (i in 0 ... children.length) {
+			if (filterNode(cast children[i], query, wholeWord, caseSensitive)) visible = true;
+		}
+		node.classList.toggle(clFilterHidden, !visible);
+		return visible;
+	}
+	public static function applyFilter() {
+		if (filterInput == null) return;
+		var query = filterInput.value;
+		var active = query.length > 0;
+		element.classList.toggle("is-filtering", active);
+		filterClear.disabled = !active;
+		if (!active) {
+			for (node in element.querySelectorEls('.$clFilterHidden')) node.classList.remove(clFilterHidden);
+			return;
+		}
+		var wholeWord = filterWholeWord.getAttribute("aria-pressed") == "true";
+		var caseSensitive = filterCaseSensitive.getAttribute("aria-pressed") == "true";
+		var children = element.children;
+		for (i in 0 ... children.length) filterNode(cast children[i], query, wholeWord, caseSensitive);
+		ensureThumbs(element);
+	}
+	static function scheduleFilter() {
+		if (filterUpdatePending || filterInput == null || filterInput.value == "") return;
+		filterUpdatePending = true;
+		window.requestAnimationFrame(function(_) {
+			filterUpdatePending = false;
+			applyFilter();
+		});
+	}
+	static function toggleFilterOption(button:ButtonElement) {
+		button.setAttribute("aria-pressed", button.getAttribute("aria-pressed") == "true" ? "false" : "true");
+		applyFilter();
+	}
 	public static function clear() {
 		element.innerHTML = "";
 		element.removeAttribute(attrFilter);
@@ -428,6 +506,28 @@ using tools.PathTools;
 	public static function init() {
 		element = document.querySelectorAuto(".treeview");
 		if (element == null) element = document.createDivElement();
+		filterInput = document.querySelectorAuto("#tree-filter-input");
+		filterClear = document.querySelectorAuto("#tree-filter-clear");
+		filterWholeWord = document.querySelectorAuto("#tree-filter-whole-word");
+		filterCaseSensitive = document.querySelectorAuto("#tree-filter-case-sensitive");
+		if (filterInput != null) {
+			filterInput.oninput = function(_) applyFilter();
+			filterInput.addEventListener("keydown", function(e:KeyboardEvent) {
+				if (e.keyCode == KeyboardEvent.DOM_VK_ESCAPE && filterInput.value != "") {
+					filterInput.value = "";
+					applyFilter();
+				}
+			});
+			filterClear.onclick = function(_) {
+				filterInput.value = "";
+				applyFilter();
+				filterInput.focus();
+			};
+			filterWholeWord.onclick = function(_) toggleFilterOption(filterWholeWord);
+			filterCaseSensitive.onclick = function(_) toggleFilterOption(filterCaseSensitive);
+			filterObserver = new MutationObserver(function(_, _) scheduleFilter());
+			filterObserver.observe(element, { childList: true, subtree: true });
+		}
 		thumbStyle = document.querySelectorAuto("#tree-thumbs");
 		thumbSheet = cast thumbStyle.sheet;
 		var EventEmitter = ace.AceWrap.require("ace/lib/event_emitter").EventEmitter;

@@ -193,6 +193,14 @@ button[type=button].highlighted-button {
 	--treeview-background-color: #222222;
 	color: #D0D0D0;
 }
+.tree-filter .tree-filter-button {
+	color: #eeeeee;
+}
+.tree-filter .tree-filter-button[aria-pressed="true"] {
+	color: #ffffff;
+	border-color: var(--color-primary);
+	background: rgba(85, 132, 212, 0.32);
+}
 .treeview div[data-color] {
 	color: white;
 }

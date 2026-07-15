@@ -51,8 +51,20 @@
 			</div>
 			<div class="chrome-tabs-bottom-bar"></div>
 		</div>
-		<div class="bottom treeview">
-			
+		<div class="bottom resource-tree-panel">
+			<div class="tree-filter" role="search">
+				<input id="tree-filter-input" type="text" placeholder="Filter resources" aria-label="Filter project resources" autocomplete="off" spellcheck="false" />
+				<button id="tree-filter-clear" class="tree-filter-button" type="button" title="Clear filter" aria-label="Clear resource filter" disabled>
+					<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" /></svg>
+				</button>
+				<button id="tree-filter-whole-word" class="tree-filter-button" type="button" title="Match whole word" aria-label="Match whole word" aria-pressed="false">
+					<svg viewBox="0 0 18 16" aria-hidden="true"><path d="M1.5 12.5h15M3 10l3-7 3 7M4.2 7h3.6M11 3v7M11 6.5c3.5-1.5 5 0 5 1.7 0 2.2-3 2.5-5 1" /></svg>
+				</button>
+				<button id="tree-filter-case-sensitive" class="tree-filter-button" type="button" title="Match case" aria-label="Match case" aria-pressed="false">
+					<span aria-hidden="true">Aa</span>
+				</button>
+			</div>
+			<div class="treeview"></div>
 		</div>
 	</div>
 	<div width="5" id="splitter-td" class="splitter-td"

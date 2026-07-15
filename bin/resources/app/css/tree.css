@@ -1,7 +1,74 @@
+.resource-tree-panel {
+	display: flex;
+	flex-direction: column;
+}
+.tree-filter {
+	display: flex;
+	align-items: center;
+	gap: 3px;
+	flex: 0 0 auto;
+	padding: 5px 4px;
+	border-bottom: 1px solid rgba(127, 127, 127, 0.5);
+	box-sizing: border-box;
+}
+.tree-filter input {
+	min-width: 0;
+	height: 26px;
+	flex: 1 1 auto;
+	padding: 3px 6px;
+	border: 1px solid rgba(127, 127, 127, 0.7);
+	box-sizing: border-box;
+	font: inherit;
+}
+.tree-filter .tree-filter-button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 26px;
+	height: 26px;
+	flex: 0 0 26px;
+	margin: 0;
+	padding: 0;
+	border: 1px solid transparent;
+	border-radius: 2px;
+	background: transparent;
+	color: #333;
+	font: 700 11px/1 sans-serif;
+	cursor: pointer;
+}
+.tree-filter .tree-filter-button svg {
+	width: 16px;
+	height: 16px;
+	fill: none;
+	stroke: currentColor;
+	stroke-width: 1.9;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+}
+.tree-filter .tree-filter-button:hover:not(:disabled) {
+	background: rgba(127, 127, 127, 0.18);
+}
+.tree-filter .tree-filter-button[aria-pressed="true"] {
+	border-color: currentColor;
+	background: rgba(127, 127, 127, 0.28);
+}
+.tree-filter .tree-filter-button:disabled {
+	opacity: 0.35;
+	cursor: default;
+}
 .treeview {
+	flex: 1 1 auto;
+	min-height: 0;
 	line-height: 1.35;
 	overflow: auto;
 	--treeview-background-color: white;
+}
+.treeview .item.tree-filter-hidden,
+.treeview .dir.tree-filter-hidden {
+	display: none;
+}
+.treeview.is-filtering .dir:not(.tree-filter-hidden) > .items {
+	display: block;
 }
 .treeview .dir .header {
 	-webkit-user-select: none;
