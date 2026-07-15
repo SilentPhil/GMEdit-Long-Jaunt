@@ -1,6 +1,52 @@
 #outline-view {
 	overflow: auto;
 }
+#main #editor-td .bottom.outline-view-right-active {
+	flex-direction: row;
+}
+#outline-view-workspace {
+	display: flex;
+	flex-direction: column;
+	position: relative;
+	min-width: 0;
+	min-height: 0;
+	width: 0;
+	height: 100%;
+	flex: 1 1 auto;
+}
+#outline-view-workspace > .tabview {
+	display: flex;
+	position: relative;
+	min-width: 0;
+	min-height: 0;
+	flex-grow: 1;
+}
+#outline-view-workspace > .tabview > div {
+	min-width: 0;
+	min-height: 0;
+	flex-grow: 1;
+}
+#outline-view-right {
+	display: flex;
+	flex-direction: column;
+	min-width: 160px;
+	min-height: 0;
+	width: 280px;
+	flex: 0 0 280px;
+	background: inherit;
+	color: inherit;
+}
+#outline-view-right > #outline-view {
+	width: 100%;
+	min-width: 0;
+	min-height: 0;
+	flex: 1 1 auto;
+	box-sizing: border-box;
+}
+#outline-view-right-splitter {
+	height: 100%;
+	flex: 0 0 5px;
+}
 #outline-view.popout-window {
 	right: 20px;
 	top: 40px;

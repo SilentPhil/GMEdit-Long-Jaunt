@@ -352,11 +352,60 @@ https://stackoverflow.com/a/36247448/5578773
 	cursor: n-resize;
 }
 #misc-select {
+	display: none;
 	width: 100%;
 	border: 0;
 	line-height: 1.5;
 	height: 1.5em;
 	box-shadow: 0 -1px 0 rgba(0,0,0,0.1) inset;
+}
+#misc-tabs {
+	display: flex;
+	align-items: stretch;
+	gap: 0;
+	min-height: 25px;
+	padding: 0 4px;
+	border-bottom: 1px solid rgba(128, 128, 128, 0.35);
+	background: rgba(128, 128, 128, 0.08);
+	box-sizing: border-box;
+	flex: 0 0 auto;
+}
+.misc-tab {
+	position: relative;
+	min-width: 72px;
+	margin: 0;
+	padding: 3px 10px;
+	border: 0;
+	border-left: 1px solid transparent;
+	border-right: 1px solid transparent;
+	background: transparent;
+	color: inherit;
+	font: inherit;
+	cursor: pointer;
+}
+.misc-tab:hover {
+	background: rgba(128, 128, 128, 0.16);
+}
+.misc-tab.active {
+	border-left-color: rgba(128, 128, 128, 0.25);
+	border-right-color: rgba(128, 128, 128, 0.25);
+	background: rgba(128, 128, 128, 0.22);
+}
+.misc-tab.active:after {
+	content: "";
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: -1px;
+	height: 2px;
+	background: var(--color-primary);
+}
+.misc-tab:focus {
+	outline: none !important;
+}
+.misc-tab:focus-visible {
+	outline: 1px solid var(--color-primary) !important;
+	outline-offset: -3px;
 }
 #misc-panel {
 	position: relative;

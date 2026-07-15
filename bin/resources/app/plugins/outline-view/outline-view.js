@@ -13,6 +13,12 @@
 	var Preferences = $gmedit["ui.Preferences"];
 	var FileWrap = $gmedit["electron.FileWrap"];
 	var popout = false; // show a popout instead of a sidebar
+	var dockPosition = "bottom";
+	var rightHost = null;
+	var rightWorkspace = null;
+	var rightDock = null;
+	var rightSplitter = null;
+	var rightSplitterInstance = null;
 	var displayMode = 1;
 	var currOnly = false; // original idea (only show the current file)
 	var noIndex = false;
@@ -665,6 +671,80 @@
 	//
 	var visible = false;
 	var toggleCheckbox = null;
+	function dispatchResize() {
+		window.dispatchEvent(new Event("resize"));
+	}
+	function ensureRightDock() {
+		if (rightDock) return true;
+		rightHost = document.querySelector("#editor-td > .bottom");
+		if (!rightHost) return false;
+
+		rightWorkspace = document.createElement("div");
+		rightWorkspace.id = "outline-view-workspace";
+		while (rightHost.firstChild) rightWorkspace.appendChild(rightHost.firstChild);
+		rightHost.classList.add("outline-view-right-active");
+		rightHost.appendChild(rightWorkspace);
+
+		rightSplitter = document.createElement("div");
+		rightSplitter.id = "outline-view-right-splitter";
+		rightSplitter.className = "splitter-td";
+		rightSplitter.setAttribute("splitter-element", "#outline-view-right");
+		rightSplitter.setAttribute("splitter-lskey", "splitter-width-outline-view-right");
+		rightSplitter.setAttribute("splitter-default-width", "280");
+		rightSplitter.setAttribute("splitter-min-width", "160");
+		rightSplitter.setAttribute("splitter-update-tabs", "yeah");
+
+		rightDock = document.createElement("div");
+		rightDock.id = "outline-view-right";
+		rightHost.appendChild(rightSplitter);
+		rightHost.appendChild(rightDock);
+
+		var Splitter = window.GMEdit_Splitter;
+		if (Splitter) {
+			rightSplitterInstance = new Splitter(rightSplitter);
+		}
+		dispatchResize();
+		return true;
+	}
+	function removeRightDock() {
+		if (!rightDock) return;
+		if (outer.parentElement == rightDock) rightDock.removeChild(outer);
+		rightSplitterInstance = null;
+		rightSplitter.remove();
+		rightDock.remove();
+		while (rightWorkspace.firstChild) {
+			rightHost.insertBefore(rightWorkspace.firstChild, rightWorkspace);
+		}
+		rightWorkspace.remove();
+		rightHost.classList.remove("outline-view-right-active");
+		rightSplitter = null;
+		rightDock = null;
+		rightWorkspace = null;
+		rightHost = null;
+		dispatchResize();
+	}
+	function attachPanel() {
+		if (dockPosition == "right" && ensureRightDock()) {
+			rightDock.appendChild(outer);
+		} else {
+			GMEdit.sidebar.add("Outline View", outer);
+			GMEdit.sidebar.set("Outline View");
+		}
+	}
+	function detachPanel() {
+		if (rightDock) {
+			removeRightDock();
+		} else if (!popout) {
+			GMEdit.sidebar.remove("Outline View", outer);
+		} else if (outer.parentElement) outer.parentElement.removeChild(outer);
+	}
+	function setDockPosition(next) {
+		if (next != "right") next = "bottom";
+		if (dockPosition == next) return;
+		if (visible) detachPanel();
+		dockPosition = next;
+		if (visible) attachPanel();
+	}
 	function toggle_sync() {
 		if (!currOnly) {
 			syncAll();
@@ -689,16 +769,12 @@
 		sete(aceEditor, "keyboardActivity", onUpdate_schedule, visible);
 		if (toggleCheckbox) toggleCheckbox.checked = !visible;
 		if (visible) {
-			if (!popout) {
-				GMEdit.sidebar.add("Outline View", outer);
-				GMEdit.sidebar.set("Outline View");
-			} else document.body.insertBefore(outer, document.querySelector("#preferences-window"));
+			if (!popout || dockPosition == "right") attachPanel();
+			else document.body.insertBefore(outer, document.querySelector("#preferences-window"));
 			//
 			toggle_sync();
 		} else {
-			if (!popout) {
-				GMEdit.sidebar.remove("Outline View", outer);
-			} else outer.parentElement.removeChild(outer);
+			detachPanel();
 		}
 	}
 
@@ -724,6 +800,9 @@
 		var dm = opt(currOV, "displayMode", null);
 		if (dm == null) dm = opt(currOV, "currOnly", false) ? 0 : 1;
 		return dm;
+	}
+	function getDockPosition(currOV) {
+		return opt(currOV, "position", "bottom") == "right" ? "right" : "bottom";
 	}
 
 	var toggleOutlineViewCommand;
@@ -765,6 +844,7 @@
 			AceCommands.add(toggleOutlineViewCommand);
 			AceCommands.addToPalette(toggleOutlineViewPaletteCommand);
 			
+			dockPosition = getDockPosition(currOV);
 			setDisplayMode(getDisplayMode(currOV))
 			showAtTop = opt(currOV, "showAtTop", true);
 			showFuncArgs = opt(currOV, "showFuncArgs", true);
@@ -797,6 +877,13 @@
 				Preferences.save();
 			});
 			toggleCheckbox = hideCtr.querySelector("input");
+			var dockPositions = ["Bottom", "Right"];
+			Preferences.addDropdown(out, "Panel position", dockPosition == "right" ? "Right" : "Bottom", dockPositions, function(val) {
+				currOV = prepareOV();
+				currOV.position = val == "Right" ? "right" : "bottom";
+				setDockPosition(currOV.position);
+				Preferences.save();
+			});
 			var displayModes = [
 				"Only show the currently active document",
 				"Show all documents",

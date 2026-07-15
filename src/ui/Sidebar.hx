@@ -1,5 +1,6 @@
 package ui;
 import js.html.CustomEvent;
+import js.html.ButtonElement;
 import js.html.DivElement;
 import js.html.Element;
 import js.html.Event;
@@ -11,13 +12,14 @@ using tools.HtmlTools;
 
 /**
  * The secondary sidebar for plugins.
- * If there's more than one panel shown, a dropdown appears.
+ * If there's more than one panel shown, a tab bar appears.
  * @author YellowAfterlife
  */
 @:keep class Sidebar {
 	static var list:Array<SidebarItem> = [];
 	static var map:Dictionary<SidebarItem> = new Dictionary();
 	static var select:SelectElement;
+	static var tabs:DivElement;
 	static var panel:DivElement;
 	static var sizer:DivElement;
 	static var outer:DivElement;
@@ -33,20 +35,32 @@ using tools.HtmlTools;
 			e.initUIEvent('resize', true, false, Main.window, 0); 
 			Main.window.dispatchEvent(e);
 		}
-		select.style.display = n <= 1 ? "none" : "";
+		// A single lower panel needs no navigation chrome. In particular, this
+		// keeps plugins using the Sidebar API looking the same in GMEdit builds
+		// that do not provide any built-in lower panels.
+		select.style.display = "none";
+		tabs.style.display = n <= 1 ? "none" : "";
 	}
 	public static function set(name:String) {
 		var item = map[name];
 		if (item == null) return;
 		var curr = panel.children[0];
-		if (curr == item.el) return;
+		var changed = curr != item.el;
 		var fn = select.onchange;
 		select.onchange = null;
 		select.value = name;
-		if (curr != null) panel.removeChild(curr);
-		panel.appendChild(item.el);
+		for (other in list) {
+			var active = other == item;
+			other.tab.classList.setTokenFlag("active", active);
+			other.tab.setAttribute("aria-selected", active ? "true" : "false");
+			other.tab.tabIndex = active ? 0 : -1;
+		}
+		if (changed) {
+			if (curr != null) panel.removeChild(curr);
+			panel.appendChild(item.el);
+		}
 		select.onchange = fn;
-		if (name == "Problems") Problems.onShown();
+		if (changed && name == "Problems") Problems.onShown();
 		/*
 		if (panel.children[0] != null) {
 			panel.removeChild(panel.children[0]);
@@ -55,12 +69,18 @@ using tools.HtmlTools;
 	}
 	public static function add(name:String, el:Element) {
 		var item = map[name];
-		if (item != null) list.remove(item);
+		var wasActive = item != null && panel.children[0] == item.el;
+		if (item != null) {
+			list.remove(item);
+			select.removeChild(item.opt);
+			tabs.removeChild(item.tab);
+		}
 		item = new SidebarItem(name, el);
 		map.set(name, item);
 		list.push(item);
 		select.appendChild(item.opt);
-		if (panel.children[0] == null) {
+		tabs.appendChild(item.tab);
+		if (panel.children[0] == null || wasActive || panel.children[0] == el) {
 			set(name);
 		}
 		sync();
@@ -72,6 +92,7 @@ using tools.HtmlTools;
 		map.remove(name);
 		list.remove(item);
 		select.removeChild(item.opt);
+		tabs.removeChild(item.tab);
 		if (panel.children[0] == item.el) {
 			panel.removeChild(item.el);
 			if (list.length > 0) set(list[0].name);
@@ -81,6 +102,7 @@ using tools.HtmlTools;
 	}
 	public static function init() {
 		select = Main.document.querySelectorAuto("#misc-select");
+		tabs = Main.document.querySelectorAuto("#misc-tabs");
 		panel = Main.document.querySelectorAuto("#misc-panel");
 		sizer = Main.document.querySelectorAuto("#misc-splitter-td");
 		outer = Main.document.querySelectorAuto("#misc-td");
@@ -92,12 +114,21 @@ using tools.HtmlTools;
 private class SidebarItem {
 	public var el:Element;
 	public var opt:OptionElement;
+	public var tab:ButtonElement;
 	public var name:String;
 	public function new(name:String, el:Element) {
 		this.name = name;
 		this.el = el;
 		opt = Main.document.createOptionElement();
 		HtmlTools.setInnerText(opt, name);
+		tab = Main.document.createButtonElement();
+		tab.type = "button";
+		tab.className = "misc-tab";
+		tab.setAttribute("role", "tab");
+		tab.setAttribute("aria-selected", "false");
+		tab.tabIndex = -1;
+		HtmlTools.setInnerText(tab, name);
+		tab.onclick = function(_) Sidebar.set(name);
 	}
 }
 
