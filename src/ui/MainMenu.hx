@@ -164,6 +164,9 @@ class MainMenu {
 		#end
 	}
 	public static function init() {
+		#if !lwedit
+		Layouts.init();
+		#end
 		menu = new Menu();
 		#if (!lwedit)
 		addProjectItems(menu);

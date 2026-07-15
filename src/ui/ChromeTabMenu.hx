@@ -1,4 +1,5 @@
 package ui;
+import electron.Electron;
 import electron.Menu;
 import gml.file.GmlFileBackup;
 import js.html.Element;
@@ -97,16 +98,48 @@ class ChromeTabMenu {
 		colorInput.addEventListener("input", function(_) {
 			if (colorTarget != null) colorTarget.tabColor = colorInput.value;
 		});
+		function pasteColor(text:String):Void {
+			text = text != null ? StringTools.trim(text) : "";
+			if (!~/^#[0-9a-fA-F]{6}$/.match(text)) {
+				electron.Dialog.showWarning("Clipboard does not contain a valid #RRGGBB color.");
+				return;
+			}
+			colorInput.value = text;
+			if (colorTarget != null) colorTarget.tabColor = text;
+		}
 		var colorButtons = Main.document.createDivElement();
 		colorButtons.className = "buttons";
 		colorWindow.appendChild(colorButtons);
-		for (apply in [true, false]) {
+		function addColorButton(label:String, click:Void->Void):Void {
+			if (colorButtons.childNodes.length > 0) {
+				colorButtons.appendChild(Main.document.createTextNode(" "));
+			}
 			var button = Main.document.createInputElement();
 			button.type = "button";
-			button.value = apply ? "Apply" : "Cancel";
-			button.addEventListener("click", function(_) closeColorDialog(apply));
-			if (!apply) colorButtons.appendChild(Main.document.createTextNode(" "));
+			button.value = label;
+			button.addEventListener("click", function(_) click());
 			colorButtons.appendChild(button);
+		}
+		addColorButton("Copy", function() {
+			if (Electron != null && Electron.clipboard != null) {
+				Electron.clipboard.writeText(colorInput.value.toUpperCase());
+			} else {
+				var clipboard:Dynamic = (Main.window.navigator:Dynamic).clipboard;
+				if (clipboard != null) clipboard.writeText(colorInput.value.toUpperCase());
+			}
+		});
+		addColorButton("Paste", function() {
+			if (Electron != null && Electron.clipboard != null) {
+				pasteColor(Electron.clipboard.readText());
+			} else {
+				var clipboard:Dynamic = (Main.window.navigator:Dynamic).clipboard;
+				if (clipboard == null) {
+					electron.Dialog.showWarning("Clipboard access is unavailable.");
+				} else clipboard.readText().then(function(text) pasteColor(text));
+			}
+		});
+		for (apply in [true, false]) {
+			addColorButton(apply ? "Apply" : "Cancel", function() closeColorDialog(apply));
 		}
 
 		menu = new Menu();

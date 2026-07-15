@@ -86,6 +86,11 @@ import ui.treeview.TreeViewElement;
 	public var isVirtual:Bool;
 	/** current configuration name */
 	public var config:String = "default";
+	/** Project-relative path of the last created/opened layout. */
+	public var activeLayoutPath:Null<String> = null;
+	/** Tabs to restore when leaving the active layout. */
+	public var layoutReturnTabs:Null<Array<ProjectTabState>> = null;
+	public var layoutReturnActiveTab:Null<Int> = null;
 	
 	/** for room speed detection */
 	public var gmxFirstRoomName:String = null;
@@ -398,6 +403,22 @@ import ui.treeview.TreeViewElement;
 			PluginEvents.projectClose({project:current});
 		}
 		TreeView.saveOpen();
+		var tabState = captureTabState();
+		var data:ProjectState = {
+			treeviewScrollTop: TreeView.element.scrollTop,
+			treeviewOpenNodes: TreeView.openPaths,
+			tabs: tabState.tabs,
+			activeTab: tabState.activeTab,
+			activeLayout: activeLayoutPath,
+			layoutReturnTabs: layoutReturnTabs,
+			layoutReturnActiveTab: layoutReturnActiveTab,
+			bookmarks: Bookmarks.getStates(),
+		};
+		PluginEvents.projectStateSave({project:this, state:data});
+		ProjectStateManager.set(path, data);
+		fileCache.onSave();
+	}
+	public function captureTabState():{tabs:Array<ProjectTabState>, activeTab:Null<Int>} {
 		var tabs:Array<ProjectTabState> = [];
 		var activeTab:Null<Int> = null;
 		for (_tab in ChromeTabs.element.querySelectorAll(".chrome-tab")) try {
@@ -414,16 +435,7 @@ import ui.treeview.TreeViewElement;
 				tabs.push(ts);
 			}
 		} catch (_:Dynamic) { }
-		var data:ProjectState = {
-			treeviewScrollTop: TreeView.element.scrollTop,
-			treeviewOpenNodes: TreeView.openPaths,
-			tabs: tabs,
-			activeTab: activeTab,
-			bookmarks: Bookmarks.getStates(),
-		};
-		PluginEvents.projectStateSave({project:this, state:data});
-		ProjectStateManager.set(path, data);
-		fileCache.onSave();
+		return {tabs: tabs, activeTab: activeTab};
 	}
 	public var firstLoadState:ProjectState = null;
 	
@@ -449,6 +461,9 @@ import ui.treeview.TreeViewElement;
 		var state = firstLoadState;
 		if (state != null) {
 			firstLoadState = null;
+			activeLayoutPath = state.activeLayout;
+			layoutReturnTabs = state.layoutReturnTabs;
+			layoutReturnActiveTab = state.layoutReturnActiveTab;
 			var tabStates:Array<ProjectTabState> = state.tabs;
 			if (tabStates == null) {
 				if (state.tabPaths != null) {
@@ -459,9 +474,24 @@ import ui.treeview.TreeViewElement;
 					tabStates = [];
 				}
 			}
+			if (activeLayoutPath != null && layoutReturnTabs == null) {
+				layoutReturnTabs = tabStates.copy();
+				layoutReturnActiveTab = state.activeTab;
+			}
 			//
-			var activeFile = null;
-			for (i => tabState in tabStates) try {
+			restoreTabState(tabStates, state.activeTab);
+			//
+			PluginEvents.projectStateRestore({project:this, state:state});
+		}
+		if (Main.moduleArgs.exists("lint")) {
+			cli.GmlLintCli.run();
+		} else if (Preferences.current.problemsScanMode == ui.preferences.PrefData.PrefProblemsScanMode.OnProjectOpen) {
+			ui.Problems.refreshAutomatic();
+		}
+	}
+	public function restoreTabState(tabStates:Array<ProjectTabState>, activeTab:Null<Int>):Void {
+		var activeFile = null;
+		for (i => tabState in tabStates) try {
 				var file:GmlFile = null;
 				if (tabState.kind != null) {
 					var loaders = FileKind.tabStateLoaders[tabState.kind];
@@ -496,20 +526,12 @@ import ui.treeview.TreeViewElement;
 					if (tabState.color != null) {
 						file.tabEl.tabColor = tabState.color;
 					}
-					if (i == state.activeTab) activeFile = file;
+					if (i == activeTab) activeFile = file;
 				}
 			} catch (x:Dynamic) {
 				Console.error("Error recovering " + path + ":", x);
 			}
-			if (activeFile != null) activeFile.tabEl.click();
-			//
-			PluginEvents.projectStateRestore({project:this, state:state});
-		}
-		if (Main.moduleArgs.exists("lint")) {
-			cli.GmlLintCli.run();
-		} else if (Preferences.current.problemsScanMode == ui.preferences.PrefData.PrefProblemsScanMode.OnProjectOpen) {
-			ui.Problems.refreshAutomatic();
-		}
+		if (activeFile != null) activeFile.tabEl.click();
 	}
 	//
 	public static function init() {

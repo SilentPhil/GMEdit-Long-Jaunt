@@ -158,7 +158,7 @@ html[data-multiline-tabs] .chrome-tabs {
 }
 #project-name {
 	font-size: 14px;
-	width: calc(100% - 28px);
+	width: calc(100% - 96px);
 	overflow: hidden;
 	text-overflow: ellipsis;
 	word-break: break-all;
@@ -203,4 +203,8 @@ html.starter-loading .system-button {
 }
 .system-button.close:hover svg polygon {
 	fill: white;
+}
+.system-button.layouts {
+	width: 60px;
+	font-size: 11px;
 }

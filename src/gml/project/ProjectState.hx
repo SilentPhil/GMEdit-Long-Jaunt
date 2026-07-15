@@ -13,6 +13,9 @@ typedef ProjectState = {
 	tabs:Array<ProjectTabState>,
 	?tabPaths:Array<String>, // legacy
 	?activeTab:Int,
+	?activeLayout:String,
+	?layoutReturnTabs:Array<ProjectTabState>,
+	?layoutReturnActiveTab:Int,
 	?mtime:Float,
 	?bookmarks:Array<GmlBookmarkState>,
 }
