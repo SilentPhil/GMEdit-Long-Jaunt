@@ -2,6 +2,7 @@ package ui;
 import electron.Menu;
 import gml.file.GmlFileBackup;
 import js.html.Element;
+import js.html.InputElement;
 import js.html.MouseEvent;
 import ui.ChromeTabs;
 import ui.treeview.TreeView;
@@ -30,6 +31,11 @@ class ChromeTabMenu {
 	static var pinAsMenuItems:Array<MenuItem>;
 	static var unpinItem:MenuItem;
 	static var closeIdleItem:MenuItem;
+	static var colorInput:InputElement;
+	static var colorDialog:Element;
+	static var colorTarget:ChromeTab;
+	static var colorInitial:Null<String>;
+	static var resetColorItem:MenuItem;
 	public static function show(el:ChromeTab, ev:MouseEvent) {
 		target = el;
 		var file = el.gmlFile;
@@ -49,6 +55,7 @@ class ChromeTabMenu {
 		}
 		unpinItem.visible = pinned;
 		closeIdleItem.visible = tabPrefs.idleTime > 0;
+		resetColorItem.enabled = el.tabColor != null;
 		
 		#if !lwedit
 		showInDirectoryItem.enabled = hasFile;
@@ -65,6 +72,43 @@ class ChromeTabMenu {
 		menu.popupAsync(ev);
 	}
 	public static function init() {
+		function closeColorDialog(apply:Bool):Void {
+			colorDialog.style.display = "none";
+			if (!apply && colorTarget != null) colorTarget.tabColor = colorInitial;
+			colorTarget = null;
+		}
+		colorDialog = Main.document.createDivElement();
+		colorDialog.className = "lw_modal";
+		colorDialog.style.display = "none";
+		Main.document.body.appendChild(colorDialog);
+		var colorOverlay = Main.document.createDivElement();
+		colorOverlay.className = "overlay";
+		colorOverlay.addEventListener("click", function(_) closeColorDialog(false));
+		colorDialog.appendChild(colorOverlay);
+		var colorWindow = Main.document.createDivElement();
+		colorWindow.className = "window";
+		colorDialog.appendChild(colorWindow);
+		colorWindow.appendChild(Main.document.createTextNode("Tab color"));
+		colorWindow.appendChild(Main.document.createBRElement());
+		colorInput = Main.document.createInputElement();
+		colorInput.type = "color";
+		colorInput.value = "#5188d9";
+		colorWindow.appendChild(colorInput);
+		colorInput.addEventListener("input", function(_) {
+			if (colorTarget != null) colorTarget.tabColor = colorInput.value;
+		});
+		var colorButtons = Main.document.createDivElement();
+		colorButtons.className = "buttons";
+		colorWindow.appendChild(colorButtons);
+		for (apply in [true, false]) {
+			var button = Main.document.createInputElement();
+			button.type = "button";
+			button.value = apply ? "Apply" : "Cancel";
+			button.addEventListener("click", function(_) closeColorDialog(apply));
+			if (!apply) colorButtons.appendChild(Main.document.createTextNode(" "));
+			colorButtons.appendChild(button);
+		}
+
 		menu = new Menu();
 		menu.append(new MenuItem({
 			id: "close",
@@ -116,6 +160,23 @@ class ChromeTabMenu {
 			id: "close-sep",
 			type: MenuItemType.Sep
 		}));
+		menu.append(new MenuItem({
+			id: "set-color",
+			label: "Set tab color...",
+			click: function() {
+				colorTarget = target;
+				colorInitial = target.tabColor;
+				if (colorInitial != null) colorInput.value = colorInitial;
+				colorDialog.style.display = "";
+				colorInput.focus();
+			}
+		}));
+		menu.append(resetColorItem = new MenuItem({
+			id: "reset-color",
+			label: "Reset tab color",
+			click: function() target.tabColor = null
+		}));
+		menu.appendSep("color-sep");
 		
 		#if lwedit
 		menu.append(new MenuItem({

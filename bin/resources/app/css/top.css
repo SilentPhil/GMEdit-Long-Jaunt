@@ -46,6 +46,17 @@ html[data-multiline-tabs] .chrome-tabs {
 	filter: brightness(0.75);
 }
 
+/* Per-tab colors override both the standard SVG tabs and flat theme tabs. */
+.chrome-tabs .chrome-tab[data-tab-color] .chrome-tab-background > svg .chrome-tab-background {
+	fill: var(--tab-custom-color) !important;
+}
+#tabs > .chrome-tabs-content > .chrome-tab[data-tab-color] > .chrome-tab-background:before {
+	background: var(--tab-custom-color) !important;
+}
+.chrome-tabs .chrome-tab[data-tab-color] .chrome-tab-title {
+	color: var(--tab-custom-foreground) !important;
+}
+
 
 .chrome-tabs.chrome-tabs-auto-hide-close-buttons .chrome-tab:not(:hover):not(.chrome-tab-changed) .chrome-tab-close,
 .chrome-tabs.chrome-tabs-lock-pinned .chrome-tab.chrome-tab-pinned:not(.chrome-tab-changed) .chrome-tab-close {

@@ -372,6 +372,15 @@ extern class ChromeTab extends Element {
 	private inline function set_pinLayer(val:Int) {
 		return ChromeTabTools.setPinLayer(this, val);
 	}
+
+	/** Optional custom background color in #RRGGBB format. */
+	public var tabColor(get, set):Null<String>;
+	private inline function get_tabColor():Null<String> {
+		return ChromeTabTools.getColor(this);
+	}
+	private inline function set_tabColor(val:Null<String>):Null<String> {
+		return ChromeTabTools.setColor(this, val);
+	}
 	
 	/** Last access time, as JS Date.now() */
 	public var gmlATime:Null<Float>;
@@ -389,6 +398,8 @@ extern class ChromeTabList implements ArrayAccess<ChromeTab> {
 	public function item(index:Int):ChromeTab;
 }
 class ChromeTabTools {
+	static var colorPattern = ~/^#[0-9a-fA-F]{6}$/;
+
 	public static function getPinLayer(tab:ChromeTab) {
 		var val = tab.dataset.pinLayer;
 		return val != null ? Std.parseInt(val) : 0;
@@ -398,5 +409,26 @@ class ChromeTabTools {
 			tab.dataset.pinLayer = Std.string(val);
 		} else js.Syntax.delete(tab.dataset, "pinLayer");
 		return val;
+	}
+	public static function getColor(tab:ChromeTab):Null<String> {
+		var color = tab.dataset.tabColor;
+		return color != null && colorPattern.match(color) ? color : null;
+	}
+	public static function setColor(tab:ChromeTab, val:Null<String>):Null<String> {
+		if (val != null && colorPattern.match(val)) {
+			var color = val.toUpperCase();
+			tab.dataset.tabColor = color;
+			tab.style.setProperty("--tab-custom-color", color);
+			var r = Std.parseInt("0x" + color.substr(1, 2));
+			var g = Std.parseInt("0x" + color.substr(3, 2));
+			var b = Std.parseInt("0x" + color.substr(5, 2));
+			var foreground = r * 299 + g * 587 + b * 114 >= 150000 ? "#111111" : "#FFFFFF";
+			tab.style.setProperty("--tab-custom-foreground", foreground);
+			return color;
+		}
+		js.Syntax.delete(tab.dataset, "tabColor");
+		tab.style.removeProperty("--tab-custom-color");
+		tab.style.removeProperty("--tab-custom-foreground");
+		return null;
 	}
 }

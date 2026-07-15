@@ -407,6 +407,9 @@ import ui.treeview.TreeViewElement;
 				if (tab.isPinned) {
 					ts.pinned = tab.pinLayer;
 				}
+				if (tab.tabColor != null) {
+					ts.color = tab.tabColor;
+				}
 				if (tab.isOpen) activeTab = tabs.length;
 				tabs.push(ts);
 			}
@@ -489,6 +492,9 @@ import ui.treeview.TreeViewElement;
 					}
 					if (pinLayer > 0) {
 						ChromeTabs.impl.setTabPinLayer(file.tabEl, pinLayer);
+					}
+					if (tabState.color != null) {
+						file.tabEl.tabColor = tabState.color;
 					}
 					if (i == state.activeTab) activeFile = file;
 				}

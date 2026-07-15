@@ -20,6 +20,7 @@ typedef ProjectTabState = {
 	?relPath:RelPath,
 	?fullPath:FullPath,
 	?pinned:EitherType<Bool, Int>,
+	?color:String,
 	?kind:String,
 	?data:Dynamic,
 }
