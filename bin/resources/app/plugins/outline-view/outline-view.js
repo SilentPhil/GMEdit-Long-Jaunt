@@ -27,6 +27,23 @@
 	}
 	var showAtTop = true;
 	var showFuncArgs = false;
+	var hideMethodArgs = true;
+	var hideMethodArgsCheckbox = null;
+	var hideMethodArgsButton = null;
+	function setHideMethodArgs(value) {
+		hideMethodArgs = value;
+		if (hideMethodArgsCheckbox) hideMethodArgsCheckbox.checked = value;
+		if (hideMethodArgsButton) {
+			hideMethodArgsButton.setAttribute("aria-pressed", value ? "true" : "false");
+			hideMethodArgsButton.title = value ? "Show class method arguments" : "Hide class method arguments";
+			hideMethodArgsButton.setAttribute("aria-label", hideMethodArgsButton.title);
+		}
+	}
+	var hideEmptyRegions = true;
+	function setHideEmptyRegions(value) {
+		hideEmptyRegions = value;
+		outer.classList.toggle("outline-hide-empty-regions", value);
+	}
 	var tailSep = " ➜ "; // narrow space, arrow, narrow space
 	//
 	var Menuitem = Electron_MenuItem;
@@ -133,7 +150,7 @@
 							title += "\n" + tail;
 						}
 						
-						var nav = { def: def, ctxAfter: true, showAtTop: showAtTop };
+						var nav = { def: def, ctxAfter: true, showAtTop: showAtTop, outlineKind: mt[2] ? "event" : "section" };
 						
 						// if this is an event, we set an attribute so that we can have different icons for them
 						if (mt[1]) nav.outlineViewData = "gml_" + def;
@@ -152,13 +169,18 @@
 							title += "\n" + tail;
 						}
 						
-						var nav = { def: def, ctxAfter: true, showAtTop: showAtTop };
+						var nav = {
+							def: def,
+							ctxAfter: true,
+							showAtTop: showAtTop,
+							outlineKind: /\bconstructor\b/.test(line) ? "constructor" : "function"
+						};
 						ctx.flush(label, title, nav);
 					} else if (mt = rxSubFunc.exec(line)) {
 						var name = mt[2] || mt[3];
 						var label = name, title = mt[1];
 						
-						if (showFuncArgs) label += mt[4];
+						if (showFuncArgs && !hideMethodArgs) label += mt[4];
 						title += mt[4];
 						
 						var tail = (mt[5] || "").trim();
@@ -178,25 +200,26 @@
 							ctx: name,
 							ctxRx: rx,
 							ctxAfter: true,
-							showAtTop: showAtTop
+							showAtTop: showAtTop,
+							outlineKind: "method"
 						};
 						ctx.mark(label, title, nav);
 					} else if (mt = rxShorthandFunc.exec(line)) { // shorthand
 						var label = mt[1], title = mt[1];
 						rx = new RegExp("\\b" + label + "\\b\\s*=\\s*\\(");
 
-						if (showFuncArgs) label += mt[2];
+						if (showFuncArgs && !hideMethodArgs) label += mt[2];
 						title += mt[2];
 						
-						var nav = { def: def, ctx: mt[1], ctxRx: rx, ctxAfter: true, showAtTop: showAtTop };
+						var nav = { def: def, ctx: mt[1], ctxRx: rx, ctxAfter: true, showAtTop: showAtTop, outlineKind: "method" };
 						ctx.mark(label, title, nav);
 					} else if (mt = rxPush.exec(line)) {
-						var nav = { def: def, ctx: mt[1], ctxAfter: true, showAtTop: showAtTop };
+						var nav = { def: def, ctx: mt[1], ctxAfter: true, showAtTop: showAtTop, outlineViewRegion: true, outlineKind: "region" };
 						ctx.push(mt[2], mt[0], nav);
 					} else if (mt = rxPop.exec(line)) {
 						ctx.pop();
 					} else if (mt = rxMark.exec(line)) {
-						var nav = { def: def, ctx: mt[1], ctxAfter: true, showAtTop: showAtTop };
+						var nav = { def: def, ctx: mt[1], ctxAfter: true, showAtTop: showAtTop, outlineKind: "mark" };
 						ctx.mark(mt[2], mt[0], nav);
 					}
 				}
@@ -463,6 +486,24 @@
 	filterCaseSensitive.addEventListener("click", function() { toggleFilterOption(filterCaseSensitive); });
 	var filterObserver = new MutationObserver(scheduleFilter);
 	//
+	var toolbar = document.createElement("div");
+	toolbar.className = "outline-toolbar";
+	toolbar.setAttribute("role", "toolbar");
+	toolbar.setAttribute("aria-label", "Outline view actions");
+	hideMethodArgsButton = document.createElement("button");
+	hideMethodArgsButton.type = "button";
+	hideMethodArgsButton.className = "outline-toolbar-button";
+	hideMethodArgsButton.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2.5 10s2.8-4.5 7.5-4.5 7.5 4.5 7.5 4.5-2.8 4.5-7.5 4.5S2.5 10 2.5 10Z"/><circle cx="10" cy="10" r="2.2"/><path d="M4 16 16 4"/></svg>';
+	hideMethodArgsButton.addEventListener("click", function() {
+		setHideMethodArgs(!hideMethodArgs);
+		currOV = prepareOV();
+		currOV.hideMethodArgs = hideMethodArgs;
+		Preferences.save();
+		forceRefresh();
+	});
+	toolbar.appendChild(hideMethodArgsButton);
+	outer.appendChild(toolbar);
+	//
 	var currEl = null;
 	//
 	function currFile() { return $gmedit["gml.file.GmlFile"].current; }
@@ -542,6 +583,8 @@
 			}
 		}
 		seta(r, "outline-data", nav && nav.outlineViewData)
+		seta(r, "outline-region", nav && nav.outlineViewRegion ? "" : null);
+		seta(r, "outline-kind", nav ? (nav.outlineKind || "section") : "file");
 		seta(r.treeHeader, "title", title);
 		seta(r, "outline-def", nav && nav.def);
 		seta(r, "outline-ctx", nav && nav.ctx);
@@ -637,6 +680,16 @@
 		function finishDir(q) {
 			setc(q, "outline-dir", q.treeItems.children.length > 0);
 		}
+		function markEmptyRegions(q) {
+			var hasContent = false;
+			for (var i = 0; i < q.treeItems.children.length; i++) {
+				if (markEmptyRegions(q.treeItems.children[i])) hasContent = true;
+			}
+			var isRegion = q.hasAttribute("outline-region");
+			var empty = isRegion && !hasContent;
+			setc(q, "outline-empty-region", empty);
+			return isRegion ? !empty : true;
+		}
 		function flushStack() {
 			while (stack.length > 0) finishDir(stack.pop());
 			finishDir(curr);
@@ -668,6 +721,7 @@
 		if (!noIndex) conf.reindex(file, ctx);
 		flushStack();
 		finishDir(ov);
+		markEmptyRegions(ov);
 		// re-collapse:
 		for (var i = 0; i < reclose.length; i++) {
 			var q = ov.treeItems.querySelector(reclose[i]);
@@ -938,6 +992,8 @@
 			setDisplayMode(getDisplayMode(currOV))
 			showAtTop = opt(currOV, "showAtTop", true);
 			showFuncArgs = opt(currOV, "showFuncArgs", true);
+			setHideMethodArgs(opt(currOV, "hideMethodArgs", true));
+			setHideEmptyRegions(opt(currOV, "hideEmptyRegions", true));
 	
 			GMEdit.on("fileRename", onFileRename);
 
@@ -994,6 +1050,21 @@
 				currOV = prepareOV();
 				showFuncArgs = currOV.showFuncArgs = val;
 				currEl = null;
+				Preferences.save();
+				forceRefresh();
+			});
+			var hideMethodArgsCtr = Preferences.addCheckbox(out, "Hide class method arguments", opt(currOV, "hideMethodArgs", true), function(val) {
+				currOV = prepareOV();
+				currOV.hideMethodArgs = val;
+				setHideMethodArgs(val);
+				Preferences.save();
+				forceRefresh();
+			});
+			hideMethodArgsCheckbox = hideMethodArgsCtr.querySelector("input");
+			Preferences.addCheckbox(out, "Hide empty regions", opt(currOV, "hideEmptyRegions", true), function(val) {
+				currOV = prepareOV();
+				currOV.hideEmptyRegions = val;
+				setHideEmptyRegions(val);
 				Preferences.save();
 				forceRefresh();
 			});

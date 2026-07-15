@@ -1,7 +1,21 @@
 #outline-view {
+	--outline-file-color: #46505c;
+	--outline-constructor-color: #946200;
+	--outline-function-color: #176f8f;
+	--outline-method-color: #2f66a8;
+	--outline-region-color: #79518f;
+	--outline-section-color: #4f772d;
 	display: flex;
 	flex-direction: column;
 	overflow: hidden;
+}
+#main.chrome-tabs-dark-theme #outline-view {
+	--outline-file-color: #d8dee9;
+	--outline-constructor-color: #e5b567;
+	--outline-function-color: #6cb6d9;
+	--outline-method-color: #9cc4ff;
+	--outline-region-color: #c7a0dc;
+	--outline-section-color: #a8c98f;
 }
 #outline-view > .outline-filter {
 	width: 100%;
@@ -14,8 +28,52 @@
 #outline-view .outline-filter-hidden {
 	display: none;
 }
+#outline-view.outline-hide-empty-regions .outline-empty-region {
+	display: none;
+}
 #outline-view .treeview.outline-is-filtering .outline-item:not(.outline-filter-hidden) > .items {
 	display: block;
+}
+.outline-toolbar {
+	display: flex;
+	align-items: center;
+	gap: 3px;
+	width: 100%;
+	min-height: 30px;
+	padding: 2px 4px;
+	border-top: 1px solid rgba(127, 127, 127, 0.5);
+	box-sizing: border-box;
+	flex: 0 0 auto;
+}
+.outline-toolbar-button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 26px;
+	height: 26px;
+	margin: 0;
+	padding: 0;
+	border: 1px solid transparent;
+	border-radius: 2px;
+	background: transparent;
+	color: inherit;
+	cursor: pointer;
+}
+.outline-toolbar-button:hover {
+	background: rgba(127, 127, 127, 0.18);
+}
+.outline-toolbar-button[aria-pressed="true"] {
+	border-color: var(--color-primary);
+	background: rgba(85, 132, 212, 0.32);
+}
+.outline-toolbar-button svg {
+	width: 18px;
+	height: 18px;
+	fill: none;
+	stroke: currentColor;
+	stroke-width: 1.6;
+	stroke-linecap: round;
+	stroke-linejoin: round;
 }
 #main #editor-td .bottom.gml > .tabview.outline-view-legacy-bottom-active {
 	flex-direction: column;
@@ -154,4 +212,73 @@
 }
 #outline-view .outline-item[outline-data^="gml_draw"] > .header:before {
 	background-position: -2px -42px;
+}
+
+/* Semantic outline kinds */
+#outline-view .outline-item[outline-kind]:not([outline-kind="event"]) > .header:before {
+	display: inline-block;
+	background-image: none !important;
+	background-position: center !important;
+	background-color: transparent;
+	filter: none !important;
+	font: 700 13px/16px "Segoe UI Symbol", "Segoe UI", sans-serif;
+	text-align: center;
+	opacity: 0.95;
+}
+#outline-view .outline-item[outline-kind="file"] > .header {
+	color: var(--outline-file-color);
+}
+#outline-view .outline-item[outline-kind="file"] > .header:before {
+	content: "▱";
+	color: var(--outline-file-color);
+}
+#outline-view .outline-item[outline-kind="constructor"] > .header {
+	color: var(--outline-constructor-color);
+	font-weight: 600;
+}
+#outline-view .outline-item[outline-kind="constructor"] > .header:before {
+	content: "C";
+	color: var(--outline-constructor-color);
+}
+#outline-view .outline-item[outline-kind="function"] > .header {
+	color: var(--outline-function-color);
+}
+#outline-view .outline-item[outline-kind="function"] > .header:before {
+	content: "ƒ";
+	color: var(--outline-function-color);
+}
+#outline-view .outline-item[outline-kind="method"] > .header {
+	color: var(--outline-method-color);
+}
+#outline-view .outline-item[outline-kind="method"] > .header:before {
+	content: "m";
+	color: var(--outline-method-color);
+}
+#outline-view .outline-item[outline-kind="region"] > .header {
+	color: var(--outline-region-color);
+	font-weight: 600;
+}
+#outline-view .outline-item[outline-kind="region"] > .header:before {
+	content: "▰";
+	color: var(--outline-region-color);
+}
+#outline-view .outline-item[outline-kind="section"] > .header,
+#outline-view .outline-item[outline-kind="mark"] > .header {
+	color: var(--outline-section-color);
+}
+#outline-view .outline-item[outline-kind="section"] > .header:before {
+	content: "#";
+	color: var(--outline-section-color);
+}
+#outline-view .outline-item[outline-kind="mark"] > .header:before {
+	content: "§";
+	color: var(--outline-section-color);
+}
+/* Keep the dedicated GameMaker event sprites and regular text colour. */
+#outline-view .outline-item[outline-kind="event"] > .header {
+	color: inherit;
+}
+#outline-view .outline-item[outline-kind="event"] > .header:before {
+	content: "";
+	background-image: url(icons.png) !important;
 }
