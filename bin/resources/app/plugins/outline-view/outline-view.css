@@ -1,5 +1,21 @@
 #outline-view {
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+}
+#outline-view > .outline-filter {
+	width: 100%;
+}
+#outline-view > .treeview {
+	min-height: 0;
+	flex: 1 1 auto;
 	overflow: auto;
+}
+#outline-view .outline-filter-hidden {
+	display: none;
+}
+#outline-view .treeview.outline-is-filtering .outline-item:not(.outline-filter-hidden) > .items {
+	display: block;
 }
 #main #editor-td .bottom.outline-view-right-active {
 	flex-direction: row;
@@ -55,7 +71,7 @@
 	padding: 0;
 }
 #outline-view .treeview {
-	min-height: 100%;
+	min-height: 0;
 	box-sizing: border-box;
 }
 #outline-view .treeview:empty {

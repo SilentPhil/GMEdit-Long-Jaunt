@@ -355,9 +355,115 @@
 		outer.style.resize = "horizontal";
 	}
 	//
+	var filterBar = document.createElement("div");
+	filterBar.className = "tree-filter outline-filter";
+	filterBar.setAttribute("role", "search");
+	var filterInput = document.createElement("input");
+	filterInput.type = "text";
+	filterInput.placeholder = "Filter outline";
+	filterInput.setAttribute("aria-label", "Filter outline");
+	filterInput.autocomplete = "off";
+	filterInput.spellcheck = false;
+	filterBar.appendChild(filterInput);
+	function makeFilterButton(title, label) {
+		var button = document.createElement("button");
+		button.type = "button";
+		button.className = "tree-filter-button";
+		button.title = title;
+		button.setAttribute("aria-label", label);
+		filterBar.appendChild(button);
+		return button;
+	}
+	var filterClear = makeFilterButton("Clear filter", "Clear outline filter");
+	filterClear.disabled = true;
+	filterClear.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" /></svg>';
+	var filterWholeWord = makeFilterButton("Match whole word", "Match whole word");
+	filterWholeWord.setAttribute("aria-pressed", "false");
+	filterWholeWord.innerHTML = '<svg viewBox="0 0 18 16" aria-hidden="true"><path d="M1.5 12.5h15M3 10l3-7 3 7M4.2 7h3.6M11 3v7M11 6.5c3.5-1.5 5 0 5 1.7 0 2.2-3 2.5-5 1" /></svg>';
+	var filterCaseSensitive = makeFilterButton("Match case", "Match case");
+	filterCaseSensitive.setAttribute("aria-pressed", "false");
+	filterCaseSensitive.innerHTML = '<span aria-hidden="true">Aa</span>';
+	outer.appendChild(filterBar);
+	//
 	var treeview = document.createElement("div")
 	treeview.classList.add("treeview");
 	outer.appendChild(treeview);
+	var filterUpdatePending = false;
+	function isFilterWordChar(code) {
+		return (code >= 48 && code <= 57)
+			|| (code >= 65 && code <= 90)
+			|| (code >= 97 && code <= 122)
+			|| code == 95;
+	}
+	function filterMatches(name, query, wholeWord, caseSensitive) {
+		if (!caseSensitive) {
+			name = name.toLowerCase();
+			query = query.toLowerCase();
+		}
+		var at = name.indexOf(query);
+		if (!wholeWord) return at >= 0;
+		while (at >= 0) {
+			var beforeOK = at == 0 || !isFilterWordChar(name.charCodeAt(at - 1));
+			var after = at + query.length;
+			var afterOK = after == name.length || !isFilterWordChar(name.charCodeAt(after));
+			if (beforeOK && afterOK) return true;
+			at = name.indexOf(query, at + 1);
+		}
+		return false;
+	}
+	function filterNode(node, query, wholeWord, caseSensitive) {
+		var label = node.treeHeader && node.treeHeader.querySelector("span.label");
+		var visible = label && filterMatches(label.textContent, query, wholeWord, caseSensitive);
+		var children = node.treeItems && node.treeItems.children;
+		if (children) for (var i = 0; i < children.length; i++) {
+			if (filterNode(children[i], query, wholeWord, caseSensitive)) visible = true;
+		}
+		node.classList.toggle("outline-filter-hidden", !visible);
+		return visible;
+	}
+	function applyFilter() {
+		var query = filterInput.value;
+		var active = query.length > 0;
+		filterClear.disabled = !active;
+		treeview.classList.toggle("outline-is-filtering", active);
+		if (!active) {
+			var hidden = treeview.querySelectorAll(".outline-filter-hidden");
+			for (var i = 0; i < hidden.length; i++) hidden[i].classList.remove("outline-filter-hidden");
+			return;
+		}
+		var wholeWord = filterWholeWord.getAttribute("aria-pressed") == "true";
+		var caseSensitive = filterCaseSensitive.getAttribute("aria-pressed") == "true";
+		for (var i = 0; i < treeview.children.length; i++) {
+			filterNode(treeview.children[i], query, wholeWord, caseSensitive);
+		}
+	}
+	function scheduleFilter() {
+		if (filterUpdatePending || filterInput.value == "") return;
+		filterUpdatePending = true;
+		requestAnimationFrame(function() {
+			filterUpdatePending = false;
+			applyFilter();
+		});
+	}
+	function toggleFilterOption(button) {
+		button.setAttribute("aria-pressed", button.getAttribute("aria-pressed") == "true" ? "false" : "true");
+		applyFilter();
+	}
+	filterInput.addEventListener("input", applyFilter);
+	filterInput.addEventListener("keydown", function(e) {
+		if (e.key == "Escape" && filterInput.value != "") {
+			filterInput.value = "";
+			applyFilter();
+		}
+	});
+	filterClear.addEventListener("click", function() {
+		filterInput.value = "";
+		applyFilter();
+		filterInput.focus();
+	});
+	filterWholeWord.addEventListener("click", function() { toggleFilterOption(filterWholeWord); });
+	filterCaseSensitive.addEventListener("click", function() { toggleFilterOption(filterCaseSensitive); });
+	var filterObserver = new MutationObserver(scheduleFilter);
 	//
 	var currEl = null;
 	//
@@ -414,6 +520,7 @@
 	function makeNav(file, label, title, nav) {
 		var r = navPool.pop();
 		if (r) {
+			r.classList.remove("outline-filter-hidden");
 			setNavItemLabel(r, label);
 		} else {
 			r = makeDir(label);
@@ -819,6 +926,7 @@
 
 	GMEdit.register("outline-view", {
 		init: () => {
+			filterObserver.observe(treeview, { childList: true, subtree: true });
 
 			toggleOutlineViewCommand = {
 				name: "toggleOutlineView",
@@ -857,6 +965,7 @@
 	
 		},
 		cleanup: function() {
+			filterObserver.disconnect();
 
 			AceCommands.remove(toggleOutlineViewCommand);
 			AceCommands.removeFromPalette(toggleOutlineViewPaletteCommand);
