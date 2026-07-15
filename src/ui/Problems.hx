@@ -244,26 +244,38 @@ class Problems {
 		list.innerHTML = "";
 		var errors = 0;
 		var warnings = 0;
+		var visibleErrors = 0;
+		var visibleWarnings = 0;
 		for (item in items) {
 			if (isExcluded(item)) continue;
 			if (item.type == "warning") warnings++; else errors++;
-			if (isVisibleItem(item)) list.appendChild(makeRow(item));
+			if (isVisibleItem(item)) {
+				if (item.type == "warning") visibleWarnings++; else visibleErrors++;
+				list.appendChild(makeRow(item));
+			}
 		}
+		updateFilterButtons(errors, warnings);
 		if (items.length == 0) {
 			renderMessage("No problems found.");
 			return;
 		}
-		var parts = [];
-		if (errors > 0) parts.push(errors + " error" + (errors == 1 ? "" : "s"));
-		if (warnings > 0) parts.push(warnings + " warning" + (warnings == 1 ? "" : "s"));
-		summary.innerText = parts.join(", ");
-		updateFilterButtons(errors, warnings);
+		var visibleSummary = formatProblemCounts(visibleErrors, visibleWarnings);
+		if (visibleErrors != errors || visibleWarnings != warnings) {
+			summary.innerText = visibleSummary + " (total: " + formatProblemCounts(errors, warnings) + ")";
+		} else summary.innerText = visibleSummary;
 		if (list.children.length == 0) {
 			var msg = Main.document.createDivElement();
 			msg.className = "problems-message";
 			msg.innerText = "No problems match the current filters.";
 			list.appendChild(msg);
 		}
+	}
+
+	static function formatProblemCounts(errors:Int, warnings:Int):String {
+		var parts:Array<String> = [];
+		if (errors > 0) parts.push(errors + " error" + (errors == 1 ? "" : "s"));
+		if (warnings > 0) parts.push(warnings + " warning" + (warnings == 1 ? "" : "s"));
+		return parts.length > 0 ? parts.join(", ") : "0 problems";
 	}
 	
 	static function makeFilterButton(type:String, title:String):ButtonElement {
@@ -283,6 +295,9 @@ class Problems {
 					showCurrentFileOnly = !showCurrentFileOnly;
 				case "open-tabs":
 					showOpenTabsOnly = !showOpenTabsOnly;
+					if (showOpenTabsOnly) {
+						refreshOpenTabs();
+					}
 				default:
 					showErrors = !showErrors;
 			}
@@ -330,8 +345,11 @@ class Problems {
 	static function updateFilterButtons(errors:Int, warnings:Int):Void {
 		showErrorsButton.classList.setTokenFlag("active", showErrors);
 		showWarningsButton.classList.setTokenFlag("active", showWarnings);
-		showErrorsButton.disabled = errors == 0;
-		showWarningsButton.disabled = warnings == 0;
+		// A filter remains useful even when its current result count is zero:
+		// another file/scope can add matching problems without requiring the
+		// user to visit that file first.
+		showErrorsButton.disabled = false;
+		showWarningsButton.disabled = false;
 		showCurrentFileButton.classList.setTokenFlag("active", showCurrentFileOnly);
 		showCurrentFileButton.disabled = currentFilePath() == null;
 		showOpenTabsButton.classList.setTokenFlag("active", showOpenTabsOnly);
