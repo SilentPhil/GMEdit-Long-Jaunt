@@ -4,6 +4,21 @@
 	--color-primary: #5584d4;
 	--color-background: #222222;
 	--color-hightlight-background: #333333;
+	--context-menu-background: #2b2b2b;
+	--context-menu-color: #d0d0d0;
+	--context-menu-border: rgba(128, 128, 128, 0.45);
+	--context-menu-shadow: rgba(0, 0, 0, 0.45);
+	--context-menu-hover-background: rgba(128, 128, 128, 0.22);
+	--context-menu-hover-color: #fff;
+	--context-menu-disabled-color: #777;
+	--context-menu-separator: rgba(128, 128, 128, 0.35);
+	--problems-collapse-background: #2d343b;
+	--problems-collapse-color: #85909b;
+	--problems-collapse-border-top: rgba(255, 255, 255, 0.12);
+	--problems-collapse-border-bottom: rgba(0, 0, 0, 0.45);
+	--problems-collapse-hover-background: #3b4650;
+	--problems-collapse-hover-color: #c0cad4;
+	--problems-collapse-active-background: #263038;
 }
 
 body {

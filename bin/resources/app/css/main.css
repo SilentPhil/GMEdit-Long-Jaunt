@@ -3,6 +3,23 @@
 	outline-width: 2px;
 	outline-offset: -1px;
 }
+:root {
+	--context-menu-background: #f2f2f2;
+	--context-menu-color: #222;
+	--context-menu-border: rgba(0, 0, 0, 0.28);
+	--context-menu-shadow: rgba(0, 0, 0, 0.25);
+	--context-menu-hover-background: rgba(0, 90, 180, 0.14);
+	--context-menu-hover-color: #111;
+	--context-menu-disabled-color: #888;
+	--context-menu-separator: rgba(0, 0, 0, 0.18);
+	--problems-collapse-background: #e8e8e8;
+	--problems-collapse-color: #666;
+	--problems-collapse-border-top: rgba(255, 255, 255, 0.8);
+	--problems-collapse-border-bottom: rgba(0, 0, 0, 0.25);
+	--problems-collapse-hover-background: #d7e5f3;
+	--problems-collapse-hover-color: #222;
+	--problems-collapse-active-background: #c7d9ea;
+}
 html, body {
     padding: 0;
 	margin: 0;
@@ -368,15 +385,18 @@ https://stackoverflow.com/a/36247448/5578773
 	margin: 0;
 	padding: 0;
 	border: 0;
-	border-top: 1px solid rgba(255, 255, 255, 0.12);
-	border-bottom: 1px solid rgba(0, 0, 0, 0.45);
-	background: #2d343b;
-	color: #85909b;
+	border-top: 1px solid var(--problems-collapse-border-top);
+	border-bottom: 1px solid var(--problems-collapse-border-bottom);
+	background: var(--problems-collapse-background);
+	color: var(--problems-collapse-color);
 	cursor: pointer;
 }
 .problems-collapse-toggle:hover {
-	background: #3b4650;
-	color: #c0cad4;
+	background: var(--problems-collapse-hover-background);
+	color: var(--problems-collapse-hover-color);
+}
+.problems-collapse-toggle:active {
+	background: var(--problems-collapse-active-background);
 }
 .problems-collapse-toggle:focus,
 .problems-collapse-toggle:focus-visible {
@@ -587,10 +607,10 @@ https://stackoverflow.com/a/36247448/5578773
 	z-index: 100000;
 	min-width: 230px;
 	padding: 4px 0;
-	border: 1px solid rgba(128, 128, 128, 0.45);
-	background: #2b2b2b;
-	color: #d0d0d0;
-	box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+	border: 1px solid var(--context-menu-border);
+	background: var(--context-menu-background);
+	color: var(--context-menu-color);
+	box-shadow: 0 6px 18px var(--context-menu-shadow);
 	font: 12px "Segoe UI", sans-serif;
 }
 .problems-context-menu-item {
@@ -621,8 +641,8 @@ https://stackoverflow.com/a/36247448/5578773
 }
 .problems-context-menu-item:hover,
 .problems-context-menu-item:focus {
-	background-color: rgba(128, 128, 128, 0.22);
-	color: #fff;
+	background-color: var(--context-menu-hover-background);
+	color: var(--context-menu-hover-color);
 	outline: none;
 }
 .problems-context-menu-item.has-submenu:after {
@@ -641,9 +661,9 @@ https://stackoverflow.com/a/36247448/5578773
 	top: -5px;
 	min-width: 160px;
 	padding: 4px 0;
-	border: 1px solid rgba(128, 128, 128, 0.45);
-	background: #2b2b2b;
-	box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+	border: 1px solid var(--context-menu-border);
+	background: var(--context-menu-background);
+	box-shadow: 0 6px 18px var(--context-menu-shadow);
 }
 .problems-exclusions-editor {
 	box-sizing: border-box;

@@ -37,7 +37,7 @@ using tools.HtmlTools;
 	//
 	function popup(?opt:MenuPopupOptions):Void;
 	private inline function popupAuto(?opt:MenuPopupOptions):Void {
-		popup(opt);
+		MenuFallback.popupMenu(this, opt);
 	}
 	inline function popupSync(e:MouseEvent):Void {
 		MenuFallback.contextEvent = e;
@@ -66,6 +66,10 @@ typedef MenuPopupOptions = {
 	var label:String;
 	var click:Function;
 	var submenu:Menu;
+	var type:MenuItemType;
+	var accelerator:Dynamic;
+	var icon:Dynamic;
+	var role:String;
 }
 typedef MenuItemOptions = {
 	?click:Function,
