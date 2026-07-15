@@ -126,14 +126,14 @@ class Problems {
 		element.appendChild(toolbar);
 		element.appendChild(list);
 		initMenu();
-		Sidebar.add("Problems", element);
+		BottomPanel.add("Problems", element);
 		initCollapseButton();
 		if (!Preferences.current.problemsStartExpanded) setCollapsed(true);
 		renderMessage("No project problems checked yet.");
 	}
 	
 	public static function show():Void {
-		Sidebar.set("Problems");
+		BottomPanel.set("Problems");
 		if (isCollapsed) setCollapsed(false);
 	}
 
@@ -187,7 +187,7 @@ class Problems {
 
 	static function initCollapseButton():Void {
 		if (collapseButton != null) return;
-		var misc:DivElement = Main.document.querySelectorAuto("#misc-td");
+		var misc:DivElement = Main.document.querySelectorAuto("#bottom-panel-td");
 		var parent = misc.parentElement;
 		if (parent == null) return;
 		collapseButton = Main.document.createButtonElement();
@@ -200,8 +200,8 @@ class Problems {
 	}
 
 	static function setCollapsed(collapsed:Bool):Void {
-		var misc:DivElement = Main.document.querySelectorAuto("#misc-td");
-		var splitter:DivElement = Main.document.querySelectorAuto("#misc-splitter-td");
+		var misc:DivElement = Main.document.querySelectorAuto("#bottom-panel-td");
+		var splitter:DivElement = Main.document.querySelectorAuto("#bottom-panel-splitter-td");
 		isCollapsed = collapsed;
 		if (collapsed) {
 			if (misc.offsetHeight > 0) lastPanelHeight = misc.offsetHeight;

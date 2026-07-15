@@ -35,9 +35,6 @@ using tools.HtmlTools;
 			e.initUIEvent('resize', true, false, Main.window, 0); 
 			Main.window.dispatchEvent(e);
 		}
-		// A single lower panel needs no navigation chrome. In particular, this
-		// keeps plugins using the Sidebar API looking the same in GMEdit builds
-		// that do not provide any built-in lower panels.
 		select.style.display = "none";
 		tabs.style.display = n <= 1 ? "none" : "";
 	}
@@ -45,7 +42,6 @@ using tools.HtmlTools;
 		var item = map[name];
 		if (item == null) return;
 		var curr = panel.children[0];
-		var changed = curr != item.el;
 		var fn = select.onchange;
 		select.onchange = null;
 		select.value = name;
@@ -55,12 +51,11 @@ using tools.HtmlTools;
 			other.tab.setAttribute("aria-selected", active ? "true" : "false");
 			other.tab.tabIndex = active ? 0 : -1;
 		}
-		if (changed) {
+		if (curr != item.el) {
 			if (curr != null) panel.removeChild(curr);
 			panel.appendChild(item.el);
 		}
 		select.onchange = fn;
-		if (changed && name == "Problems") Problems.onShown();
 		/*
 		if (panel.children[0] != null) {
 			panel.removeChild(panel.children[0]);

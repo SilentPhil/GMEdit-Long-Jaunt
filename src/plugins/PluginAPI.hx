@@ -1,6 +1,7 @@
 package plugins;
 import plugins.PluginConfig.PluginRegName;
 import haxe.DynamicAccess;
+import ui.BottomPanel;
 import ui.Sidebar;
 import ace.AceTools;
 
@@ -38,6 +39,8 @@ class PluginAPI {
 	
 	// The following just point to specific classes for convenience
 	public static var sidebar:Class<Sidebar> = Sidebar;
+	/** Optional API in GMEdit builds that provide panels below the editor. */
+	public static var bottomPanel:Class<BottomPanel> = BottomPanel;
 	public static var aceTools:Class<AceTools> = AceTools;
 	
 	/*

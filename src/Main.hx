@@ -112,6 +112,7 @@ class Main {
 		GlobalLookup.init();
 		TagEditor.init();
 		Sidebar.init();
+		BottomPanel.init();
 		Problems.init();
 		MainMenu.init();
 		//

@@ -77,7 +77,7 @@ function Splitter(sizer) {
 	this.minWidth = 0|(sizer.getAttribute("splitter-min-width")||50);
 	this.updateTabs = sizer.getAttribute("splitter-update-tabs");
 	this.isMisc = sizer.id != "splitter-td";
-	this.orientation = sizer.getAttribute("splitter-orientation") || (sizer.id == "misc-splitter-td" ? "horizontal" : "vertical");
+	this.orientation = sizer.getAttribute("splitter-orientation") || "vertical";
 	this.parentEl = target.parentElement;
 	this.lsKey = sizer.getAttribute("splitter-lskey");
 	this.defaultWidth = 0|(sizer.getAttribute("splitter-default-width")||this.minWidth);

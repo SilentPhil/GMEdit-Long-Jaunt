@@ -158,18 +158,20 @@ https://stackoverflow.com/a/36247448/5578773
 	padding: 0px;
 }
 #main #editor-td .bottom {
-	display: flex;
+	display: grid;
 	position: relative;
-	flex-direction: column;
+	grid-template-columns: minmax(0, 1fr) auto auto;
+	grid-template-rows: minmax(0, 1fr) auto auto auto;
 }
 #main #editor-td .bottom > div {
 	min-width: 0;
 	min-height: 0;
 }
 #main #editor-td .bottom > .tabview {
-	flex-grow: 1;
 	display: flex;
 	position: relative;
+	grid-column: 1;
+	grid-row: 1;
 }
 #main #editor-td .bottom > .tabview > div {
 	flex-grow: 1;
@@ -338,10 +340,24 @@ https://stackoverflow.com/a/36247448/5578773
 	display: flex;
 	flex-direction: column;
 	position: relative;
+	grid-column: 3;
+	grid-row: 1 / 5;
 	min-height: 0;
-	width: auto !important;
 }
 #misc-splitter-td {
+	grid-column: 2;
+	grid-row: 1 / 5;
+}
+#misc-select {
+	width: 100%;
+	border: 0;
+	line-height: 1.5;
+	height: 1.5em;
+	box-shadow: 0 -1px 0 rgba(0,0,0,0.1) inset;
+}
+#bottom-panel-splitter-td {
+	grid-column: 1;
+	grid-row: 2;
 	width: 100%;
 	height: 5px;
 	flex: 0 0 5px;
@@ -351,28 +367,34 @@ https://stackoverflow.com/a/36247448/5578773
 	border-bottom: 1px solid;
 	cursor: n-resize;
 }
-#misc-select {
-	display: none;
-	width: 100%;
-	border: 0;
-	line-height: 1.5;
-	height: 1.5em;
-	box-shadow: 0 -1px 0 rgba(0,0,0,0.1) inset;
+#bottom-panel-td {
+	display: flex;
+	flex-direction: column;
+	position: relative;
+	grid-column: 1;
+	grid-row: 3;
+	min-width: 0;
+	min-height: 0;
 }
+#bottom-panel-tabs,
 #misc-tabs {
 	display: flex;
 	align-items: stretch;
 	gap: 0;
 	min-height: 25px;
+	overflow-x: auto;
+	overflow-y: hidden;
 	padding: 0 4px;
 	border-bottom: 1px solid rgba(128, 128, 128, 0.35);
 	background: rgba(128, 128, 128, 0.08);
 	box-sizing: border-box;
 	flex: 0 0 auto;
 }
+.bottom-panel-tab,
 .misc-tab {
 	position: relative;
 	min-width: 72px;
+	max-width: 180px;
 	margin: 0;
 	padding: 3px 10px;
 	border: 0;
@@ -381,16 +403,22 @@ https://stackoverflow.com/a/36247448/5578773
 	background: transparent;
 	color: inherit;
 	font: inherit;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 	cursor: pointer;
 }
+.bottom-panel-tab:hover,
 .misc-tab:hover {
 	background: rgba(128, 128, 128, 0.16);
 }
+.bottom-panel-tab.active,
 .misc-tab.active {
 	border-left-color: rgba(128, 128, 128, 0.25);
 	border-right-color: rgba(128, 128, 128, 0.25);
 	background: rgba(128, 128, 128, 0.22);
 }
+.bottom-panel-tab.active:after,
 .misc-tab.active:after {
 	content: "";
 	position: absolute;
@@ -400,12 +428,38 @@ https://stackoverflow.com/a/36247448/5578773
 	height: 2px;
 	background: var(--color-primary);
 }
+.bottom-panel-tab:focus,
 .misc-tab:focus {
 	outline: none !important;
 }
+.bottom-panel-tab:focus-visible,
 .misc-tab:focus-visible {
 	outline: 1px solid var(--color-primary) !important;
 	outline-offset: -3px;
+}
+#bottom-panel-content {
+	position: relative;
+	display: flex;
+	min-width: 0;
+	min-height: 0;
+	flex-grow: 1;
+}
+#bottom-panel-content > div {
+	flex-grow: 1;
+}
+/* Compatibility for plugins that implemented a bottom pane before GMEdit had one. */
+#main #editor-td #bottom-panel-content > #bottom-panel {
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+	min-width: 0;
+	min-height: 0;
+	max-height: none;
+	flex: 1 1 auto;
+	flex-basis: auto !important;
+}
+#main #editor-td #bottom-panel-content > #bottom-panel > .splitter-td {
+	display: none;
 }
 #misc-panel {
 	position: relative;
@@ -427,6 +481,8 @@ https://stackoverflow.com/a/36247448/5578773
 .problems-collapse-toggle {
 	position: relative;
 	display: block;
+	grid-column: 1;
+	grid-row: 4;
 	box-sizing: border-box;
 	width: 100%;
 	height: 14px;
