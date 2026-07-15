@@ -101,8 +101,22 @@ using tools.HtmlTools;
 				legacyElement = found;
 				observer.observe(found, { childList: true, subtree: true });
 				add(legacyName, found);
-			} else {
+				// The first insertion comes from BottomPane.show(), so treat it as
+				// an intentional request to reveal newly-created job output.
 				set(legacyName);
+			} else {
+				// Constructor removes and re-appends its pane on every
+				// activeFileChange to keep it at the bottom in vanilla GMEdit.
+				// Preserve our selected tab during that housekeeping operation.
+				var item = map[legacyName];
+				var wasActive = item != null && item.tab.classList.contains("active");
+				if (wasActive) {
+					if (panel.children[0] != found) {
+						var curr = panel.children[0];
+						if (curr != null) panel.removeChild(curr);
+						panel.appendChild(found);
+					}
+				} else found.remove();
 			}
 			return;
 		}
