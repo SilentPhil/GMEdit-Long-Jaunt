@@ -114,7 +114,6 @@ class Main {
 		Sidebar.init();
 		BottomPanel.init();
 		LeftBottomPanel.init();
-		Problems.init();
 		MainMenu.init();
 		//
 		#if !lwedit
@@ -128,6 +127,7 @@ class Main {
 		ProjectStyle.init();
 		FileDrag.init();
 		ChromeTabs.init();
+		Problems.init();
 		PluginManager.initApi();
 		Project.init();
 		aceEditor.statusBar.update();
