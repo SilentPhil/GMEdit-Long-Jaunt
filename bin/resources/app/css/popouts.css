@@ -375,20 +375,24 @@ html #ace_settingsmenu {
 }
 .popout-menu li {
 	position: relative;
+	display: grid;
+	grid-template-columns: minmax(max-content, 1fr) max-content;
+	align-items: center;
+	column-gap: 32px;
 	box-sizing: border-box;
 	min-height: 28px;
 	padding: 5px 34px;
-	padding-right: 28px;
+	padding-right: 9px;
 	background-position: 9px center;
 	background-repeat: no-repeat;
 	cursor: default;
 }
 .popout-menu-label {
-	display: inline-block;
+	grid-column: 1;
 }
 .popout-menu-accelerator {
-	float: right;
-	margin-left: 32px;
+	grid-column: 2;
+	justify-self: end;
 	opacity: 0.9;
 }
 .popout-menu li[disabled] {
