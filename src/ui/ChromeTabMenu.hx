@@ -32,11 +32,14 @@ class ChromeTabMenu {
 	static var pinAsMenuItems:Array<MenuItem>;
 	static var unpinItem:MenuItem;
 	static var closeIdleItem:MenuItem;
+	static var closePinLayerItem:MenuItem;
+	static var closeOtherPinLayersItem:MenuItem;
 	static var colorInput:InputElement;
 	static var colorDialog:Element;
 	static var colorTarget:ChromeTab;
 	static var colorInitial:Null<String>;
 	static var resetColorItem:MenuItem;
+	static var copyColorItem:MenuItem;
 	public static function show(el:ChromeTab, ev:MouseEvent) {
 		target = el;
 		var file = el.gmlFile;
@@ -44,11 +47,11 @@ class ChromeTabMenu {
 		
 		var tabPrefs = Preferences.current.chromeTabs;
 		var pinned = el.classList.contains(ChromeTabs.clPinned);
+		var pinLayer = el.pinLayer;
 		var pinLayers = tabPrefs.pinLayers;
 		pinItem.visible = !pinned && !pinLayers;
 		pinAsItem.visible = pinLayers;
 		if (pinLayers) {
-			var pinLayer = el.pinLayer;
 			for (i => item in pinAsMenuItems) {
 				if (item == null) continue;
 				item.checked = pinLayer == i;
@@ -56,7 +59,10 @@ class ChromeTabMenu {
 		}
 		unpinItem.visible = pinned;
 		closeIdleItem.visible = tabPrefs.idleTime > 0;
+		closePinLayerItem.enabled = pinLayer > 0;
+		closeOtherPinLayersItem.enabled = pinLayer > 0;
 		resetColorItem.enabled = el.tabColor != null;
+		copyColorItem.enabled = el.tabColor != null;
 		
 		#if !lwedit
 		showInDirectoryItem.enabled = hasFile;
@@ -73,6 +79,42 @@ class ChromeTabMenu {
 		menu.popupAsync(ev);
 	}
 	public static function init() {
+		function closeTabs(test:ChromeTab->Bool):Void {
+			var tabs = target.parentElement.querySelectorEls(".chrome-tab");
+			for (tab in tabs) {
+				var chromeTab:ChromeTab = cast tab;
+				if (test(chromeTab)) chromeTab.closeButton.click();
+			}
+		}
+		function writeClipboard(text:String):Void {
+			if (Electron != null && Electron.clipboard != null) {
+				Electron.clipboard.writeText(text);
+			} else {
+				var clipboard:Dynamic = (Main.window.navigator:Dynamic).clipboard;
+				if (clipboard == null) {
+					electron.Dialog.showWarning("Clipboard access is unavailable.");
+				} else clipboard.writeText(text);
+			}
+		}
+		function pasteColor(text:String, tab:ChromeTab, ?input:InputElement):Void {
+			text = text != null ? StringTools.trim(text) : "";
+			if (!~/^#[0-9a-fA-F]{6}$/.match(text)) {
+				electron.Dialog.showWarning("Clipboard does not contain a valid #RRGGBB color.");
+				return;
+			}
+			if (input != null) input.value = text;
+			if (tab != null) tab.tabColor = text;
+		}
+		function readColorFromClipboard(tab:ChromeTab, ?input:InputElement):Void {
+			if (Electron != null && Electron.clipboard != null) {
+				pasteColor(Electron.clipboard.readText(), tab, input);
+			} else {
+				var clipboard:Dynamic = (Main.window.navigator:Dynamic).clipboard;
+				if (clipboard == null) {
+					electron.Dialog.showWarning("Clipboard access is unavailable.");
+				} else clipboard.readText().then(function(text) pasteColor(text, tab, input));
+			}
+		}
 		function closeColorDialog(apply:Bool):Void {
 			colorDialog.style.display = "none";
 			if (!apply && colorTarget != null) colorTarget.tabColor = colorInitial;
@@ -98,15 +140,6 @@ class ChromeTabMenu {
 		colorInput.addEventListener("input", function(_) {
 			if (colorTarget != null) colorTarget.tabColor = colorInput.value;
 		});
-		function pasteColor(text:String):Void {
-			text = text != null ? StringTools.trim(text) : "";
-			if (!~/^#[0-9a-fA-F]{6}$/.match(text)) {
-				electron.Dialog.showWarning("Clipboard does not contain a valid #RRGGBB color.");
-				return;
-			}
-			colorInput.value = text;
-			if (colorTarget != null) colorTarget.tabColor = text;
-		}
 		var colorButtons = Main.document.createDivElement();
 		colorButtons.className = "buttons";
 		colorWindow.appendChild(colorButtons);
@@ -121,22 +154,10 @@ class ChromeTabMenu {
 			colorButtons.appendChild(button);
 		}
 		addColorButton("Copy", function() {
-			if (Electron != null && Electron.clipboard != null) {
-				Electron.clipboard.writeText(colorInput.value.toUpperCase());
-			} else {
-				var clipboard:Dynamic = (Main.window.navigator:Dynamic).clipboard;
-				if (clipboard != null) clipboard.writeText(colorInput.value.toUpperCase());
-			}
+			writeClipboard(colorInput.value.toUpperCase());
 		});
 		addColorButton("Paste", function() {
-			if (Electron != null && Electron.clipboard != null) {
-				pasteColor(Electron.clipboard.readText());
-			} else {
-				var clipboard:Dynamic = (Main.window.navigator:Dynamic).clipboard;
-				if (clipboard == null) {
-					electron.Dialog.showWarning("Clipboard access is unavailable.");
-				} else clipboard.readText().then(function(text) pasteColor(text));
-			}
+			readColorFromClipboard(colorTarget, colorInput);
 		});
 		for (apply in [true, false]) {
 			addColorButton(apply ? "Apply" : "Cancel", function() closeColorDialog(apply));
@@ -189,6 +210,27 @@ class ChromeTabMenu {
 				}
 			}
 		}));
+		menu.append(closePinLayerItem = new MenuItem({
+			id: "close-pin-layer",
+			label: "Close All in Pinned Layer",
+			click: function() {
+				var pinLayer = target.pinLayer;
+				if (pinLayer > 0) closeTabs(function(tab) return tab.pinLayer == pinLayer);
+			}
+		}));
+		menu.append(closeOtherPinLayersItem = new MenuItem({
+			id: "close-except-pin-layer",
+			label: "Close All Except Pinned Layer",
+			click: function() {
+				var pinLayer = target.pinLayer;
+				if (pinLayer > 0) closeTabs(function(tab) return tab.pinLayer != pinLayer);
+			}
+		}));
+		menu.append(new MenuItem({
+			id: "close-unpinned",
+			label: "Close All Unpinned",
+			click: function() closeTabs(function(tab) return tab.pinLayer == 0)
+		}));
 		menu.append(new MenuItem({
 			id: "close-sep",
 			type: MenuItemType.Sep
@@ -208,6 +250,19 @@ class ChromeTabMenu {
 			id: "reset-color",
 			label: "Reset tab color",
 			click: function() target.tabColor = null
+		}));
+		menu.append(copyColorItem = new MenuItem({
+			id: "copy-color",
+			label: "Copy tab color",
+			click: function() {
+				var color = target.tabColor;
+				if (color != null) writeClipboard(color);
+			}
+		}));
+		menu.append(new MenuItem({
+			id: "paste-color",
+			label: "Paste tab color",
+			click: function() readColorFromClipboard(target)
 		}));
 		menu.appendSep("color-sep");
 		
