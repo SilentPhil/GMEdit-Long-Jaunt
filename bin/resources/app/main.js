@@ -45,6 +45,42 @@ const isMac = process.platform == "darwin"
 const appId = "cc.yal.gmedit"
 const appIconPath = path.join(__dirname, "icons", "icon." + (isWindows ? "ico" : "png"))
 
+function fitWindowStateToScreen(state) {
+	if (state == null) return null
+	let { x, y, width, height } = state
+	if (![x, y, width, height].every(Number.isFinite) || width <= 0 || height <= 0) return null
+
+	let savedBounds = {
+		x: Math.round(x),
+		y: Math.round(y),
+		width: Math.round(width),
+		height: Math.round(height),
+	}
+	let workArea = electron.screen.getDisplayMatching(savedBounds).workArea
+	let fittedWidth = Math.min(savedBounds.width, workArea.width)
+	let fittedHeight = Math.min(savedBounds.height, workArea.height)
+	return {
+		x: Math.max(workArea.x, Math.min(savedBounds.x, workArea.x + workArea.width - fittedWidth)),
+		y: Math.max(workArea.y, Math.min(savedBounds.y, workArea.y + workArea.height - fittedHeight)),
+		width: fittedWidth,
+		height: fittedHeight,
+		maximized: state.maximized === true,
+	}
+}
+
+function saveWindowState(configPath, state) {
+	try {
+		if (!fs.existsSync(configPath)) return
+		const config = JSON.parse(fs.readFileSync(configPath, 'utf8'))
+		if (config.app?.rememberWindowState === false) return
+		if (config.app == null) config.app = {}
+		config.app.windowState = state
+		fs.writeFileSync(configPath, JSON.stringify(config, null, "\t"), 'utf8')
+	} catch (x) {
+		console.warn('Error saving window state:', x)
+	}
+}
+
 if (isWindows) {
 	app.setAppUserModelId(appId)
 }
@@ -109,20 +145,31 @@ app.on("browser-window-created", (e, wnd) => {
 function createWindow(first) {
 	//
 	let windowWidth = 960, windowHeight = 720, windowFrame = false
+	let windowX = null, windowY = null, restoreMaximized = false
+	const configPath = app.getPath("userData") + "/GMEdit/config/user-preferences.json"
 	try {
-		const configPath = app.getPath("userData") + "/GMEdit/config/user-preferences.json"
 		if (fs.existsSync(configPath)) {
 			const config = JSON.parse(fs.readFileSync(configPath, 'utf8'))
 			windowWidth = config.app?.windowWidth ?? windowWidth
 			windowHeight = config.app?.windowHeight ?? windowHeight
 			windowFrame = config.app?.windowFrame ?? windowFrame
+			if (first && lintOptions == null && config.app?.rememberWindowState !== false) {
+				const state = fitWindowStateToScreen(config.app?.windowState)
+				if (state != null) {
+					windowX = state.x
+					windowY = state.y
+					windowWidth = state.width
+					windowHeight = state.height
+					restoreMaximized = state.maximized
+				}
+			}
 		}
 	} catch (x) {
 		console.warn('Error reading preferences:', x)
 	}
 	// Create the browser window.
 	const showOnceReady = false
-	let wnd = new BrowserWindow({
+	let windowOptions = {
 		width: windowWidth,
 		height: windowHeight,
 		frame: windowFrame,
@@ -133,9 +180,16 @@ function createWindow(first) {
 			nodeIntegration: true,
 			contextIsolation: false,
 		},
-		show: lintOptions == null && !showOnceReady,
+		show: lintOptions == null && !showOnceReady && !restoreMaximized,
 		icon: appIconPath
-	})
+	}
+	if (windowX != null) windowOptions.x = windowX
+	if (windowY != null) windowOptions.y = windowY
+	let wnd = new BrowserWindow(windowOptions)
+	if (restoreMaximized) {
+		wnd.maximize()
+		wnd.show()
+	}
 
 	wnd.webContents.on('did-create-window', (childWnd) => {
 		childWnd.once('ready-to-show', () => {
@@ -220,12 +274,26 @@ function createWindow(first) {
 	}
 
 	// Emitted when the window is closed.
+	let closingWindowState = null
+	if (first && lintOptions == null) {
+		wnd.on('close', function () {
+			let bounds = wnd.getNormalBounds()
+			closingWindowState = {
+				x: bounds.x,
+				y: bounds.y,
+				width: bounds.width,
+				height: bounds.height,
+				maximized: wnd.isMaximized(),
+			}
+		})
+	}
 	wnd.on('closed', function () {
 		// Dereference the window object, usually you would store windows
 		// in an array if your app supports multi windows, this is the time
 		// when you should delete the corresponding element.
 		let i = activeWindows.indexOf(wnd)
 		if (i >= 0) activeWindows.splice(i, 1)
+		if (closingWindowState != null) saveWindowState(configPath, closingWindowState)
 		wnd = null
 	})
 }

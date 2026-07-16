@@ -27,5 +27,9 @@ class PrefApp {
 			current.app.windowFrame = v;
 			save();
 		});
+		addCheckbox(out, "Remember window state", current.app.rememberWindowState, function(v) {
+			current.app.rememberWindowState = v;
+			save();
+		});
 	}
 }

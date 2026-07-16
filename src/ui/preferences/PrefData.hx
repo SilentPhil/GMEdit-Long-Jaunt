@@ -96,6 +96,7 @@ import haxe.DynamicAccess;
 			windowWidth: 960,
 			windowHeight: 720,
 			windowFrame: false,
+			rememberWindowState: true,
 		},
 		globalLookup: {
 			matchMode: AceSmart,
@@ -198,6 +199,14 @@ typedef PrefDataImpl = {
 		windowWidth:Int,
 		windowHeight:Int,
 		windowFrame:Bool,
+		rememberWindowState:Bool,
+		?windowState:{
+			x:Int,
+			y:Int,
+			width:Int,
+			height:Int,
+			maximized:Bool,
+		},
 	},
 	globalLookup: {
 		matchMode:PrefMatchMode,
