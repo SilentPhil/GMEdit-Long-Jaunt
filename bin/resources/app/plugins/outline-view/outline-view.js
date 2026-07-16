@@ -27,6 +27,17 @@
 	}
 	var showAtTop = true;
 	var showFuncArgs = false;
+	var showFuncArgsCheckbox = null;
+	var hideFunctionArgsButton = null;
+	function setShowFuncArgs(value) {
+		showFuncArgs = value;
+		if (showFuncArgsCheckbox) showFuncArgsCheckbox.checked = value;
+		if (hideFunctionArgsButton) {
+			hideFunctionArgsButton.setAttribute("aria-pressed", value ? "false" : "true");
+			hideFunctionArgsButton.title = value ? "Hide function arguments" : "Show function arguments";
+			hideFunctionArgsButton.setAttribute("aria-label", hideFunctionArgsButton.title);
+		}
+	}
 	var hideMethodArgs = true;
 	var hideMethodArgsCheckbox = null;
 	var hideMethodArgsButton = null;
@@ -43,6 +54,65 @@
 	function setHideEmptyRegions(value) {
 		hideEmptyRegions = value;
 		outer.classList.toggle("outline-hide-empty-regions", value);
+	}
+	var showCollapseControls = true;
+	var collapseControlsButton = null;
+	function setShowCollapseControls(value) {
+		showCollapseControls = value;
+		outer.classList.toggle("outline-show-collapse-controls", value);
+		if (collapseControlsButton) {
+			collapseControlsButton.setAttribute("aria-pressed", value ? "true" : "false");
+			collapseControlsButton.title = value ? "Hide class and region collapse controls" : "Show class and region collapse controls";
+			collapseControlsButton.setAttribute("aria-label", collapseControlsButton.title);
+		}
+	}
+	var hideGuideLines = false;
+	var hideGuideLinesButton = null;
+	function setHideGuideLines(value) {
+		hideGuideLines = value;
+		outer.classList.toggle("outline-hide-guide-lines", value);
+		if (hideGuideLinesButton) {
+			hideGuideLinesButton.setAttribute("aria-pressed", value ? "true" : "false");
+			hideGuideLinesButton.title = value ? "Show vertical guide lines" : "Hide vertical guide lines";
+			hideGuideLinesButton.setAttribute("aria-label", hideGuideLinesButton.title);
+		}
+	}
+	var disableIndentation = false;
+	var disableIndentationButton = null;
+	function setDisableIndentation(value) {
+		disableIndentation = value;
+		outer.classList.toggle("outline-no-indentation", value);
+		if (disableIndentationButton) {
+			disableIndentationButton.setAttribute("aria-pressed", value ? "true" : "false");
+			disableIndentationButton.title = value ? "Restore nested indentation" : "Remove nested indentation";
+			disableIndentationButton.setAttribute("aria-label", disableIndentationButton.title);
+		}
+	}
+	var alignCollapseContents = true;
+	var alignCollapseContentsButton = null;
+	function setAlignCollapseContents(value) {
+		alignCollapseContents = value;
+		outer.classList.toggle("outline-align-collapse-contents", value);
+		if (alignCollapseContentsButton) {
+			alignCollapseContentsButton.setAttribute("aria-pressed", value ? "true" : "false");
+			alignCollapseContentsButton.title = value
+				? "Use original container content indentation"
+				: "Align container contents with collapse controls";
+			alignCollapseContentsButton.setAttribute("aria-label", alignCollapseContentsButton.title);
+		}
+	}
+	var keepRegionContents = true;
+	var keepRegionContentsButton = null;
+	function setKeepRegionContents(value) {
+		keepRegionContents = value;
+		if (keepRegionContentsButton) {
+			keepRegionContentsButton.setAttribute("aria-pressed", value ? "true" : "false");
+			keepRegionContentsButton.title = value
+				? "Hide region contents when filtering out regions"
+				: "Keep region contents when filtering out regions";
+			keepRegionContentsButton.setAttribute("aria-label", keepRegionContentsButton.title);
+		}
+		if (typeof applyFilter == "function") applyFilter();
 	}
 	var tailSep = " ➜ "; // narrow space, arrow, narrow space
 	//
@@ -180,7 +250,7 @@
 						var name = mt[2] || mt[3];
 						var label = name, title = mt[1];
 						
-						if (showFuncArgs && !hideMethodArgs) label += mt[4];
+						if (!hideMethodArgs) label += mt[4];
 						title += mt[4];
 						
 						var tail = (mt[5] || "").trim();
@@ -208,7 +278,7 @@
 						var label = mt[1], title = mt[1];
 						rx = new RegExp("\\b" + label + "\\b\\s*=\\s*\\(");
 
-						if (showFuncArgs && !hideMethodArgs) label += mt[2];
+						if (!hideMethodArgs) label += mt[2];
 						title += mt[2];
 						
 						var nav = { def: def, ctx: mt[1], ctxRx: rx, ctxAfter: true, showAtTop: showAtTop, outlineKind: "method" };
@@ -405,6 +475,37 @@
 	filterCaseSensitive.setAttribute("aria-pressed", "false");
 	filterCaseSensitive.innerHTML = '<span aria-hidden="true">Aa</span>';
 	outer.appendChild(filterBar);
+	var typeFilterBar = document.createElement("div");
+	typeFilterBar.className = "outline-type-filters";
+	typeFilterBar.setAttribute("role", "toolbar");
+	typeFilterBar.setAttribute("aria-label", "Outline item types");
+	var typeFilters = {
+		method: true,
+		function: true,
+		constructor: true,
+		region: true
+	};
+	function makeTypeFilterButton(label, kind) {
+		var button = document.createElement("button");
+		button.type = "button";
+		button.className = "outline-type-filter-button";
+		button.textContent = label;
+		button.title = "Hide " + label.toLowerCase();
+		button.setAttribute("aria-pressed", "true");
+		button.addEventListener("click", function() {
+			typeFilters[kind] = !typeFilters[kind];
+			button.setAttribute("aria-pressed", typeFilters[kind] ? "true" : "false");
+			button.title = (typeFilters[kind] ? "Hide " : "Show ") + label.toLowerCase();
+			applyFilter();
+		});
+		typeFilterBar.appendChild(button);
+		return button;
+	}
+	makeTypeFilterButton("Methods", "method");
+	makeTypeFilterButton("Functions", "function");
+	makeTypeFilterButton("Classes", "constructor");
+	makeTypeFilterButton("Regions", "region");
+	outer.appendChild(typeFilterBar);
 	//
 	var treeview = document.createElement("div")
 	treeview.classList.add("treeview");
@@ -417,6 +518,7 @@
 			|| code == 95;
 	}
 	function filterMatches(name, query, wholeWord, caseSensitive) {
+		if (query == "") return true;
 		if (!caseSensitive) {
 			name = name.toLowerCase();
 			query = query.toLowerCase();
@@ -432,24 +534,44 @@
 		}
 		return false;
 	}
+	function typeFilterIsDefault() {
+		return typeFilters.method && typeFilters.function && typeFilters.constructor && typeFilters.region;
+	}
+	function typeFilterAllows(node) {
+		var kind = node.getAttribute("outline-kind");
+		return typeFilters[kind] !== false;
+	}
 	function filterNode(node, query, wholeWord, caseSensitive) {
 		var label = node.treeHeader && node.treeHeader.querySelector("span.label");
-		var visible = label && filterMatches(label.textContent, query, wholeWord, caseSensitive);
+		var kind = node.getAttribute("outline-kind");
+		var typeAllowed = typeFilterAllows(node);
+		var visible = label
+			&& typeAllowed
+			&& filterMatches(label.textContent, query, wholeWord, caseSensitive);
+		var childVisible = false;
 		var children = node.treeItems && node.treeItems.children;
 		if (children) for (var i = 0; i < children.length; i++) {
-			if (filterNode(children[i], query, wholeWord, caseSensitive)) visible = true;
+			if (filterNode(children[i], query, wholeWord, caseSensitive)) childVisible = true;
 		}
+		if (childVisible) visible = true;
+		var keepChildren = !typeAllowed && kind == "region" && keepRegionContents;
+		node.classList.toggle("outline-region-header-hidden", keepChildren && childVisible);
+		// Classes remain an all-or-nothing filter. Regions can optionally keep their contents.
+		if (!typeAllowed && !keepChildren) visible = false;
 		node.classList.toggle("outline-filter-hidden", !visible);
 		return visible;
 	}
 	function applyFilter() {
 		var query = filterInput.value;
-		var active = query.length > 0;
-		filterClear.disabled = !active;
-		treeview.classList.toggle("outline-is-filtering", active);
+		var textActive = query.length > 0;
+		var active = textActive || !typeFilterIsDefault();
+		filterClear.disabled = !textActive;
+		treeview.classList.toggle("outline-is-filtering", textActive);
 		if (!active) {
 			var hidden = treeview.querySelectorAll(".outline-filter-hidden");
 			for (var i = 0; i < hidden.length; i++) hidden[i].classList.remove("outline-filter-hidden");
+			var headerHidden = treeview.querySelectorAll(".outline-region-header-hidden");
+			for (var i = 0; i < headerHidden.length; i++) headerHidden[i].classList.remove("outline-region-header-hidden");
 			return;
 		}
 		var wholeWord = filterWholeWord.getAttribute("aria-pressed") == "true";
@@ -459,7 +581,7 @@
 		}
 	}
 	function scheduleFilter() {
-		if (filterUpdatePending || filterInput.value == "") return;
+		if (filterUpdatePending || (filterInput.value == "" && typeFilterIsDefault())) return;
 		filterUpdatePending = true;
 		requestAnimationFrame(function() {
 			filterUpdatePending = false;
@@ -502,6 +624,73 @@
 		forceRefresh();
 	});
 	toolbar.appendChild(hideMethodArgsButton);
+	hideFunctionArgsButton = document.createElement("button");
+	hideFunctionArgsButton.type = "button";
+	hideFunctionArgsButton.className = "outline-toolbar-button outline-toolbar-glyph";
+	hideFunctionArgsButton.innerHTML = '<span aria-hidden="true">&#402;()</span>';
+	hideFunctionArgsButton.addEventListener("click", function() {
+		setShowFuncArgs(!showFuncArgs);
+		currOV = prepareOV();
+		currOV.showFuncArgs = showFuncArgs;
+		Preferences.save();
+		forceRefresh();
+	});
+	toolbar.appendChild(hideFunctionArgsButton);
+	collapseControlsButton = document.createElement("button");
+	collapseControlsButton.type = "button";
+	collapseControlsButton.className = "outline-toolbar-button outline-toolbar-glyph";
+	collapseControlsButton.innerHTML = '<span aria-hidden="true">+/&minus;</span>';
+	collapseControlsButton.addEventListener("click", function() {
+		setShowCollapseControls(!showCollapseControls);
+		currOV = prepareOV();
+		currOV.showCollapseControls = showCollapseControls;
+		Preferences.save();
+	});
+	toolbar.appendChild(collapseControlsButton);
+	alignCollapseContentsButton = document.createElement("button");
+	alignCollapseContentsButton.type = "button";
+	alignCollapseContentsButton.className = "outline-toolbar-button outline-toolbar-glyph";
+	alignCollapseContentsButton.innerHTML = '<span aria-hidden="true">+&#8677;</span>';
+	alignCollapseContentsButton.addEventListener("click", function() {
+		setAlignCollapseContents(!alignCollapseContents);
+		currOV = prepareOV();
+		currOV.alignCollapseContents = alignCollapseContents;
+		Preferences.save();
+	});
+	toolbar.appendChild(alignCollapseContentsButton);
+	hideGuideLinesButton = document.createElement("button");
+	hideGuideLinesButton.type = "button";
+	hideGuideLinesButton.className = "outline-toolbar-button outline-toolbar-glyph";
+	hideGuideLinesButton.innerHTML = '<span aria-hidden="true">&#9474;&#9474;</span>';
+	hideGuideLinesButton.addEventListener("click", function() {
+		setHideGuideLines(!hideGuideLines);
+		currOV = prepareOV();
+		currOV.hideGuideLines = hideGuideLines;
+		Preferences.save();
+	});
+	toolbar.appendChild(hideGuideLinesButton);
+	disableIndentationButton = document.createElement("button");
+	disableIndentationButton.type = "button";
+	disableIndentationButton.className = "outline-toolbar-button outline-toolbar-glyph";
+	disableIndentationButton.innerHTML = '<span aria-hidden="true">&#8676;</span>';
+	disableIndentationButton.addEventListener("click", function() {
+		setDisableIndentation(!disableIndentation);
+		currOV = prepareOV();
+		currOV.disableIndentation = disableIndentation;
+		Preferences.save();
+	});
+	toolbar.appendChild(disableIndentationButton);
+	keepRegionContentsButton = document.createElement("button");
+	keepRegionContentsButton.type = "button";
+	keepRegionContentsButton.className = "outline-toolbar-button outline-toolbar-glyph";
+	keepRegionContentsButton.innerHTML = '<span aria-hidden="true">R&#8627;</span>';
+	keepRegionContentsButton.addEventListener("click", function() {
+		setKeepRegionContents(!keepRegionContents);
+		currOV = prepareOV();
+		currOV.keepRegionContents = keepRegionContents;
+		Preferences.save();
+	});
+	toolbar.appendChild(keepRegionContentsButton);
 	outer.appendChild(toolbar);
 	//
 	var currEl = null;
@@ -520,11 +709,39 @@
 	var TreeView = $gmedit["ui.treeview.TreeView"];
 	var makeDir = TreeView.makeDir;
 	var navPool = [];
+	function syncCollapseToggle(dir) {
+		var kind = dir.getAttribute("outline-kind");
+		var eligible = dir.treeItems.children.length > 0 && (kind == "constructor" || kind == "region");
+		var button = dir.treeHeader.querySelector(":scope > .outline-collapse-toggle");
+		dir.classList.toggle("outline-collapsible", eligible);
+		if (!eligible) {
+			if (button) button.remove();
+			return;
+		}
+		if (!button) {
+			button = document.createElement("button");
+			button.type = "button";
+			button.className = "outline-collapse-toggle";
+			button.addEventListener("click", function(e) {
+				e.preventDefault();
+				e.stopPropagation();
+				dir.classList.toggle("open");
+				syncCollapseToggle(dir);
+			});
+			dir.treeHeader.insertBefore(button, dir.treeHeader.querySelector("span.label"));
+		}
+		var open = dir.classList.contains("open");
+		button.textContent = open ? "\u2212" : "+";
+		button.title = (open ? "Collapse " : "Expand ") + dir.treeHeader.querySelector("span.label").textContent;
+		button.setAttribute("aria-label", button.title);
+		button.setAttribute("aria-expanded", open ? "true" : "false");
+	}
 	function makeNav_clicked(e) {
 		var dir = e.target;
 		if (dir.classList.contains("header")) dir = dir.parentElement;
 		if (e.offsetX < dir.treeHeader.querySelector("span").offsetLeft && dir.treeItems.children.length > 0) {
 			dir.classList.toggle("open");
+			syncCollapseToggle(dir);
 		} else {
 			if (currFile() != dir.outlineViewFile) activateFile(dir.outlineViewFile);
 			if (dir.outlineViewNav) dir.outlineViewFile.navigate(dir.outlineViewNav);
@@ -560,6 +777,7 @@
 		var r = navPool.pop();
 		if (r) {
 			r.classList.remove("outline-filter-hidden");
+			r.classList.remove("outline-region-header-hidden");
 			setNavItemLabel(r, label);
 		} else {
 			r = makeDir(label);
@@ -679,6 +897,7 @@
 		var curr = ov;
 		function finishDir(q) {
 			setc(q, "outline-dir", q.treeItems.children.length > 0);
+			syncCollapseToggle(q);
 		}
 		function markEmptyRegions(q) {
 			var hasContent = false;
@@ -725,7 +944,10 @@
 		// re-collapse:
 		for (var i = 0; i < reclose.length; i++) {
 			var q = ov.treeItems.querySelector(reclose[i]);
-			if (q) q.classList.remove("open");
+			if (q) {
+				q.classList.remove("open");
+				syncCollapseToggle(q);
+			}
 		}
 	}
 	//
@@ -991,9 +1213,14 @@
 			dockPosition = getDockPosition(currOV);
 			setDisplayMode(getDisplayMode(currOV))
 			showAtTop = opt(currOV, "showAtTop", true);
-			showFuncArgs = opt(currOV, "showFuncArgs", true);
+			setShowFuncArgs(opt(currOV, "showFuncArgs", true));
 			setHideMethodArgs(opt(currOV, "hideMethodArgs", true));
 			setHideEmptyRegions(opt(currOV, "hideEmptyRegions", true));
+			setShowCollapseControls(opt(currOV, "showCollapseControls", true));
+			setAlignCollapseContents(opt(currOV, "alignCollapseContents", true));
+			setHideGuideLines(opt(currOV, "hideGuideLines", false));
+			setDisableIndentation(opt(currOV, "disableIndentation", false));
+			setKeepRegionContents(opt(currOV, "keepRegionContents", true));
 	
 			GMEdit.on("fileRename", onFileRename);
 
@@ -1046,13 +1273,15 @@
 				toggle_sync();
 				forceRefresh();
 			})
-			Preferences.addCheckbox(out, "Show 2.3 function arguments", opt(currOV, "showFuncArgs", true), function(val) {
+			var showFuncArgsCtr = Preferences.addCheckbox(out, "Show 2.3 function arguments", opt(currOV, "showFuncArgs", true), function(val) {
 				currOV = prepareOV();
-				showFuncArgs = currOV.showFuncArgs = val;
+				currOV.showFuncArgs = val;
+				setShowFuncArgs(val);
 				currEl = null;
 				Preferences.save();
 				forceRefresh();
 			});
+			showFuncArgsCheckbox = showFuncArgsCtr.querySelector("input");
 			var hideMethodArgsCtr = Preferences.addCheckbox(out, "Hide class method arguments", opt(currOV, "hideMethodArgs", true), function(val) {
 				currOV = prepareOV();
 				currOV.hideMethodArgs = val;
