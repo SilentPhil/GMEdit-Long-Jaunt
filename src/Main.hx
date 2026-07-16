@@ -113,6 +113,7 @@ class Main {
 		TagEditor.init();
 		Sidebar.init();
 		BottomPanel.init();
+		LeftBottomPanel.init();
 		Problems.init();
 		MainMenu.init();
 		//

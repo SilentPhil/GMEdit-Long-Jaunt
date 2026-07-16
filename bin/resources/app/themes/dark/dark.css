@@ -172,7 +172,7 @@ button[type=button].highlighted-button {
 	--tree-toggle-shadow: 0 2px 8px rgba(0, 0, 0, 0.36), inset 0 1px 0 rgba(255, 255, 255, 0.08);
 	--tree-toggle-active-shadow: 0 1px 4px rgba(0, 0, 0, 0.42), inset 0 1px 2px rgba(0, 0, 0, 0.28);
 }
-#misc-splitter-td, #bottom-panel-splitter-td {
+#misc-splitter-td, #bottom-panel-splitter-td, #left-bottom-panel-splitter-td {
 	background: #505050;
 }
 #main #editor-td {

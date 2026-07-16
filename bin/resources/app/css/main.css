@@ -355,7 +355,8 @@ https://stackoverflow.com/a/36247448/5578773
 	height: 1.5em;
 	box-shadow: 0 -1px 0 rgba(0,0,0,0.1) inset;
 }
-#bottom-panel-splitter-td {
+#bottom-panel-splitter-td,
+#left-bottom-panel-splitter-td {
 	grid-column: 1;
 	grid-row: 2;
 	width: 100%;
@@ -367,6 +368,15 @@ https://stackoverflow.com/a/36247448/5578773
 	border-bottom: 1px solid;
 	cursor: n-resize;
 }
+#left-bottom-panel-td {
+	display: flex;
+	flex-direction: column;
+	position: relative;
+	min-width: 0;
+	min-height: 0;
+	height: 240px;
+	flex: 0 0 auto;
+}
 #bottom-panel-td {
 	display: flex;
 	flex-direction: column;
@@ -377,7 +387,8 @@ https://stackoverflow.com/a/36247448/5578773
 	min-height: 0;
 }
 #bottom-panel-tabs,
-#misc-tabs {
+#misc-tabs,
+#left-bottom-panel-tabs {
 	display: flex;
 	align-items: stretch;
 	gap: 0;
@@ -391,7 +402,8 @@ https://stackoverflow.com/a/36247448/5578773
 	flex: 0 0 auto;
 }
 .bottom-panel-tab,
-.misc-tab {
+.misc-tab,
+.left-bottom-panel-tab {
 	position: relative;
 	min-width: 72px;
 	max-width: 180px;
@@ -409,17 +421,20 @@ https://stackoverflow.com/a/36247448/5578773
 	cursor: pointer;
 }
 .bottom-panel-tab:hover,
-.misc-tab:hover {
+.misc-tab:hover,
+.left-bottom-panel-tab:hover {
 	background: rgba(128, 128, 128, 0.16);
 }
 .bottom-panel-tab.active,
-.misc-tab.active {
+.misc-tab.active,
+.left-bottom-panel-tab.active {
 	border-left-color: rgba(128, 128, 128, 0.25);
 	border-right-color: rgba(128, 128, 128, 0.25);
 	background: rgba(128, 128, 128, 0.22);
 }
 .bottom-panel-tab.active:after,
-.misc-tab.active:after {
+.misc-tab.active:after,
+.left-bottom-panel-tab.active:after {
 	content: "";
 	position: absolute;
 	left: 0;
@@ -429,22 +444,26 @@ https://stackoverflow.com/a/36247448/5578773
 	background: var(--color-primary);
 }
 .bottom-panel-tab:focus,
-.misc-tab:focus {
+.misc-tab:focus,
+.left-bottom-panel-tab:focus {
 	outline: none !important;
 }
 .bottom-panel-tab:focus-visible,
-.misc-tab:focus-visible {
+.misc-tab:focus-visible,
+.left-bottom-panel-tab:focus-visible {
 	outline: 1px solid var(--color-primary) !important;
 	outline-offset: -3px;
 }
-#bottom-panel-content {
+#bottom-panel-content,
+#left-bottom-panel-content {
 	position: relative;
 	display: flex;
 	min-width: 0;
 	min-height: 0;
 	flex-grow: 1;
 }
-#bottom-panel-content > div {
+#bottom-panel-content > div,
+#left-bottom-panel-content > div {
 	flex-grow: 1;
 }
 /* Compatibility for plugins that implemented a bottom pane before GMEdit had one. */

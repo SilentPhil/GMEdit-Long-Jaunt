@@ -30,6 +30,11 @@ using tools.HtmlTools;
 		Main.window.dispatchEvent(e);
 	}
 
+	/** Wait until a moved panel has its final dimensions before embedded editors resize. */
+	static function deferResize() {
+		Main.window.requestAnimationFrame(function(_) dispatchResize());
+	}
+
 	static function sync() {
 		var n = list.length;
 		var v = n == 0 ? "none" : "";
@@ -56,6 +61,7 @@ using tools.HtmlTools;
 		if (changed) {
 			if (curr != null) panel.removeChild(curr);
 			panel.appendChild(item.el);
+			deferResize();
 		}
 		if (changed && name == "Problems") Problems.onShown();
 	}
@@ -115,6 +121,7 @@ using tools.HtmlTools;
 						var curr = panel.children[0];
 						if (curr != null) panel.removeChild(curr);
 						panel.appendChild(found);
+						deferResize();
 					}
 				} else found.remove();
 			}
