@@ -4,6 +4,7 @@ import electron.Dialog;
 import electron.Menu;
 import gml.Project;
 import gml.project.ProjectState.ProjectTabState;
+import js.html.Element;
 import js.html.MouseEvent;
 import ui.ChromeTabs.ChromeTab;
 
@@ -11,14 +12,30 @@ import ui.ChromeTabs.ChromeTab;
 class Layouts {
 	static inline var directory = "#layouts";
 	static var menu:Menu;
+	static var button:Element;
 
 	public static function init():Void {
-		var button = Main.document.querySelector(".system-button.layouts");
+		button = Main.document.querySelector(".system-button.layouts");
 		if (button == null) return;
+		updateButton();
 		button.addEventListener("click", function(e:MouseEvent) {
 			buildMenu();
 			menu.popupAsync(e);
 		});
+	}
+
+	public static function updateButton():Void {
+		if (button == null) return;
+		button.innerText = "Layouts";
+		button.removeAttribute("title");
+		var project = Project.current;
+		if (project == null || project.path == "" || project.activeLayoutPath == null) return;
+		for (layout in readLayouts(project)) {
+			if (layout.path != project.activeLayoutPath) continue;
+			button.innerText = layout.data.name;
+			button.title = layout.data.name;
+			return;
+		}
 	}
 
 	static function buildMenu():Void {
@@ -111,21 +128,27 @@ class Layouts {
 				return;
 			}
 			try {
+				var path = pathForName(name);
 				var existing:LayoutFile = null;
 				for (layout in readLayouts(project)) {
-					if (layout.data.name.toLowerCase() == name.toLowerCase()) {
+					if (layout.data.name.toLowerCase() == name.toLowerCase()
+						|| layout.path.toLowerCase() == path.toLowerCase()) {
 						existing = layout;
 						break;
 					}
 				}
-				if (existing != null && !Dialog.showConfirmWarn(
-					'A layout named "$name" already exists. Overwrite it?'
-				)) return;
+				if (existing != null) {
+					var message = existing.data.name.toLowerCase() == name.toLowerCase()
+						? 'A layout named "$name" already exists. Overwrite it?'
+						: 'The file for "$name" is already used by layout "${existing.data.name}". Overwrite it?';
+					if (!Dialog.showConfirmWarn(message)) return;
+				}
 				if (!project.existsSync(directory)) project.mkdirSync(directory);
-				var path = existing != null ? existing.path : nextPath(project);
+				if (existing != null) path = existing.path;
 				writeLayout(project, path, name);
 				rememberReturnState(project);
 				project.activeLayoutPath = path;
+				updateButton();
 			} catch (error:Dynamic) {
 				Dialog.showError("Could not save layout:\n" + Std.string(error));
 			}
@@ -163,12 +186,12 @@ class Layouts {
 		project.activeLayoutPath = null;
 		project.layoutReturnTabs = null;
 		project.layoutReturnActiveTab = null;
+		if (project == Project.current) updateButton();
 	}
 
-	static function nextPath(project:Project):String {
-		var index = 1;
-		while (project.existsSync(directory + "/layout-" + index + ".json")) index++;
-		return directory + "/layout-" + index + ".json";
+	static function pathForName(name:String):String {
+		var fileName = StringTools.replace(name.toLowerCase(), " ", "_");
+		return directory + "/" + fileName + ".json";
 	}
 
 	static function deleteLayout(project:Project, layout:LayoutFile):Void {
@@ -188,6 +211,7 @@ class Layouts {
 		closeAllTabs();
 		project.restoreTabState(layout.data.tabs, layout.data.activeTab);
 		project.activeLayoutPath = layout.path;
+		updateButton();
 	}
 
 	static function closeLayout(project:Project):Void {
