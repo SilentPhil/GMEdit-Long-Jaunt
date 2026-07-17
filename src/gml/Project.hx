@@ -392,6 +392,9 @@ import ui.treeview.TreeViewElement;
 	public static function setCurrent(project:Project):Void {
 		if (current != null) current.close();
 		current = project;
+		#if !lwedit
+		ui.Layouts.updateButton();
+		#end
 	}
 	public static function open(path:String) {
 		setCurrent(new Project(path));
@@ -483,6 +486,9 @@ import ui.treeview.TreeViewElement;
 			//
 			PluginEvents.projectStateRestore({project:this, state:state});
 		}
+		#if !lwedit
+		ui.Layouts.updateButton();
+		#end
 		if (Main.moduleArgs.exists("lint")) {
 			cli.GmlLintCli.run();
 		} else if (Preferences.current.problemsScanMode == ui.preferences.PrefData.PrefProblemsScanMode.OnProjectOpen) {
