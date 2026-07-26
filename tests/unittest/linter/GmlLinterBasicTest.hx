@@ -816,6 +816,114 @@ class GmlLinterBasicTest {
 		Assert.isTrue(t.errors[0].text.indexOf("run") >= 0);
 	}
 
+	@Test public function testSuperAliasFindsInheritedMethod() {
+		var t = runLinter23(
+			"function LinterSuperBase() constructor {\n"
+			+ "\tstatic init = function(_health/*:int*/)/*->void*/ {}\n"
+			+ "}\n"
+			+ "function LinterSuperChild() : LinterSuperBase() constructor {\n"
+			+ "\t/// @super\n"
+			+ "\tstatic base_init = init;\n"
+			+ "\tstatic init = function(_health/*:int*/)/*->void*/ {\n"
+			+ "\t\tbase_init(_health);\n"
+			+ "\t}\n"
+			+ "}"
+		, true, KGmlScript.inst);
+		Assert.areEqual(0, t.problems.length, problemTexts(t));
+	}
+
+	@Test public function testInlineSuperAliasFindsInheritedMethod() {
+		var t = runLinter23(
+			"function LinterInlineSuperBase() constructor {\n"
+			+ "\tstatic init = function()/*->void*/ {}\n"
+			+ "}\n"
+			+ "function LinterInlineSuperChild() : LinterInlineSuperBase() constructor {\n"
+			+ "\tstatic base_init = init; /// @super\n"
+			+ "\tstatic init = function()/*->void*/ { base_init(); }\n"
+			+ "}"
+		, true, KGmlScript.inst);
+		Assert.areEqual(0, t.problems.length, problemTexts(t));
+	}
+
+	@Test public function testSuperAliasWarnsWhenOverrideDoesNotUseIt() {
+		var t = runLinter23(
+			"function LinterSuperUnusedBase() constructor {\n"
+			+ "\tstatic init = function()/*->void*/ {}\n"
+			+ "}\n"
+			+ "function LinterSuperUnusedChild() : LinterSuperUnusedBase() constructor {\n"
+			+ "\t/// @super\n"
+			+ "\tstatic base_init = init;\n"
+			+ "\tstatic init = function()/*->void*/ {\n"
+			+ "\t\t// base_init() in a comment does not count.\n"
+			+ "\t\tvar armor = 100;\n"
+			+ "\t}\n"
+			+ "}"
+		, true, KGmlScript.inst);
+		Assert.areEqual(0, t.errors.length, problemTexts(t));
+		Assert.areEqual(1, t.warnings.length, problemTexts(t));
+		Assert.isTrue(t.warnings[0].text.indexOf("base_init") >= 0, problemTexts(t));
+		Assert.isTrue(t.warnings[0].text.indexOf("not used") >= 0, problemTexts(t));
+	}
+
+	@Test public function testSuperAliasReferenceCountsAsUse() {
+		var t = runLinter23(
+			"function LinterSuperReferenceBase() constructor {\n"
+			+ "\tstatic init = function()/*->void*/ {}\n"
+			+ "}\n"
+			+ "function LinterSuperReferenceChild() : LinterSuperReferenceBase() constructor {\n"
+			+ "\t/// @super\n"
+			+ "\tstatic base_init = init;\n"
+			+ "\tstatic init = function()/*->void*/ {\n"
+			+ "\t\tvar callback = base_init;\n"
+			+ "\t\tcallback();\n"
+			+ "\t}\n"
+			+ "}"
+		, true, KGmlScript.inst);
+		Assert.areEqual(0, t.problems.length, problemTexts(t));
+	}
+
+	@Test public function testSuperAliasRequiresInheritedMember() {
+		var t = runLinter23(
+			"function LinterSuperMissingBase() constructor {}\n"
+			+ "function LinterSuperMissingChild() : LinterSuperMissingBase() constructor {\n"
+			+ "\t/// @super\n"
+			+ "\tstatic base_init = init;\n"
+			+ "}"
+		, true, KGmlScript.inst);
+		Assert.areEqual(1, t.errors.length, problemTexts(t));
+		Assert.isTrue(t.errors[0].text.indexOf("@super") >= 0, problemTexts(t));
+		Assert.isTrue(t.errors[0].text.indexOf("init") >= 0, problemTexts(t));
+	}
+
+	@Test public function testSuperAliasMustPrecedeOverride() {
+		var t = runLinter23(
+			"function LinterSuperOrderBase() constructor {\n"
+			+ "\tstatic init = function()/*->void*/ {}\n"
+			+ "}\n"
+			+ "function LinterSuperOrderChild() : LinterSuperOrderBase() constructor {\n"
+			+ "\tstatic init = function()/*->void*/ {}\n"
+			+ "\t/// @super\n"
+			+ "\tstatic base_init = init;\n"
+			+ "}"
+		, true, KGmlScript.inst);
+		Assert.areEqual(1, t.errors.length, problemTexts(t));
+		Assert.isTrue(t.errors[0].text.indexOf("after it was overridden") >= 0, problemTexts(t));
+	}
+
+	@Test public function testSuperAliasRequiresDirectIdentifierAssignment() {
+		var t = runLinter23(
+			"function LinterSuperDirectBase() constructor {\n"
+			+ "\tstatic init = function()/*->void*/ {}\n"
+			+ "}\n"
+			+ "function LinterSuperDirectChild() : LinterSuperDirectBase() constructor {\n"
+			+ "\t/// @super\n"
+			+ "\tstatic base_init = method(init);\n"
+			+ "}"
+		, true, KGmlScript.inst);
+		Assert.areEqual(1, t.errors.length, problemTexts(t));
+		Assert.isTrue(t.errors[0].text.indexOf("directly assign") >= 0, problemTexts(t));
+	}
+
 	@Test public function testOverrideWithoutParentReportsMemberLineAfterEnum() {
 		var t = runLinter23(
 			"enum LinterOverrideMode {\n"

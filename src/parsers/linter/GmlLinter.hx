@@ -402,6 +402,8 @@ class GmlLinter {
 	static var functionDeclLineRx = new RegExp("^\\s*function\\s+(\\w+)\\b");
 	public static var constructorParentLineRx = new RegExp("^\\s*function\\s+\\w+\\b[^\\n]*:\\s*(\\w+)\\s*\\(");
 	static var staticFieldLineRx = new RegExp("^\\s*static\\s+(\\w+)\\b\\s*=");
+	static var staticSuperAliasLineRx = new RegExp(
+		"^\\s*static\\s+(\\w+)\\b\\s*=\\s*(\\w+)\\s*;?\\s*(?:///.*)?$");
 	static var instanceFieldLineRx = new RegExp("^\\s*(\\w+)\\s*=");
 	function findImplementsWarningPos(source:String, ownName:String, interfaceName:String, ?preferred:AcePos):AcePos {
 		var lines = source.split("\n");
@@ -562,6 +564,12 @@ class GmlLinter {
 				var staticMatch = staticFieldLineRx.exec(line);
 				if (staticMatch != null) {
 					var field = staticMatch[1];
+					if (memberMeta != null && memberMeta.isSuper) {
+						var superMatch = staticSuperAliasLineRx.exec(line);
+						var source = superMatch != null ? superMatch[2] : null;
+						var sourceDeclaredBefore = source != null && current.instFields.exists(source);
+						current.addSuperAlias(field, source, sourceDeclaredBefore, memberMeta.pos);
+					}
 					current.addField(field, true, row, line, memberMeta);
 					current.addField(field, false, row, line, memberMeta);
 					pendingMeta = null;
@@ -737,6 +745,132 @@ class GmlLinter {
 			checkOverride(field, false, findOverrideWarningPos(source, impl, field, false, { row: 0, column: 0 }));
 		}
 	}
+	function checkSuperAliases(
+		impl:GmlLinterInterfaceImplementation,
+		currentImpls:Dictionary<GmlLinterInterfaceImplementation>,
+		source:String
+	):Void {
+		if (impl.superAliases.length == 0) return;
+		var ns = GmlAPI.gmlNamespaces[impl.name];
+		var lines = source.split("\n");
+		for (alias in impl.superAliases) {
+			if (alias.source == null) {
+				errors.push(new GmlLinterProblem(
+					'Member `${alias.field}` is marked @super but must directly assign an inherited member',
+					alias.pos));
+				continue;
+			}
+			if (alias.field == alias.source) {
+				errors.push(new GmlLinterProblem(
+					'@super alias `${alias.field}` must have a different name from its inherited member',
+					alias.pos));
+				continue;
+			}
+			if (alias.sourceDeclaredBefore) {
+				errors.push(new GmlLinterProblem(
+					'@super alias `${alias.field}` refers to `${alias.source}` after it was overridden in ${impl.name}',
+					alias.pos));
+				continue;
+			}
+			var found = false;
+			if (impl.parentName != null) {
+				found = currentImplHasField(currentImpls, currentImpls[impl.parentName], alias.source, true);
+				if (!found) {
+					var parentNs = ns != null ? ns.parent : GmlAPI.gmlNamespaces[impl.parentName];
+					found = namespaceHasOwnOrParentField(parentNs, alias.source, true);
+				}
+			}
+			if (!found) {
+				errors.push(new GmlLinterProblem(
+					'Member `${alias.field}` is marked @super but inherited member `${alias.source}` was not found',
+					alias.pos));
+				continue;
+			}
+			var overridePos = impl.staticPositions[alias.source];
+			if (overridePos != null && overridePos.row > alias.pos.row
+				&& !staticMethodBodyUsesIdentifier(lines, overridePos.row, alias.source, alias.field)
+			) {
+				warnings.push(new GmlLinterProblem(
+					'@super alias `${alias.field}` is not used by overriding method `${alias.source}`',
+					alias.pos));
+			}
+		}
+	}
+	function staticMethodBodyUsesIdentifier(
+		lines:Array<String>,
+		startRow:Int,
+		methodName:String,
+		identifier:String
+	):Bool {
+		if (startRow < 0 || startRow >= lines.length) return true;
+		var declarationRx = new RegExp(
+			"^\\s*static\\s+" + methodName + "\\b\\s*=\\s*function\\b");
+		if (!declarationRx.test(lines[startRow])) return true;
+		var sawFunction = false;
+		var sawParams = false;
+		var paramDepth = 0;
+		var bodyStarted = false;
+		var bodyDepth = 0;
+		var inBlockComment = false;
+		for (row in startRow ... lines.length) {
+			var line = lines[row];
+			var i = 0, n = line.length;
+			while (i < n) {
+				var c = line.fastCodeAt(i);
+				if (inBlockComment) {
+					if (c == "*".code && i + 1 < n && line.fastCodeAt(i + 1) == "/".code) {
+						inBlockComment = false;
+						i += 2;
+					} else i += 1;
+					continue;
+				}
+				if (c == "/".code && i + 1 < n) {
+					var next = line.fastCodeAt(i + 1);
+					if (next == "/".code) break;
+					if (next == "*".code) {
+						inBlockComment = true;
+						i += 2;
+						continue;
+					}
+				}
+				if (c == '"'.code || c == "'".code || c == "`".code) {
+					var quote = c;
+					i += 1;
+					while (i < n) {
+						var stringChar = line.fastCodeAt(i++);
+						if (stringChar == "\\".code) i += 1;
+						else if (stringChar == quote) break;
+					}
+					continue;
+				}
+				if (c.isIdent0()) {
+					var identStart = i++;
+					while (i < n && line.fastCodeAt(i).isIdent1()) i += 1;
+					var ident = line.substring(identStart, i);
+					if (!sawFunction && ident == "function") sawFunction = true;
+					if (bodyStarted && ident == identifier) return true;
+					continue;
+				}
+				if (sawFunction && !bodyStarted) {
+					if (c == "(".code) {
+						sawParams = true;
+						paramDepth += 1;
+					} else if (c == ")".code && sawParams) {
+						paramDepth -= 1;
+					} else if (c == "{".code && sawParams && paramDepth == 0) {
+						bodyStarted = true;
+						bodyDepth = 1;
+					}
+				} else if (bodyStarted) {
+					if (c == "{".code) bodyDepth += 1;
+					else if (c == "}".code && --bodyDepth <= 0) return false;
+				}
+				i += 1;
+			}
+		}
+		// Incomplete code should not produce an extra, potentially misleading warning.
+		return true;
+	}
 	function checkAbstractMembers(impl:GmlLinterInterfaceImplementation):Void {
 		var ns = GmlAPI.gmlNamespaces[impl.name];
 		if (ns == null || ns.parent == null) return;
@@ -789,6 +923,7 @@ class GmlLinter {
 				}
 			}
 			checkVirtualOverrideImplementation(impl, currentImpls, source);
+			checkSuperAliases(impl, currentImpls, source);
 			checkAbstractMembers(impl);
 		}
 	}
@@ -1931,6 +2066,7 @@ class GmlLinterInterfaceImplementation {
 	public var staticPositions:Dictionary<AcePos> = new Dictionary();
 	public var instMeta:Dictionary<GmlLinterMemberMeta> = new Dictionary();
 	public var staticMeta:Dictionary<GmlLinterMemberMeta> = new Dictionary();
+	public var superAliases:Array<GmlLinterSuperAlias> = [];
 	public function new(name:String) {
 		this.name = name;
 	}
@@ -1957,48 +2093,71 @@ class GmlLinterInterfaceImplementation {
 		var metas = isInst ? instMeta : staticMeta;
 		metas[field] = meta.withFallbackPos(row, line);
 	}
+	public function addSuperAlias(field:String, source:String, sourceDeclaredBefore:Bool, pos:AcePos):Void {
+		superAliases.push({
+			field: field,
+			source: source,
+			sourceDeclaredBefore: sourceDeclaredBefore,
+			pos: pos,
+		});
+	}
 }
 class GmlLinterMemberMeta {
 	public var isVirtual:Bool;
 	public var isAbstract:Bool;
 	public var isOverride:Bool;
+	public var isSuper:Bool;
 	public var pos:AcePos;
-	public function new(isVirtual:Bool, isAbstract:Bool, isOverride:Bool, pos:AcePos) {
+	public function new(isVirtual:Bool, isAbstract:Bool, isOverride:Bool, isSuper:Bool, pos:AcePos) {
 		this.isVirtual = isVirtual;
 		this.isAbstract = isAbstract;
 		this.isOverride = isOverride;
+		this.isSuper = isSuper;
 		this.pos = pos;
 	}
 	public static function fromLine(line:String, row:Int):GmlLinterMemberMeta {
 		var isVirtual = line.indexOf("@virtual") >= 0;
 		var isAbstract = line.indexOf("@abstract") >= 0;
 		var isOverride = line.indexOf("@override") >= 0;
-		if (!isVirtual && !isAbstract && !isOverride) return null;
-		var col = line.indexOf("@override");
+		var isSuper = line.indexOf("@super") >= 0;
+		if (!isVirtual && !isAbstract && !isOverride && !isSuper) return null;
+		var col = line.indexOf("@super");
+		if (col < 0) col = line.indexOf("@override");
 		if (col < 0) col = line.indexOf("@abstract");
 		if (col < 0) col = line.indexOf("@virtual");
-		return new GmlLinterMemberMeta(isVirtual, isAbstract, isOverride, { row: row, column: col >= 0 ? col : 0 });
+		return new GmlLinterMemberMeta(isVirtual, isAbstract, isOverride, isSuper,
+			{ row: row, column: col >= 0 ? col : 0 });
 	}
 	public static function merge(a:GmlLinterMemberMeta, b:GmlLinterMemberMeta):GmlLinterMemberMeta {
 		if (a == null) return b;
 		if (b == null) return a;
 		var pos = a.pos;
 		if (!a.isOverride && b.isOverride) pos = b.pos;
+		else if (!a.isSuper && b.isSuper) pos = b.pos;
 		else if (!a.isAbstract && b.isAbstract) pos = b.pos;
 		else if (!a.isVirtual && b.isVirtual) pos = b.pos;
 		return new GmlLinterMemberMeta(
 			a.isVirtual || b.isVirtual,
 			a.isAbstract || b.isAbstract,
 			a.isOverride || b.isOverride,
+			a.isSuper || b.isSuper,
 			pos
 		);
 	}
 	public function withFallbackPos(row:Int, line:String):GmlLinterMemberMeta {
 		if (pos != null) return this;
 		var col = line.indexOf("static");
-		return new GmlLinterMemberMeta(isVirtual, isAbstract, isOverride, { row: row, column: col >= 0 ? col : 0 });
+		return new GmlLinterMemberMeta(isVirtual, isAbstract, isOverride, isSuper,
+			{ row: row, column: col >= 0 ? col : 0 });
 	}
 }
+
+typedef GmlLinterSuperAlias = {
+	field:String,
+	source:String,
+	sourceDeclaredBefore:Bool,
+	pos:AcePos,
+};
 
 enum GmlLinterValue {
 	VUndefined;

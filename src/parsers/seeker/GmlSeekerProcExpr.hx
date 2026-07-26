@@ -22,6 +22,8 @@ class GmlSeekerProcExpr {
 	public static var templateItems:Array<GmlTypeTemplateItem> = null;
 	public static var fieldType:GmlType = null;
 	public static var isFunction:Bool = false;
+	/** Identifier used by a direct `field = identifier;` assignment. */
+	public static var sourceIdent:String = null;
 	public static function reset() {
 		args = null;
 		argTypes = null;
@@ -30,8 +32,9 @@ class GmlSeekerProcExpr {
 		templateItems = null;
 		fieldType = null;
 		isFunction = false;
+		sourceIdent = null;
 	}
-	public static function proc(seeker:GmlSeekerImpl, s:String, ?asStatic:Bool) {
+	public static function proc(seeker:GmlSeekerImpl, s:String, ?asStatic:Bool, forceType:Bool = false) {
 		reset();
 		//
 		var q = seeker.reader;
@@ -41,7 +44,7 @@ class GmlSeekerProcExpr {
 			case "/".code: q.skipLine(); q.skipSpaces1(); c = q.peek();
 			case "*".code: q.skip(2); q.skipComment(); q.skipSpaces1(); c = q.peek();
 		}
-		var specTypeInst = seeker.specTypeInst;
+		var specTypeInst = seeker.specTypeInst || forceType;
 		function procAs() {
 			q.skipSpaces1_local();
 			if (q.skipIfStrEquals("/*#as ")) {
@@ -134,6 +137,7 @@ class GmlSeekerProcExpr {
 				} else fieldType = doc.getFunctionType();
 			} else switch (q.peek()) {
 				case "\r".code, "\n".code, ";".code:
+					sourceIdent = ident;
 					for (_ in 0 ... 1) {
 						var loopDoc = seeker.doc;
 						var found = false;
@@ -178,7 +182,8 @@ class GmlSeekerProcExpr {
 						if (fieldType != null) break;
 						
 						// project resource
-						var resType = gml.Project.current.resourceTypes[ident];
+						var resourceTypes = gml.Project.current.resourceTypes;
+						var resType = resourceTypes != null ? resourceTypes[ident] : null;
 						if (resType != null) {
 							fieldType = GmlTypeDef.parse(resType);
 							break;

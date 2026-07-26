@@ -222,6 +222,7 @@ class AceWrapCommonCompleters {
 			new AceAutoCompleteItem("virtual", jsk, "@virtual\nMarks a method as intended for overriding"),
 			new AceAutoCompleteItem("abstract", jsk, "@abstract\nMarks a method that descendants must implement"),
 			new AceAutoCompleteItem("override", jsk, "@override\nMarks a method as overriding a base/interface member"),
+			new AceAutoCompleteItem("super", jsk, "@super\nMarks an alias of an inherited constructor member"),
 		];
 		jsDocCompleter = new AceWrapCompleter([], ["comment.meta"], false, gmlOnly);
 		for (ac in jsDocItems) jsDocCompleter.items.push(ac); // we don't want items sorted in this one case

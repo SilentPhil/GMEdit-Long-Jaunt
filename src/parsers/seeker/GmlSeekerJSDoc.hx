@@ -1,5 +1,6 @@
 package parsers.seeker;
 import ace.extern.AceAutoCompleteItem;
+import gml.GmlAPI;
 import gml.GmlFuncDoc;
 import gml.GmlImports;
 import gml.GmlNamespace.GmlFieldAccess;
@@ -41,6 +42,7 @@ class GmlSeekerJSDoc {
 	public var isVirtual:Bool = false;
 	public var isAbstract:Bool = false;
 	public var isOverride:Bool = false;
+	public var isSuper:Bool = false;
 	public var pubSubArgs:Array<String> = null;
 	public var pubSubTypes:Array<String> = null;
 	public var redirectCount = 0;
@@ -60,6 +62,7 @@ class GmlSeekerJSDoc {
 		isVirtual = false;
 		isAbstract = false;
 		isOverride = false;
+		isSuper = false;
 		pubSubArgs = null;
 		pubSubTypes = null;
 		if (resetInterf) resetInterface();
@@ -98,6 +101,7 @@ class GmlSeekerJSDoc {
 		r.isVirtual = isVirtual;
 		r.isAbstract = isAbstract;
 		r.isOverride = isOverride;
+		r.isSuper = isSuper;
 		r.pubSubArgs = copyArray(pubSubArgs);
 		r.pubSubTypes = copyArray(pubSubTypes);
 		r.redirectCount = redirectCount;
@@ -141,6 +145,7 @@ class GmlSeekerJSDoc {
 		if (q.isVirtual) isVirtual = true;
 		if (q.isAbstract) isAbstract = true;
 		if (q.isOverride) isOverride = true;
+		if (q.isSuper) isSuper = true;
 		pubSubArgs = concatArrays(pubSubArgs, q.pubSubArgs);
 		pubSubTypes = concatArrays(pubSubTypes, q.pubSubTypes);
 		implementsNames = concatArrays(implementsNames, q.implementsNames);
@@ -294,6 +299,7 @@ class GmlSeekerJSDoc {
 			if (jsDoc_has_virtual_tag.test(s)) isVirtual = true;
 			if (jsDoc_has_abstract_tag.test(s)) isAbstract = true;
 			if (jsDoc_has_override_tag.test(s)) isOverride = true;
+			if (jsDoc_has_super_tag.test(s)) isSuper = true;
 		}
 		if (!isInlineFieldDoc && (jsDoc_private.exec(s) != null
 			|| jsDoc_protected.exec(s) != null
@@ -301,6 +307,7 @@ class GmlSeekerJSDoc {
 			|| jsDoc_virtual.exec(s) != null
 			|| jsDoc_abstract.exec(s) != null
 			|| jsDoc_override.exec(s) != null
+			|| jsDoc_super.exec(s) != null
 		)) {
 			var accessMatch = jsDoc_find_access_tag.exec(s);
 			if (accessMatch != null) {
@@ -508,6 +515,46 @@ class GmlSeekerJSDoc {
 		if (mt != null) {
 			if (procIs(seeker, s, null, s.substring(3).trimBoth())) return;
 			isOverride = true;
+			return;
+		}
+
+		mt = jsDoc_super.exec(s);
+		if (mt != null) {
+			if (isInlineFieldDoc) {
+				var aliasMatch = new RegExp(
+					"\\bstatic\\s+(\\w+)\\b\\s*=\\s*(\\w+)\\s*;?\\s*///").exec(lineText);
+				if (aliasMatch == null || seeker.doc == null) return;
+				var aliasName = aliasMatch[1];
+				var sourceName = aliasMatch[2];
+				var aliasHint = out.fieldHints[seeker.doc.name + ":" + aliasName];
+				if (aliasHint == null) return;
+				var parentName = seeker.doc.parentName;
+				var depth = 0;
+				while (parentName != null && ++depth <= gml.GmlNamespace.maxDepth) {
+					var parentHint = out.fieldHints[parentName + ":" + sourceName];
+					var parentDoc = parentHint != null ? parentHint.doc : null;
+					var parentNs = GmlAPI.gmlNamespaces[parentName];
+					if (parentDoc == null && parentNs != null) parentDoc = parentNs.docInstMap[sourceName];
+					var parentLookup = parentHint != null ? parentHint.lookup : null;
+					if (parentLookup == null && parentNs != null) parentLookup = parentNs.instLookup[sourceName];
+					if (parentLookup == null && parentDoc != null) parentLookup = parentDoc.lookup;
+					if (parentDoc != null || parentLookup != null) {
+						aliasHint.lookup = parentLookup;
+						if (aliasHint.doc != null && parentDoc != null) {
+							aliasHint.doc.lookup = parentDoc.lookup;
+							aliasHint.doc.nav = parentDoc.nav;
+							aliasHint.doc.deprecated = parentDoc.deprecated;
+						}
+						return;
+					}
+					var namespaceDoc = out.docs[parentName];
+					if (namespaceDoc == null) namespaceDoc = GmlAPI.gmlDoc[parentName];
+					parentName = namespaceDoc != null ? namespaceDoc.parentName
+						: parentNs != null && parentNs.parent != null ? parentNs.parent.name : null;
+				}
+				return;
+			}
+			isSuper = true;
 			return;
 		}
 

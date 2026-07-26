@@ -160,7 +160,10 @@ class GmlSeekerProcVar {
 			else if (s == "=" && isStatic) {
 				var oldLocalKind = seeker.localKind;
 				seeker.localKind = "sublocal";
-				GmlSeekerProcExpr.proc(seeker, name, true);
+				var lineEnd = q.source.indexOf("\n", q.pos);
+				if (lineEnd < 0) lineEnd = q.source.length;
+				var hasInlineSuper = new RegExp("///\\s*@super\\b").test(q.source.substring(q.pos, lineEnd));
+				GmlSeekerProcExpr.proc(seeker, name, true, seeker.jsDoc.isSuper || hasInlineSuper);
 				
 				var exprIsFunction = GmlSeekerProcExpr.isFunction;
 				var args:String = GmlSeekerProcExpr.args;
@@ -169,6 +172,34 @@ class GmlSeekerProcVar {
 				var templateSelf:GmlType = GmlSeekerProcExpr.templateSelf;
 				var templateItems:Array<GmlTypeTemplateItem> = GmlSeekerProcExpr.templateItems;
 				var fieldType:GmlType = GmlSeekerProcExpr.fieldType;
+				var superSource:String = GmlSeekerProcExpr.sourceIdent;
+				var isSuperAlias = seeker.jsDoc.isSuper || hasInlineSuper;
+				var superDoc:GmlFuncDoc = null;
+				var superLookup:gml.GmlAPI.GmlLookup = null;
+				if (isSuperAlias && superSource != null && seeker.doc != null) {
+					var parentName = seeker.doc.parentName;
+					var depth = 0;
+					while (parentName != null && ++depth <= gml.GmlNamespace.maxDepth) {
+						var parentHint = seeker.out.fieldHints[parentName + ":" + superSource];
+						if (parentHint != null) {
+							superDoc = parentHint.doc;
+							superLookup = parentHint.lookup;
+						}
+						var parentNs = GmlAPI.gmlNamespaces[parentName];
+						if (superDoc == null && parentNs != null) {
+							superDoc = parentNs.docInstMap[superSource];
+						}
+						if (superLookup == null && parentNs != null) {
+							superLookup = parentNs.instLookup[superSource];
+						}
+						if (superDoc != null || superLookup != null) break;
+						var parentDoc = seeker.out.docs[parentName];
+						if (parentDoc == null) parentDoc = GmlAPI.gmlDoc[parentName];
+						parentName = parentDoc != null ? parentDoc.parentName
+							: parentNs != null && parentNs.parent != null ? parentNs.parent.name : null;
+					}
+					if (superLookup == null && superDoc != null) superLookup = superDoc.lookup;
+				}
 				var jsDocBeforeFunc:GmlSeekerJSDoc = null;
 				var hasExplicitFieldAccess = seeker.jsDoc.accessSet;
 				var fieldAccess = GmlSeekerProcField.getEffectiveInstAccess(seeker, name, hasExplicitFieldAccess);
@@ -215,7 +246,7 @@ class GmlSeekerProcVar {
 					// related: GmlSeekerProcIdent
 					GmlSeekerProcField.addFieldHint(seeker, exprIsConstructor, seeker.jsDoc.interfaceName,
 					asInst, name, args, null, fieldType, argTypes, true, templateItems,
-					isPrivateField, null, fieldAccess, hasExplicitFieldAccess, isConstField,
+					isPrivateField, superLookup, fieldAccess, hasExplicitFieldAccess, isConstField,
 					isVirtualField, isOverrideField);
 					
 					var addFieldHint_doc = GmlSeekerProcField.addFieldHint_doc;
@@ -232,17 +263,23 @@ class GmlSeekerProcVar {
 						addFieldHint_doc.procHasReturn(seeker.reader.source, doLoopConfig.start, doLoopConfig.end);
 						
 						// similar to GmlSeekerProcIdent
-						addFieldHint_doc.lookup = {
-							path: seeker.orig,
-							sub: seeker.sub,
-							row: 0,
-						};
-						addFieldHint_doc.nav = {
-							ctx: name,
-							ctxAfter: true,
-							def: seeker.jsDoc.interfaceName,
-							ctxRx: new RegExp("\\bstatic\\s+" + name + "\\s*" + "\\:?=" + "\\s*function\\b"),
-						};
+						if (isSuperAlias && superDoc != null) {
+							addFieldHint_doc.lookup = superDoc.lookup;
+							addFieldHint_doc.nav = superDoc.nav;
+							addFieldHint_doc.deprecated = superDoc.deprecated;
+						} else {
+							addFieldHint_doc.lookup = {
+								path: seeker.orig,
+								sub: seeker.sub,
+								row: 0,
+							};
+							addFieldHint_doc.nav = {
+								ctx: name,
+								ctxAfter: true,
+								def: seeker.jsDoc.interfaceName,
+								ctxRx: new RegExp("\\bstatic\\s+" + name + "\\s*" + "\\:?=" + "\\s*function\\b"),
+							};
+						}
 						if (templateSelf != null) {
 							addFieldHint_doc.templateSelf = templateSelf;
 							addFieldHint_doc.templateItems = templateItems;
@@ -256,6 +293,8 @@ class GmlSeekerProcVar {
 					seeker.jsDoc.access = Public;
 					seeker.jsDoc.accessSet = false;
 				}
+				// `@super` applies to one alias declaration only.
+				seeker.jsDoc.isSuper = false;
 				
 				seeker.localKind = oldLocalKind;
 				if (exprIsFunction) {

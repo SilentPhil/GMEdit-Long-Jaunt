@@ -391,6 +391,37 @@ function PhaseIntro() : PhaseBase() constructor {
 }
 ```
 
+`/// @super` preserves an inherited constructor member under a new name before that member is
+overridden. The right-hand side must be a direct reference to a member inherited from the parent,
+and the alias must be declared before the replacement. GMEdit carries the inherited signature and
+source navigation over to the alias.
+
+```gml
+function Entity() constructor {
+	health = 0;
+
+	static init = function()->void {
+		health = 100;
+	}
+}
+
+function ArmoredEntity() : Entity() constructor {
+	/// @super @private
+	static base_init = init;
+
+	/// @override
+	static init = function()->void {
+		base_init();
+		armor = 100;
+	}
+}
+```
+
+The tag can also be placed inline: `static base_init = init; /// @super`.
+If the inherited member is overridden below the alias but the new method body never uses the alias,
+the linter reports a warning. Passing the alias as a value counts as use, so deferred and indirect
+calls are supported.
+
 ### Deprecated function warnings
 
 Functions and methods can be marked with `/// @deprecated`. The linter warns when code calls a

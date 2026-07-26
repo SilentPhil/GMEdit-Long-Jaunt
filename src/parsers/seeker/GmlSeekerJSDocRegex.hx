@@ -123,6 +123,10 @@ class GmlSeekerJSDocRegex {
 		+ "@override\\b\\s*"
 	);
 	public static var jsDoc_has_override_tag = new RegExp("(?:^|\\s+)@override\\b");
+	public static var jsDoc_super = new RegExp("^///\\s*"
+		+ "@super\\b\\s*"
+	);
+	public static var jsDoc_has_super_tag = new RegExp("(?:^|\\s+)@super\\b");
 	
 	public static var jsDoc_index_redirect = new RegExp("^///\\s*"
 		+ "@index_redirect\\b\\s*"
