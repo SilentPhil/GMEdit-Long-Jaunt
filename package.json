@@ -3,14 +3,14 @@
   "version": "1.0.0",
   "description": "",
   "scripts": {
-    "postinstall": "npm --prefix bin/resources/app install",
+    "postinstall": "(cd bin/resources/app && npm install)",
     "compile": "haxe build-starter.hxml && haxe build.hxml",
     "test:build": "haxe tests/test.hxml",
     "test:electron": "node tests/run-electron-tests.js",
     "lint:gml": "node scripts/gmedit-lint.js",
-    "package": "npm run compile && npm --prefix bin/resources/app exec electron-builder",
+    "package": "npm run compile && (cd bin/resources/app && npx electron-builder)",
     "postpackage": "node scripts/rename-win-artifacts.js",
-    "start": "npm --prefix bin/resources/app start"
+    "start": "(cd bin/resources/app && npm start)"
   },
   "author": "YellowAfterlife"
 }
