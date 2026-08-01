@@ -55,6 +55,21 @@ class PrefNavTabs {
 			save();
 		});
 		el.title = "Hides 'close' buttons on pinned tabs and prevents them from being closed via keyboard shortcuts";
+		var inactiveColoredTabStyleOptions = [
+			"Do nothing",
+			"Darken",
+			"Make transparent",
+		];
+		addDropdown(out,
+			"Inactive colored tabs",
+			inactiveColoredTabStyleOptions[cur.inactiveColoredTabStyle],
+			inactiveColoredTabStyleOptions,
+			function(s) {
+				var style = inactiveColoredTabStyleOptions.indexOf(s);
+				current.chromeTabs.inactiveColoredTabStyle = style;
+				ChromeTabs.syncInactiveColoredTabStyle(style);
+				save();
+			});
 		el = addIntInput(out, "Mark tabs as 'idle' after (in seconds; 0 to disable)", cur.idleTime, function(t) {
 			current.chromeTabs.idleTime = t;
 			for (tab in ChromeTabs.element.querySelectorEls(".chrome-tab." + ChromeTabs.clIdle)) {

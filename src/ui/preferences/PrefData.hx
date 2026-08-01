@@ -115,6 +115,7 @@ import haxe.DynamicAccess;
 			autoHideCloseButtons: false,
 			rowBreakAfterPinnedTabs: false,
 			lockPinnedTabs: false,
+			inactiveColoredTabStyle: 1,
 			multilineStretchStyle: 1,
 			idleTime: 0,
 			pinLayers: false,
@@ -238,6 +239,8 @@ typedef PrefDataImpl = {
 		
 		/** time until the tab gets grayed out, in seconds */
 		idleTime:Int,
+		/** 0: do nothing, 1: darken, 2: make transparent */
+		inactiveColoredTabStyle:Int,
 		/** 0: don't, 1: stretch all, 2: stretch last */
 		multilineStretchStyle:Int,
 		pinLayers:Bool,

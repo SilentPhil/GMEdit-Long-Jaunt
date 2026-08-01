@@ -36,6 +36,7 @@ class ChromeTabs {
 	
 	public static inline var clAutoHideCloseButtons:String = "chrome-tabs-auto-hide-close-buttons";
 	public static inline var clLockPinnedTabs:String = "chrome-tabs-lock-pinned";
+	public static inline var attrInactiveColoredTabStyle:String = "data-inactive-colored-tab-style";
 	
 	public static inline var pathHistorySize:Int = 32;
 	public static inline function addTab(title:String) {
@@ -104,6 +105,14 @@ class ChromeTabs {
 			}
 		}
 	}
+	public static function syncInactiveColoredTabStyle(style:Int) {
+		var value = switch (style) {
+			case 1: "darken";
+			case 2: "transparent";
+			default: "none";
+		};
+		element.setAttribute(attrInactiveColoredTabStyle, value);
+	}
 	public static function init() {
 		element = Main.document.querySelector("#tabs");
 		if (electron.Electron == null || Main.moduleArgs.exists("electron-window-frame")) {
@@ -121,6 +130,7 @@ class ChromeTabs {
 		element.classList.setTokenFlag(clLockPinnedTabs, srcOpt.lockPinnedTabs);
 		element.classList.setTokenFlag("chrome-tabs-fit-text", srcOpt.fitText);
 		element.classList.setTokenFlag("chrome-tabs-boxy", srcOpt.boxyTabs);
+		syncInactiveColoredTabStyle(srcOpt.inactiveColoredTabStyle);
 		//
 		ChromeTabMenu.init();
 		window.setInterval(idleTick, 1000);

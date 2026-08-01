@@ -57,13 +57,26 @@ html[data-multiline-tabs] .chrome-tabs {
 	color: var(--tab-custom-foreground) !important;
 }
 
+/*
+Make the active tab stand out when custom colors are in use. Apply the effect to
+the tab's visuals instead of the whole tab so that status controls stay clear.
+*/
+.chrome-tabs[data-inactive-colored-tab-style="darken"] .chrome-tab[data-tab-color]:not(.chrome-tab-current) > .chrome-tab-background,
+.chrome-tabs[data-inactive-colored-tab-style="darken"] .chrome-tab[data-tab-color]:not(.chrome-tab-current) > .chrome-tab-title {
+	filter: brightness(0.65);
+}
+.chrome-tabs[data-inactive-colored-tab-style="transparent"] .chrome-tab[data-tab-color]:not(.chrome-tab-current) > .chrome-tab-background,
+.chrome-tabs[data-inactive-colored-tab-style="transparent"] .chrome-tab[data-tab-color]:not(.chrome-tab-current) > .chrome-tab-title {
+	opacity: 0.5;
+}
+
 
 .chrome-tabs.chrome-tabs-auto-hide-close-buttons .chrome-tab:not(:hover):not(.chrome-tab-changed) .chrome-tab-close,
 .chrome-tabs.chrome-tabs-lock-pinned .chrome-tab.chrome-tab-pinned:not(.chrome-tab-changed) .chrome-tab-close {
 	visibility: hidden;
 	pointer-events: none;
 }
-.chrome-tabs.chrome-tabs-auto-hide-close-buttons .chrome-tab:not(:hover).chrome-tab-changed .chrome-tab-close {
+.chrome-tabs.chrome-tabs-auto-hide-close-buttons .chrome-tab.chrome-tab-changed .chrome-tab-close {
 	right: 1em;
 }
 
@@ -130,6 +143,11 @@ html[data-multiline-tabs] .chrome-tabs {
 .chrome-tab-changed .chrome-tab-close::before,
 .chrome-tabs.chrome-tabs-dark-theme .chrome-tab.chrome-tab-changed .chrome-tab-close:not(:hover)::before {
 	content: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 14 14"><circle cx="7" cy="7" r="3.5" fill="%235198D9"/></svg>');
+}
+.chrome-tab[data-tab-color].chrome-tab-changed .chrome-tab-close::before,
+.chrome-tabs.chrome-tabs-dark-theme .chrome-tab[data-tab-color].chrome-tab-changed .chrome-tab-close:not(:hover)::before {
+	content: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 14 14"><circle cx="7" cy="7" r="4.5" fill="%23111111" stroke="%23FFFFFF" stroke-width="1.5"/><circle cx="7" cy="7" r="2.75" fill="%234DA3FF"/></svg>');
+	filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.9));
 }
 .chrome-tabs-hint {
 	position: absolute;
