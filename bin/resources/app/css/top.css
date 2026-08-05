@@ -8,6 +8,15 @@
 	z-index: 7;
 }
 
+.chrome-tabs .chrome-pin-layer-markers {
+	top: 4px;
+}
+
+.chrome-tabs .chrome-pin-layer-marker[data-pin-layer="0"] .chrome-pin-layer-marker-icon {
+	filter: grayscale(1);
+	opacity: 0.55;
+}
+
 .chrome-tab .chrome-tab-favicon {
 	width: 0;
 }

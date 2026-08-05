@@ -30,6 +30,45 @@
   height: 100%;
   overflow: hidden;
 }
+.chrome-tabs .chrome-pin-layer-markers {
+  position: absolute;
+  left: 0.2em;
+  top: 1em;
+  width: 2.8em;
+  height: calc(100% - 1.45em);
+  z-index: 1000;
+  pointer-events: none;
+}
+.chrome-tabs .chrome-pin-layer-marker {
+  position: absolute;
+  left: 0;
+  width: 2.8em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.1em;
+  color: #555;
+  border-radius: 0.4em;
+  pointer-events: auto;
+  cursor: context-menu;
+  -webkit-app-region: no-drag;
+}
+.chrome-tabs .chrome-pin-layer-marker:hover {
+  color: #222;
+  background: rgba(0, 0, 0, 0.08);
+}
+.chrome-tabs .chrome-pin-layer-marker-icon {
+  width: 1.2em;
+  height: 1.2em;
+  background: url("../icons/silk/pin.png") center / contain no-repeat;
+}
+.chrome-tabs .chrome-pin-layer-marker-label {
+  min-width: 0.7em;
+  font-size: 1.1em;
+  line-height: 1;
+  font-weight: 600;
+  text-align: center;
+}
 .chrome-tabs .chrome-tab {
   position: absolute;
   left: 0;

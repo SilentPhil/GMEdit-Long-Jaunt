@@ -32,8 +32,6 @@ class ChromeTabMenu {
 	static var pinAsMenuItems:Array<MenuItem>;
 	static var unpinItem:MenuItem;
 	static var closeIdleItem:MenuItem;
-	static var closePinLayerItem:MenuItem;
-	static var closeOtherPinLayersItem:MenuItem;
 	static var colorInput:InputElement;
 	static var colorDialog:Element;
 	static var colorTarget:ChromeTab;
@@ -59,8 +57,6 @@ class ChromeTabMenu {
 		}
 		unpinItem.visible = pinned;
 		closeIdleItem.visible = tabPrefs.idleTime > 0;
-		closePinLayerItem.enabled = pinLayer > 0;
-		closeOtherPinLayersItem.enabled = pinLayer > 0;
 		resetColorItem.enabled = el.tabColor != null;
 		copyColorItem.enabled = el.tabColor != null;
 		
@@ -208,22 +204,6 @@ class ChromeTabMenu {
 						tab.querySelector(".chrome-tab-close").click();
 					}
 				}
-			}
-		}));
-		menu.append(closePinLayerItem = new MenuItem({
-			id: "close-pin-layer",
-			label: "Close All in Pinned Layer",
-			click: function() {
-				var pinLayer = target.pinLayer;
-				if (pinLayer > 0) closeTabs(function(tab) return tab.pinLayer == pinLayer);
-			}
-		}));
-		menu.append(closeOtherPinLayersItem = new MenuItem({
-			id: "close-except-pin-layer",
-			label: "Close All Except Pinned Layer",
-			click: function() {
-				var pinLayer = target.pinLayer;
-				if (pinLayer > 0) closeTabs(function(tab) return tab.pinLayer != pinLayer);
 			}
 		}));
 		menu.append(new MenuItem({

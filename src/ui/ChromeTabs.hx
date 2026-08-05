@@ -133,6 +133,11 @@ class ChromeTabs {
 		syncInactiveColoredTabStyle(srcOpt.inactiveColoredTabStyle);
 		//
 		ChromeTabMenu.init();
+		ChromePinLayerMenu.init();
+		element.addEventListener("pinLayerMenu", function(e:CustomEvent) {
+			var detail:Dynamic = e.detail;
+			ChromePinLayerMenu.show(detail.pinLayer, detail.event);
+		});
 		window.setInterval(idleTick, 1000);
 		//
 		var hintEl = document.createDivElement();
@@ -325,6 +330,7 @@ class ChromeTabs {
 	public function setCurrentTab(tab:Element):Void;
 	public function removeTab(tabEl:ChromeTab):Void;
 	public function layoutTabs():Void;
+	public function fixZIndexes():Void;
 	public function setTabPinLayer(tab:ChromeTab, pinLayer:Int, ?move:Bool):Void;
 	public var tabEls(default, never):Array<ChromeTab>;
 	public var tabPositions(default, never):Array<{left:Int, top:Int}>;

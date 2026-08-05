@@ -110,6 +110,7 @@
       instanceId += 1
 
       this.setupStyleEl()
+      this.setupPinLayerMarkers()
       this.setupEvents()
       this.layoutTabs()
       this.fixZIndexes()
@@ -124,6 +125,60 @@
     setupStyleEl() {
       this.animationStyleEl = document.createElement('style')
       this.el.appendChild(this.animationStyleEl)
+    }
+
+    setupPinLayerMarkers() {
+      this.pinLayerMarkersEl = document.createElement('div')
+      this.pinLayerMarkersEl.className = 'chrome-pin-layer-markers'
+      this.pinLayerMarkersEl.setAttribute('aria-label', 'Tab pin layers')
+      this.el.appendChild(this.pinLayerMarkersEl)
+    }
+
+    get showPinLayerMarkers() {
+      return !!(this.options.pinLayers && this.options.multiline && this.options.rowBreakAfterPinnedTabs)
+    }
+
+    get pinLayerGutterWidth() {
+      return this.showPinLayerMarkers ? 14 : 0
+    }
+
+    updatePinLayerMarkers(tabPositions, tabHeight) {
+      const markersEl = this.pinLayerMarkersEl
+      markersEl.textContent = ''
+      markersEl.style.display = this.showPinLayerMarkers ? '' : 'none'
+      if (!this.showPinLayerMarkers) return
+
+      let lastRow = -1
+      for (const pos of tabPositions) {
+        if (pos.row == lastRow) continue
+        lastRow = pos.row
+
+        const pinLayer = this.getTabPinLayer(pos.tabEl)
+        const title = pinLayer > 0 ? `Pin ${pinLayer}` : 'Unpinned'
+        const marker = document.createElement('div')
+        marker.className = 'chrome-pin-layer-marker'
+        marker.dataset.pinLayer = pinLayer
+        marker.title = `${title} (right-click for layer actions)`
+        marker.setAttribute('aria-label', marker.title)
+        marker.style.top = `${pos.top}px`
+        marker.style.height = `${tabHeight}px`
+
+        const icon = document.createElement('span')
+        icon.className = 'chrome-pin-layer-marker-icon'
+        marker.appendChild(icon)
+
+        const label = document.createElement('span')
+        label.className = 'chrome-pin-layer-marker-label'
+        label.textContent = pinLayer > 0 ? pinLayer : '\u2013'
+        marker.appendChild(label)
+
+        marker.addEventListener('contextmenu', event => {
+          event.preventDefault()
+          event.stopPropagation()
+          this.emit('pinLayerMenu', { pinLayer, event })
+        })
+        markersEl.appendChild(marker)
+      }
     }
     
     getTabPinLayer(tabEl) {
@@ -208,8 +263,12 @@
       return this.tabContentEl.clientWidth - this.options.tabOverlapDistance
     }
 
+    get tabsLayoutWidth() {
+      return Math.max(0, this.tabsContentWidth - this.pinLayerGutterWidth)
+    }
+
     get tabWidth() {
-      const tabsContentWidth = this.tabsContentWidth
+      const tabsContentWidth = this.tabsLayoutWidth
       const tabCount = this.tabEls.length
       const tabOverlapDistance = this.options.tabOverlapDistance
       let width = (tabsContentWidth / tabCount) + tabOverlapDistance
@@ -233,7 +292,7 @@
     }
 
     get tabPositions() {
-      let tabsContentWidth = this.tabsContentWidth
+      let tabsContentWidth = this.tabsLayoutWidth
       const tabEls = this.tabEls
       const tabWidth = this.tabWidth
       let tabHeight, tabLeft = 0, tabRight = 0
@@ -358,8 +417,13 @@
       }
       setTokenFlag(this.el.classList, "chrome-tabs-boxy", top > 0 || this.options.boxyTabs);
       if (tabsPerRow > maxTabsPerRow) maxTabsPerRow = tabsPerRow
+      const pinLayerGutterWidth = this.pinLayerGutterWidth
+      if (pinLayerGutterWidth > 0) {
+        for (const pos of positions) pos.left += pinLayerGutterWidth
+      }
       positions.tabsPerRow = maxTabsPerRow
       positions.tabRows = row + 1
+      positions.tabHeight = tabHeight
       return positions
     }
 
@@ -372,8 +436,9 @@
       }
       requestAnimationFrame(() => {
         let styleHTML = ''
+        const tabPositions = this.tabPositions
         // +y: round x
-        this.tabPositions.forEach((pos, i) => {
+        tabPositions.forEach((pos, i) => {
           pos.tabEl.style.width = pos.width + "px"
           styleHTML += `
             .chrome-tabs[data-chrome-tabs-instance-id="${ this.instanceId }"] .chrome-tab:nth-child(${ i + 1 }) {
@@ -382,6 +447,7 @@
           `
         })
         this.animationStyleEl.innerHTML = styleHTML
+        this.updatePinLayerMarkers(tabPositions, tabPositions.tabHeight)
       })
     }
 
