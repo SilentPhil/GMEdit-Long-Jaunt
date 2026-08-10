@@ -17,6 +17,7 @@ class PrefMenu {
 		PrefLinter.build(out, null);
 		PrefProblems.build(out);
 		PrefMagic.build(out);
+		PrefFnames.build(out);
 		PrefApp.build(out);
 		PrefBackups.build(out);
 		PrefPlugins.buildPreferences(out);

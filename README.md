@@ -84,6 +84,33 @@ Same page also houses screenshots and development log.
 
 This fork keeps a set of extra GML typing/navigation improvements aimed at large typed projects.
 
+### Selectable API function-name sets
+
+Desktop builds can use an alternative `fnames` file for each registered API version. Create a
+`custom_fnames` directory inside an API directory, then place every alternative set in its own
+subdirectory:
+
+```text
+resources/app/api/v23/
+|-- fnames
+`-- custom_fnames/
+    |-- Custom LTS Runtime/
+    |   `-- fnames
+    `-- Experimental Runtime/
+        `-- fnames
+```
+
+When working from this repository, the equivalent root is `bin/resources/app/api`. Open
+`Preferences > API function names` and select the desired set for each API version. Only
+subdirectories containing a `fnames` file are included in the dropdown; `Default` continues to use
+the `fnames` file directly inside the API directory.
+
+Selections are stored in the user preferences. Changing the set for the active API version reloads
+its function names immediately, while selections for other versions take effect when their API is
+next loaded. If a selected set is renamed, removed, or no longer contains `fnames`, GMEdit safely
+falls back to the default file. Files such as `extra.gml`, `replace.gml`, and `exclude.gml` continue
+to come from the base API directory.
+
 ### Collapsible resource panel
 
 The left project resource panel can be hidden from the splitter between the resource tree and code

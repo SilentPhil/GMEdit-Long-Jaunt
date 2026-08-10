@@ -23,6 +23,33 @@ using tools.ERegTools;
  */
 @:keep class GmlAPILoader {
 	static var getContent_rx = new RegExp("\r\n", "g");
+	public static function getCustomFnames(dir:String):Array<String> {
+		var out = [];
+		if (!FileSystem.canSync) return out;
+		var customDir = dir + "/custom_fnames";
+		if (!FileSystem.existsSync(customDir)) return out;
+		try {
+			for (name in FileSystem.readdirSync(customDir)) {
+				var itemDir = customDir + "/" + name;
+				var fnamesPath = itemDir + "/fnames";
+				if (FileSystem.statSync(itemDir).isDirectory()
+					&& FileSystem.existsSync(fnamesPath)
+					&& FileSystem.statSync(fnamesPath).isFile()
+				) out.push(name);
+			}
+		} catch (x:Dynamic) {
+			js.html.Console.error('Failed to scan custom fnames in $customDir:', x);
+		}
+		out.sort(function(a, b) return Reflect.compare(a.toLowerCase(), b.toLowerCase()));
+		return out;
+	}
+	static function getFnamesFile(dir:String, versionName:String):String {
+		var selected = Preferences.current.apiFnames[versionName];
+		if (selected != null && getCustomFnames(dir).indexOf(selected) >= 0) {
+			return "custom_fnames/" + selected + "/fnames";
+		}
+		return "fnames";
+	}
 	static function getContent(path:String, fn:String->Void):Void {
 		if (FileSystem.canSync) {
 			var rp = path;
@@ -123,12 +150,12 @@ using tools.ERegTools;
 		for (file in apiFiles) {
 			if (file == "default") {
 				useDefault = true;
-				file = "fnames";
+				file = getFnamesFile(dir, ctx.versionName);
 			}
 			cx.call(getContent, '$dir/$file', function(s:String) {
 				if (s != null) {
 					ctx.raw = ctx.raw.nzcct("\n", s);
-				} else if (file == "fnames") {
+				} else if (file == "fnames" || file.indexOf("custom_fnames/") == 0) {
 					Main.window.alert("Couldn't find fnames in " + dir);
 				}
 			});
@@ -228,6 +255,7 @@ using tools.ERegTools;
 		var ctx = {
 			conf: conf,
 			dir: dir,
+			versionName: version.name,
 			raw: "",
 		}
 		var cx = loadPre(ctx);
@@ -328,5 +356,6 @@ using tools.ERegTools;
 typedef GmlAPILoadContext = {
 	conf:GmlVersionConfig,
 	dir:String,
+	versionName:String,
 	?raw:String,
 }

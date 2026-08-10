@@ -12,6 +12,7 @@ import haxe.DynamicAccess;
 		theme: "dark",
 		ukSpelling: false,
 		apiFeatureFlags: [],
+		apiFnames: {},
 		compMatchMode: PrefMatchMode.AceSmart,
 		compKeywords: true,
 		compFilterSnippets: true,
@@ -170,6 +171,8 @@ typedef PrefDataImpl = {
 	compFilterSnippets:Bool,
 	compPopupWidth:Int,
 	apiFeatureFlags:Array<String>,
+	/** API version name -> directory name inside that version's custom_fnames directory. */
+	apiFnames:DynamicAccess<String>,
 	
 	detectTab:Bool,
 	tabSize:Int,
