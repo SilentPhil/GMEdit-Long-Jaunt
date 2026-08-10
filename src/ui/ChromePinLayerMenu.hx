@@ -35,15 +35,15 @@ class ChromePinLayerMenu {
 		}));
 
 		var moveMenu = new Menu();
-		moveItems = [];
-		for (layer in 0...10) {
-			var destination = layer;
+		moveItems = [for (_ in 0...10) null];
+		for (layer in -9...1) {
+			var destination = -layer;
 			var item = new MenuItem({
 				id: "move-pin-layer-to-" + destination,
 				label: destination == 0 ? "Unpinned" : "Pin " + destination,
 				click: function() moveTabs(targetLayer, destination),
 			});
-			moveItems.push(item);
+			moveItems[destination] = item;
 			moveMenu.append(item);
 		}
 		menu.append(new MenuItem({
