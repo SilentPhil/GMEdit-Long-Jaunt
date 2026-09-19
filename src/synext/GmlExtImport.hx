@@ -803,7 +803,6 @@ class GmlExtImport {
 		return null;
 	}
 	public static function post(code:GmlCode, editor:EditCode):GmlCode {
-		var path = editor.file.path;
 		errorText = "";
 		if (!Preferences.current.importMagic) {
 			post_numImports = 0;
@@ -817,8 +816,9 @@ class GmlExtImport {
 			out += q.substring(start, till);
 		}
 		//
-		var data = GmlSeekData.map[path];
-		var imps = data != null ? data.imports : null;
+		// The code being postprocessed comes from this editor. In particular,
+		// combined event editors keep a separate import context for each #event.
+		var imps = editor.imports;
 		var imp = imps != null ? imps[""] : null;
 		var impc = 0;
 		var mayHaveType = imps != null || rxHasTypePost.test(code)

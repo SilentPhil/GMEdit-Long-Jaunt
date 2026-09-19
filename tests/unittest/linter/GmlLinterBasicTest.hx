@@ -1,6 +1,7 @@
 package linter;
 import file.FileKind;
 import file.kind.gml.KGmlScript;
+import file.kind.yy.KYyEvents;
 import gml.GmlAPI;
 import gml.GmlFuncDoc;
 import gml.GmlImports;
@@ -588,6 +589,36 @@ class GmlLinterBasicTest {
 		Assert.isFalse(hasError, linter.errorText);
 		Assert.areEqual(0, linter.warnings.length, [for (warning in linter.warnings) warning.text].join("\n"));
 		Assert.areEqual("gw_Canvas", editor.imports["FamilyEditor"].longen["Canvas"]);
+	}
+
+	@Test public function testLinterPreservesImportsForEventContexts() {
+		var file = GmlFileHelper.makeGmlFile("");
+		var editor = file.codeEditor;
+		editor.kind = KYyEvents.inst;
+		var editorImports = new Dictionary<GmlImports>();
+		editorImports[""] = new GmlImports();
+		editorImports["draw"] = new GmlImports();
+		var drawImports = new GmlImports();
+		drawImports.longen["Align"] = "gw_Align";
+		editorImports["draw_gui"] = drawImports;
+		editor.imports = editorImports;
+
+		var display = "#event draw\n"
+			+ "var untouched = Align.center;\n"
+			+ "#event draw_gui\n"
+			+ "#import gw.*\n"
+			+ "var converted = Align.center;\n";
+		var expected = "#event draw\n"
+			+ "var untouched = Align.center;\n"
+			+ "#event draw_gui\n"
+			+ "//!#import gw.*\n"
+			+ "var converted = gw_Align.center;\n";
+
+		var linter = new GmlLinter();
+		linter.run(display, editor, Project.current.version);
+		Assert.areEqual("gw_Align", editor.imports["draw_gui"].longen["Align"]);
+		var result = GmlExtImport.post(display, editor);
+		Assert.areEqual(expected, result);
 	}
 
 	@Test public function testTernaryUsesCommonParentType() {

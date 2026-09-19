@@ -111,7 +111,7 @@ class GmlLinter {
 	function getImports(?force:Bool):GmlImports {
 		var imp = editor.imports[context];
 		var root = context != "" ? editor.imports[""] : null;
-		if (root != null && (imp == null || imp.longen != root.longen)) {
+		if (functionsAreGlobal && root != null && (imp == null || imp.longen != root.longen)) {
 			var localTypes = imp != null ? imp.localTypes : null;
 			imp = root.createLink();
 			if (localTypes != null) imp.localTypes = localTypes;
