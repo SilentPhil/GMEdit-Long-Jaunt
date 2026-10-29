@@ -109,20 +109,25 @@ using tools.HtmlTools;
 			if (searchRun == null) divSearching.style.display = "none";
 			var s = aceEditor.getSelectedText();
 			if (s != "" && s != null) fdFind.value = s;
+			updateSearchButtons();
 			fdFind.focus();
 			fdFind.select();
 		} else {
 			element.style.display = "none";
 		}
 	}
+	static function updateSearchButtons():Void {
+		var disabled = searchRun != null || fdFind.value == "";
+		btFind.disabled = disabled;
+		btReplace.disabled = disabled;
+		btPreview.disabled = disabled;
+	}
 	static function setSearchControlsEnabled(enabled:Bool):Void {
 		fdFind.disabled = !enabled;
 		fdVarType.disabled = !enabled;
 		cbVarTypeInvert.disabled = !enabled;
 		fdReplace.disabled = !enabled;
-		btFind.disabled = !enabled;
-		btReplace.disabled = !enabled;
-		btPreview.disabled = !enabled;
+		updateSearchButtons();
 		cbWholeWord.disabled = !enabled;
 		cbMatchCase.disabled = !enabled;
 		cbCheckComments.disabled = !enabled;
@@ -170,6 +175,7 @@ using tools.HtmlTools;
 		});
 	}
 	public static function getOptions():GlobalSearchOpt {
+		if (fdFind.value == "") return null;
 		var find:EitherType<String, RegExp>;
 		if (!cbRegExp.checked) {
 			find = fdFind.value;
@@ -221,7 +227,7 @@ using tools.HtmlTools;
 		};
 	}
 	public static function runAuto(opt:GlobalSearchOpt) {
-		if (searchRun != null) return;
+		if (searchRun != null || opt == null || ui.search.GlobalSearchImpl.isEmptyFind(opt.find)) return;
 		var state:GlobalSearchRunState = {
 			cancelled: false,
 			done: 0,
@@ -256,6 +262,7 @@ using tools.HtmlTools;
 	public static function findAuto(?opt:GlobalSearchOpt) {
 		if (opt == null) {
 			opt = getOptions();
+			if (opt == null) return;
 			if (cbUnique.checked) {
 				var found = new Dictionary<Bool>();
 				opt.findFilter = function(mt:Dynamic) {
@@ -270,6 +277,7 @@ using tools.HtmlTools;
 	}
 	public static function replaceAuto(?opt:GlobalSearchOpt) {
 		if (opt == null) opt = getOptions();
+		if (opt == null) return;
 		opt.replaceBy = fdReplace.value;
 		runAuto(opt);
 	}
@@ -388,6 +396,8 @@ using tools.HtmlTools;
 		cbRegExp = element.querySelectorAuto('#global-search-regexp');
 		cbUnique = element.querySelectorAuto('#global-search-unique');
 		//}
+		fdFind.oninput = function(_) updateSearchButtons();
+		updateSearchButtons();
 		fdFind.onkeydown = function(e:KeyboardEvent) {
 			switch (e.keyCode) {
 				case KeyboardEvent.DOM_VK_RETURN: btFind.click();

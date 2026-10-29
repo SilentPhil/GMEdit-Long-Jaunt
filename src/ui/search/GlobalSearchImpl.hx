@@ -11,6 +11,7 @@ import gml.Project;
 import parsers.GmlReader;
 import synext.GmlExtLambda;
 import haxe.Constraints.Function;
+import haxe.extern.EitherType;
 import js.lib.RegExp;
 import js.Syntax;
 import js.html.Console;
@@ -22,6 +23,14 @@ using tools.NativeString;
  * @author YellowAfterlife
  */
 class GlobalSearchImpl {
+	public static function isEmptyFind(find:EitherType<String, RegExp>):Bool {
+		if (find == null) return true;
+		if (Std.is(find, RegExp)) {
+			var rx:RegExp = find;
+			return rx.source == "(?:)";
+		}
+		return find == "";
+	}
 	static function getSaveOptions(opt:GlobalSearchOpt):GlobalSearchOpt {
 		var out:GlobalSearchOpt = Reflect.copy(opt);
 		out.searchProgress = null;
@@ -46,6 +55,10 @@ class GlobalSearchImpl {
 	}
 	
 	public static function run(opt:GlobalSearchOpt, ?finish:Void->Void) {
+		if (opt == null || isEmptyFind(opt.find)) {
+			if (finish != null) finish();
+			return;
+		}
 		var pj = Project.current;
 		var version = pj.version;
 		if (version == GmlVersion.none) return;
@@ -72,7 +85,6 @@ class GlobalSearchImpl {
 			}
 			rx = new RegExp(eterm, eopt);
 		}
-		if (term == "") return;
 		function searchCancelled():Bool {
 			if (opt.searchWasCancelled == true) return true;
 			if (opt.searchCancelled != null && opt.searchCancelled()) {
