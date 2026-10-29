@@ -56,6 +56,7 @@ abstract AceWrap(AceEditor) from AceEditor to AceEditor {
 		if (o.inputHelpers != false) ui.KeyboardShortcuts.initEditor(this);
 		if (o.tooltips != false) AceTooltips.bind(this);
 		if (o.preferences != false) ui.Preferences.bindEditor(this);
+		new AceAccessibleText(this);
 		if (o.scrollMode != false) new ScrollMode().bind(this);
 		if (o.dispatchEvent != false) plugins.PluginEvents.editorCreated({editor:this, options:o});
 		editors.EditKeybindings.initEditor(this);

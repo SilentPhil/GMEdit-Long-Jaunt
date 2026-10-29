@@ -39,6 +39,11 @@ class AceStatusBar {
 	public var contextName:String = null;
 	public var ignoreUntil:Float = Main.window.performance.now();
 	public var delayTime(default, null):Int = 50;
+	var renderedHint:SpanElement = null;
+	var renderedSignature:String = null;
+	var renderedArgument:Int = -1;
+	var scrollArgument:SpanElement = null;
+	var scrollRequest:Null<Int> = null;
 	public function new() {
 		statusBar = document.createDivElement();
 		statusBar.className = "ace_status-bar";
@@ -89,36 +94,71 @@ class AceStatusBar {
 	}
 	
 	private static var emptyToken:AceToken = { type:"", value:"" };
-	private function updateComp(editor:AceWrap, row:Int, col:Int, imports:GmlImports, lambdas:GmlExtLambda, scope:String) {
-		statusHint.innerHTML = "";
-		function renderDoc(doc:GmlFuncDoc, argCurr:Int):Void {
-			var args = doc.args;
-			var argc = args.length;
-			var out = document.createSpanElement();
-			out.className = "hint";
-			out.appendChild(document.createTextNode(doc.pre));
-			//
-			var currArg:SpanElement = null;
-			for (i in 0 ... argc) {
-				if (i > 0) out.appendChild(document.createTextNode(", "));
-				var span = document.createSpanElement();
-				span.classList.add("argument");
-				if (i == argCurr || i == argc - 1 && argCurr >= i) {
-					span.classList.add("current");
-					currArg = span;
-				}
-				span.appendChild(document.createTextNode(args[i]));
-				out.appendChild(span);
-			}
-			out.appendChild(document.createTextNode(doc.post));
-			statusHint.appendChild(out);
-			if (currArg != null) {
-				statusHint.scrollLeft = Std.int(currArg.offsetLeft + currArg.offsetWidth / 2 - statusHint.offsetWidth / 2);
-				//currArg.scrollIntoView();
-			}
-			statusHint.title = out.innerText;
-			statusHint.classList.remove("active");
+	private function renderDoc(doc:GmlFuncDoc, argCurr:Int):Void {
+		var args = doc.args;
+		var argc = args.length;
+		var signature = doc.pre + args.join(", ") + doc.post;
+		var signatureKey = haxe.Json.stringify({pre: doc.pre, args: args, post: doc.post});
+		var argument = argCurr < 0 || argc == 0 ? -1 : Std.int(Math.min(argCurr, argc - 1));
+		if (renderedHint != null && renderedHint.parentElement == statusHint && renderedSignature == signatureKey) {
+			if (renderedArgument == argument) return;
+			var previous = renderedHint.querySelector(".current");
+			if (previous != null) previous.classList.remove("current");
+			var current:SpanElement = argument >= 0 ? cast renderedHint.children[argument] : null;
+			if (current != null) current.classList.add("current");
+			renderedArgument = argument;
+			scrollToArgument(current);
+			return;
 		}
+		var out = document.createSpanElement();
+		out.className = "hint";
+		out.appendChild(document.createTextNode(doc.pre));
+		var currArg:SpanElement = null;
+		for (i in 0 ... argc) {
+			if (i > 0) out.appendChild(document.createTextNode(", "));
+			var span = document.createSpanElement();
+			span.classList.add("argument");
+			if (i == argument) {
+				span.classList.add("current");
+				currArg = span;
+			}
+			span.appendChild(document.createTextNode(args[i]));
+			out.appendChild(span);
+		}
+		out.appendChild(document.createTextNode(doc.post));
+		statusHint.textContent = "";
+		statusHint.appendChild(out);
+		renderedHint = out;
+		renderedSignature = signatureKey;
+		renderedArgument = argument;
+		scrollToArgument(currArg);
+		statusHint.title = signature;
+		statusHint.classList.remove("active");
+	}
+	private function scrollToArgument(argument:SpanElement):Void {
+		scrollArgument = argument;
+		if (scrollRequest != null || argument == null) return;
+		// Let the new hint be laid out before measuring it; never force layout in a key handler.
+		scrollRequest = Main.window.requestAnimationFrame(function(_) {
+			scrollRequest = Main.window.requestAnimationFrame(function(_) {
+				scrollRequest = null;
+				var current = scrollArgument;
+				if (current == null || renderedHint == null || current.parentElement != renderedHint
+					|| renderedHint.parentElement != statusHint) return;
+				statusHint.scrollLeft = Std.int(current.offsetLeft + current.offsetWidth / 2 - statusHint.offsetWidth / 2);
+			});
+		});
+	}
+	private function updateComp(editor:AceWrap, row:Int, col:Int, imports:GmlImports, lambdas:GmlExtLambda, scope:String):Void {
+		if (!updateCompImpl(editor, row, col, imports, lambdas, scope)) {
+			if (statusHint.firstChild != null) statusHint.textContent = "";
+			statusHint.title = "";
+			renderedHint = null;
+			renderedSignature = null;
+			renderedArgument = -1;
+		}
+	}
+	private function updateCompImpl(editor:AceWrap, row:Int, col:Int, imports:GmlImports, lambdas:GmlExtLambda, scope:String):Bool {
 		var session = editor.session;
 		function isAtOrAfterCursor(pos:AcePos):Bool {
 			return pos.row > row || pos.row == row && pos.column >= col;
@@ -334,7 +374,7 @@ class AceStatusBar {
 		}
 		if (tryRenderPubSubPayloadFromLine() || tryRenderPubSubPayload()) {
 			statusHint.onclick = null;
-			return;
+			return true;
 		}
 		var iter:AceTokenIterator = new AceTokenIterator(session, row, col);
 		var sctx:AceStatusBarDocSearch = {
@@ -408,7 +448,7 @@ class AceStatusBar {
 			}
 			tk = iter.stepBackward();
 		}
-		if (docs == null && doc == null) return;
+		if (docs == null && doc == null) return false;
 		// find the actual doc:
 		var argStart = 0;
 		if (doc == null) {
@@ -460,7 +500,7 @@ class AceStatusBar {
 			tk = iter.stepForward();
 		}
 		argCurr += argStart;
-		if ((tk == null ? ctk != emptyToken : tk != ctk) || depth < 0 && !parEmpty) return;
+		if ((tk == null ? ctk != emptyToken : tk != ctk) || depth < 0 && !parEmpty) return false;
 		//
 		if (doc != null) {
 			if (pubSubPayloadDepth >= 0 && pubSubEventName != null) {
@@ -468,12 +508,13 @@ class AceStatusBar {
 				if (pubSubEvent != null) {
 					renderPubSubPayloadDoc(pubSubEventName, pubSubPayloadCurr);
 					statusHint.onclick = null;
-					return;
+					return true;
 				}
 			}
 			renderDoc(doc, argCurr);
 		} else statusHint.title = "";
 		statusHint.onclick = null;
+		return doc != null;
 	}
 	public function setText(s:String) {
 		statusHint.innerHTML = "";
