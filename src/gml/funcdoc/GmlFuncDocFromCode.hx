@@ -105,14 +105,18 @@ class GmlFuncDocFromCode {
 			var id = q.substring(p, q.pos);
 			if (id != "function") continue;
 			//
-			while (q.loop && q.peek() != "{".code) q.skip();
+			while (q.loop) {
+				if (q.skipCommon_inline() >= 0) continue;
+				if (q.read() == "{".code) break;
+			}
 			var depth = 1;
 			while (q.loop) {
+				if (q.skipCommon_inline() >= 0) continue;
 				c = q.read();
 				switch (c) {
 					case "{".code: depth++;
 					case "}".code: if (--depth <= 0) break;
-					default: q.skipCommon_inline();
+					default:
 				}
 			}
 			//

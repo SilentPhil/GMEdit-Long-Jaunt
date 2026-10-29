@@ -207,8 +207,10 @@ class GmlSeekerProcVar {
 				var isConstField = seeker.jsDoc.isConst || seeker.getRegionConst();
 				var isVirtualField = seeker.jsDoc.isVirtual || seeker.getRegionVirtual();
 				var isOverrideField = seeker.jsDoc.isOverride || seeker.getRegionOverride();
-				static var doLoopConfig = new GmlSeeker_doLoop();
+				var doLoopConfig:GmlSeeker_doLoop = null;
 				if (exprIsFunction) {
+					// Nested methods must not overwrite the enclosing method's bounds.
+					doLoopConfig = new GmlSeeker_doLoop();
 					jsDocBeforeFunc = seeker.jsDoc.copy();
 					jsDocBeforeFunc.resetInterface();
 					seeker.jsDoc.reset(false);
@@ -241,6 +243,9 @@ class GmlSeekerProcVar {
 					}
 					seeker.jsDoc.reset(false);
 				}
+				// Scan this method's body, rather than the constructor prefix for every method.
+				var docStart = exprIsFunction && doLoopConfig.start >= 0 ? doLoopConfig.start : seeker.start;
+				var docEnd = exprIsFunction && doLoopConfig.end >= docStart ? doLoopConfig.end : q.pos;
 				
 				function addFieldHint(asInst:Bool) {
 					// related: GmlSeekerProcIdent
@@ -254,13 +259,11 @@ class GmlSeekerProcVar {
 						
 						// this adds the @params from before the function declaration:
 						if (jsDocBeforeFunc != null) {
-							GmlSeekerProcDoc.flushToDoc(seeker, jsDocBeforeFunc, addFieldHint_doc, false);
+							GmlSeekerProcDoc.flushToDoc(seeker, jsDocBeforeFunc, addFieldHint_doc, false, docStart, docEnd);
 						}
 						
 						// and this adds the @params from inside the function declaration!
-						GmlSeekerProcDoc.flushToDoc(seeker, seeker.jsDoc, addFieldHint_doc, true);
-						
-						addFieldHint_doc.procHasReturn(seeker.reader.source, doLoopConfig.start, doLoopConfig.end);
+						GmlSeekerProcDoc.flushToDoc(seeker, seeker.jsDoc, addFieldHint_doc, true, docStart, docEnd);
 						
 						// similar to GmlSeekerProcIdent
 						if (isSuperAlias && superDoc != null) {

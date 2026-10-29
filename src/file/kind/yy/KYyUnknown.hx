@@ -28,6 +28,7 @@ class KYyUnknown extends FileKind {
 	override public function index(path:String, content:String, main:String, sync:Bool):Bool {
 		var project = Project.current;
 		var full = project.fullPath(path);
+		var indexScriptAsync = false;
 		//
 		var resource:YyResource = null;
 		var parentPath:String = {
@@ -94,7 +95,9 @@ class KYyUnknown extends FileKind {
 			switch (resType) {
 				case "GMScript": {
 					full = Path.withExtension(full, "gml");
-					content = electron.FileWrap.readTextFileSync(full);
+					if (sync) {
+						content = electron.FileWrap.readTextFileSync(full);
+					} else indexScriptAsync = true;
 				};
 				case "GMNotes": {
 					full = Path.withExtension(full, "txt");
@@ -121,6 +124,11 @@ class KYyUnknown extends FileKind {
 				}
 			}
 		} else Console.error('`$path` has missing parent `$parentPath`');
+		if (indexScriptAsync) {
+			// Keep script reads in the bounded indexing queue, just like resource metadata.
+			parsers.GmlSeeker.run(full, main, detect.kind);
+			return true;
+		}
 		return detect.kind.index(full, content, main, sync);
 	}
 }

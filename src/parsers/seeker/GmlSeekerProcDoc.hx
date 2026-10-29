@@ -41,10 +41,14 @@ class GmlSeekerProcDoc {
 		//jsDoc.self = null;
 		return true;
 	}
-	public static function flushToDoc(seeker:GmlSeekerImpl, jsDoc:GmlSeekerJSDoc, doc:GmlFuncDoc, updateComp:Bool){
+	public static function flushToDoc(seeker:GmlSeekerImpl, jsDoc:GmlSeekerJSDoc, doc:GmlFuncDoc, updateComp:Bool,
+		?from:Int, ?till:Int
+	){
 		final q = seeker.reader;
 		final main = seeker.main;
 		final out = seeker.out;
+		if (from == null) from = seeker.start;
+		if (till == null) till = q.pos;
 		
 		if (jsDoc.args != null) {
 			var argTypesFlushed = jsDoc.typesFlush(null, doc.name, seeker);
@@ -60,12 +64,12 @@ class GmlSeekerProcDoc {
 			
 			doc.templateItems = jsDoc.templateItems;
 			if (jsDoc.rest) doc.rest = jsDoc.rest;
-			doc.procHasReturn(seeker.src, seeker.start, q.pos, seeker.docIsAutoFunc);
+			doc.procHasReturn(seeker.src, from, till, seeker.docIsAutoFunc);
 		} else if (doc.args.length != 0 || doc.hasReturn) {
 			// have some arguments and no JSDoc
-			doc.procHasReturn(seeker.src, seeker.start, q.pos, seeker.docIsAutoFunc, doc.args);
+			doc.procHasReturn(seeker.src, from, till, seeker.docIsAutoFunc, doc.args);
 		} else { // no JSDoc, try indexing
-			doc.fromCode(seeker.src, seeker.start, q.pos);
+			doc.fromCode(seeker.src, from, till);
 			updateComp = true;
 		}
 		if (jsDoc.returns != null) {
