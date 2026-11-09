@@ -427,6 +427,15 @@ Shaders, native texture storage and other unsupported APIs need
 an explicit project-owned boundary adapter. The preview reports unsupported
 operations rather than simulating the entire game renderer.
 
+Project subclasses of `gw_SpriteImage` retain their inherited sprite settings,
+instance fields and methods. Their `get_width`/`get_height` methods supply AUTO
+dimensions. After layout, the preview samples an overridden `draw(layout, style)`
+using the resolved image bounds and element style. Saved parent-method aliases
+and ordinary 2D sprite calls preserve the source's rotation pivot, tint and alpha;
+the renderer does not apply the element's sprite transforms a second time.
+Draw commands use the same bounded capture interpreter and remain independent
+for each image, even when several controls share one sprite source.
+
 For example, project code can use `preview_json_files` and `preview_json` to
 construct its own ordinary data objects from an existing catalogue. The plugin
 does not know the catalogue's schema or the names of its getters. Alternatively,
@@ -534,6 +543,10 @@ Run from the repository root:
 npm run test:goowee
 ```
 
+`node tests/goowee-preview-renderer.test.js` checks captured sprite-source
+commands, transforms, bounds and export through a recording canvas in Node,
+without opening application windows.
+
 To additionally render the real project examples without modifying them:
 
 ```sh
@@ -584,3 +597,6 @@ hierarchical `roots`, `diagnostics`, `width`, `height` and `guiScale`. Nodes hav
 pixel bounds, a 1-based source `line`, name/type, parent/children, text/sprite/
 background/style and approximation/visibility flags. No `eval`, `Function`,
 GameMaker runtime or game subprocess is used.
+An image with a sampled sprite-source draw override also has `spriteDraws`:
+an ordered list of captured draw commands in image-local coordinates. An empty
+list means the override draws nothing; an absent list uses the ordinary sprite.

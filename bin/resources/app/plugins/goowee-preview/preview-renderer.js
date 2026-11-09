@@ -18,7 +18,7 @@
         var tiles = [], tilePixels = 0, nineSliceScale = 1, imageRevision = exportContext ? exportContext.revision : Date.now();
         var composites = new Map(), compositePixels = 0, compositeId = 0;
         var compositeFrame = new WeakMap(), compositeFrameSurfaces = new WeakSet(), compositeWork = 0, compositeFramePixels = 0;
-        var alive = true, sharpPixels = false, painted = [], paintedDepths = [], paintedClips = [], transform = {scale: 1, x: 0, y: 0};
+        var alive = true, sharpPixels = false, painted = [], paintedDepths = [], paintedClips = [], paintedBounds = [], transform = {scale: 1, x: 0, y: 0};
         var colorCanvas = document.createElement("canvas");
         var sliceCanvas = document.createElement("canvas"), sliceContext = sliceCanvas.getContext("2d");
         colorCanvas.width = colorCanvas.height = 1;
@@ -301,6 +301,82 @@
         function applyClip(rect) {
             ctx.beginPath(); ctx.rect(rect.x,rect.y,rect.width,rect.height); ctx.clip();
         }
+        function drawCommands(commands, node) {
+            var ready = true;
+            ctx.save();
+            ctx.translate(node.x, node.y);
+            commands.forEach(function(layer) {
+                if (!layer) return;
+                var spec = layer.sprite, composite = spec && spec.layers ? compositeFor(spec) : null;
+                var asset = composite ? composite.asset : spec && !spec.layers ? resolveSprite(spec.name, spec.index || 0) : null;
+                var source = composite ? composite.image : asset && imageFor(asset);
+                if (!layer.fill && !source) { ready = false; return; }
+                ctx.save();
+                ctx.imageSmoothingEnabled = !sharpPixels;
+                if (layer.matrix) ctx.transform.apply(ctx, layer.matrix);
+                ctx.translate(layer.x || 0, layer.y || 0);
+                ctx.rotate(-(layer.angle || 0) * Math.PI / 180);
+                var sx = layer.scaleX == null ? 1 : layer.scaleX, sy = layer.scaleY == null ? 1 : layer.scaleY;
+                var ox = layer.originX || 0, oy = layer.originY || 0;
+                if (layer.fill) {
+                    ctx.scale(sx, sy);
+                    ctx.globalAlpha *= Number.isFinite(layer.alpha) ? Math.max(0, Math.min(1, layer.alpha)) : 1;
+                    ctx.fillStyle = color(layer.fill, "#ffffff");
+                    ctx.fillRect(-ox, -oy, layer.width, layer.height);
+                } else if (asset.nineSlice && !layer.crop && sx && sy) {
+                    // draw_sprite_ext stretches NineSlice geometry, while its
+                    // borders retain the current GUI scale before world transforms.
+                    ctx.scale(Math.sign(sx), Math.sign(sy));
+                    sprite(Object.assign({}, spec, {scale: 1}), {x: -ox * Math.abs(sx), y: -oy * Math.abs(sy),
+                        width: layer.width * Math.abs(sx), height: layer.height * Math.abs(sy)}, false);
+                } else {
+                    ctx.scale(sx, sy);
+                    ctx.globalAlpha *= Number.isFinite(spec.alpha) ? Math.max(0, Math.min(1, spec.alpha)) : 1;
+                    var image = tinted(source, asset, spec.color, "#ffffff"), crop = layer.crop;
+                    if (crop) ctx.drawImage(image, crop.x, crop.y, crop.width, crop.height, -ox, -oy, layer.width, layer.height);
+                    else ctx.drawImage(image, -ox, -oy, layer.width, layer.height);
+                }
+                ctx.restore();
+            });
+            ctx.restore();
+            return ready;
+        }
+        function commandBounds(layer, node) {
+            if (!layer || (!layer.fill && !layer.sprite)) return null;
+            var alpha = layer.fill ? layer.alpha : layer.sprite.alpha;
+            if (Number.isFinite(alpha) && alpha <= 0 || Number.isFinite(node.alpha) && node.alpha <= 0) return null;
+            var sx = layer.scaleX == null ? 1 : layer.scaleX, sy = layer.scaleY == null ? 1 : layer.scaleY;
+            var angle = -(layer.angle || 0) * Math.PI / 180, cos = Math.cos(angle), sin = Math.sin(angle);
+            var matrix = layer.matrix || [1, 0, 0, 1, 0, 0], points = [];
+            [0, layer.width].forEach(function(x) { [0, layer.height].forEach(function(y) {
+                var dx = (x - (layer.originX || 0)) * sx, dy = (y - (layer.originY || 0)) * sy;
+                var px = (layer.x || 0) + dx * cos - dy * sin, py = (layer.y || 0) + dx * sin + dy * cos;
+                points.push({x: node.x + matrix[0] * px + matrix[2] * py + matrix[4],
+                    y: node.y + matrix[1] * px + matrix[3] * py + matrix[5]});
+            }); });
+            var left = Math.min.apply(null, points.map(function(p) { return p.x; }));
+            var top = Math.min.apply(null, points.map(function(p) { return p.y; }));
+            var right = Math.max.apply(null, points.map(function(p) { return p.x; }));
+            var bottom = Math.max.apply(null, points.map(function(p) { return p.y; }));
+            return Number.isFinite(left + top + right + bottom) && right > left && bottom > top ? {x: left, y: top, width: right - left, height: bottom - top} : null;
+        }
+        function capturedBounds(node) {
+            var result = [];
+            [node.backgroundDraws, node.spriteDraws].forEach(function(commands) {
+                if (Array.isArray(commands)) commands.forEach(function(layer) {
+                    var rect = commandBounds(layer, node);
+                    if (rect) result.push(rect);
+                });
+            });
+            return result;
+        }
+        function unionBounds(rects) {
+            var left = Math.min.apply(null, rects.map(function(rect) { return rect.x; }));
+            var top = Math.min.apply(null, rects.map(function(rect) { return rect.y; }));
+            return {x: left, y: top,
+                width: Math.max.apply(null, rects.map(function(rect) { return rect.x + rect.width; })) - left,
+                height: Math.max.apply(null, rects.map(function(rect) { return rect.y + rect.height; })) - top};
+        }
         function spriteBounds(spec, node, foreground) {
             var asset = spec.layers ? spec : resolveSprite(spec.name, spec.index || 0);
             if (!asset) return node;
@@ -383,10 +459,11 @@
                 var visible = intersect(clip,n);
                 if (!contentOnly) include(n, clip);
                 else {
-                    if (n.background) include(spriteBounds(n.background, n, false), clip);
-                    if (n.sprite) include(spriteBounds(n.sprite, n, true), clip);
+                    if (n.background && !Array.isArray(n.backgroundDraws)) include(spriteBounds(n.background, n, false), clip);
+                    if (n.sprite && !Array.isArray(n.spriteDraws)) include(spriteBounds(n.sprite, n, true), clip);
                     if (n.runtimePlaceholder) include(n, clip);
                 }
+                capturedBounds(n).forEach(function(rect) { include(rect, clip); });
                 if (n.text != null && n.text !== "") include(textBounds(n), clip);
                 var childClip = n.clipChildren ? visible : clip;
                 if (childClip && !(childClip.width > 0 && childClip.height > 0)) return;
@@ -470,7 +547,7 @@
             ctx.strokeStyle = "#4b535f";
             ctx.lineWidth = 1 / scale;
             if (!exporting && !reference) ctx.strokeRect(box.x, box.y, box.width, box.height);
-            painted = []; paintedDepths = []; paintedClips = [];
+            painted = []; paintedDepths = []; paintedClips = []; paintedBounds = [];
             if (reference) {
                 ctx.imageSmoothingEnabled = !sharpPixels;
                 ctx.drawImage(referenceImage, referenceBox.x, referenceBox.y, referenceBox.width, referenceBox.height);
@@ -483,8 +560,11 @@
             function drawNode(node, depth, clip) {
                 if (node.hidden || manuallyHidden.has(node) || visited.has(node)) return;
                 visited.add(node);
-                var hasBackground = sprite(node.background, node, false);
-                var hasSprite = sprite(node.sprite, node, true);
+                ctx.save();
+                if (Number.isFinite(node.alpha)) ctx.globalAlpha *= Math.max(0, Math.min(1, node.alpha));
+                var hasBackground = Array.isArray(node.backgroundDraws) ? drawCommands(node.backgroundDraws, node) : sprite(node.background, node, false);
+                var hasSprite = Array.isArray(node.spriteDraws) ? drawCommands(node.spriteDraws, node) : sprite(node.sprite, node, true);
+                ctx.restore();
                 // GooWee containers (including an icon's Button parent) are
                 // transparent unless they explicitly draw a background or sprite.
                 // Only a requested asset that could not be loaded needs a fill.
@@ -555,9 +635,10 @@
                     ctx.fillText("Needs live game data",node.x+node.width/2,node.y+node.height/2+Math.max(24,18/scale));
                     ctx.restore();
                 }
-                var visible = intersect(clip,node);
-                if (visible.width > 0 && visible.height > 0) {
-                    painted.push(node); paintedDepths.push(depth); paintedClips.push(clip);
+                var visible = intersect(clip,node), hitBounds = unionBounds([node].concat(capturedBounds(node)));
+                var hitVisible = intersect(clip, hitBounds);
+                if (hitVisible.width > 0 && hitVisible.height > 0) {
+                    painted.push(node); paintedDepths.push(depth); paintedClips.push(clip); paintedBounds.push(hitBounds);
                 }
                 var childClip = node.clipChildren ? visible : clip;
                 if (childClip && !(childClip.width > 0 && childClip.height > 0)) return;
@@ -578,7 +659,13 @@
                     if (asset && asset.url) usedImages.add(asset.url);
                 }
             }
-            manuallyHidden.forEach(function(node) { retainHiddenAsset(node.background); retainHiddenAsset(node.sprite); });
+            manuallyHidden.forEach(function(node) {
+                if (!Array.isArray(node.backgroundDraws)) retainHiddenAsset(node.background);
+                if (!Array.isArray(node.spriteDraws)) retainHiddenAsset(node.sprite);
+                [node.backgroundDraws, node.spriteDraws].forEach(function(commands) {
+                    if (Array.isArray(commands)) commands.forEach(function(layer) { if (layer) retainHiddenAsset(layer.sprite); });
+                });
+            });
             // Keep all images in the current scene, including pending loads. A fixed
             // entry cap could evict visible images and cause an endless load/redraw cycle.
             images.forEach(function(item, url) {
@@ -661,14 +748,15 @@
                     var n = painted[i];
                     var clip = paintedClips[i];
                     if (clip && !(x >= clip.x && y >= clip.y && x < clip.x + clip.width && y < clip.y + clip.height)) continue;
-                    if (!(x >= n.x && y >= n.y && x <= n.x + n.width && y <= n.y + n.height)) continue;
+                    var rect = paintedBounds[i];
+                    if (!(x >= rect.x && y >= rect.y && x <= rect.x + rect.width && y <= rect.y + rect.height)) continue;
                     if (!options || !options.deep) return n;
                     // A separate frame canvas can cover the whole UI. Deep
                     // selection searches all painted roots for nested content.
                     // Prefer the tighter rectangle at equal depth: a frame's
                     // image can be just as nested as the title it surrounds.
                     // Equal-depth, equal-area ties keep front-to-back order.
-                    var candidateArea = n.width * n.height;
+                    var candidateArea = rect.width * rect.height;
                     if (paintedDepths[i] > depth || (paintedDepths[i] === depth && candidateArea < area)) {
                         deepest = n; depth = paintedDepths[i]; area = candidateArea;
                     }
@@ -686,7 +774,7 @@
                 compositeFrame=new WeakMap();compositeFrameSurfaces=new WeakSet();compositeWork=0;compositeFramePixels=0;
                 sliceCanvas.width = sliceCanvas.height = 1;
             },
-            dispose: function() { alive = false; this.clearImages(); painted = []; paintedDepths = []; paintedClips = []; }
+            dispose: function() { alive = false; this.clearImages(); painted = []; paintedDepths = []; paintedClips = []; paintedBounds = []; }
         };
     }
     return {create: create, color: color};

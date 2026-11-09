@@ -678,4 +678,196 @@ test("helper static catalogues initialize once per analysis and retain updates",
     }
 });
 
+test("indexed sprite-source subclasses preserve inherited fields and rotated draw overrides", () => {
+    const source = preamble + `function page() {
+        var source = new PivotSource(s_strip, #80C040);
+        source.alpha = 0.5;
+        var image = new Image(undefined, source);
+        image.size(6, 40);
+        image.margin(25, 30, 0, 0);
+        image.style.angle = 270;
+        image.style.sprite_alpha = 0.5;
+        image.style.additional_color_blend = #80FF80;
+    }`;
+    const library = `function gw_PivotSource(_sprite, _tint) : gw_SpriteImage(_sprite, 2, _tint) constructor {
+        __bounds = new gw_Rectangle(0, 0, 0, 0);
+        static super_draw = draw;
+        static draw = function(_layout, _style) {
+            __bounds.x = _layout.x + _layout.width;
+            __bounds.y = _layout.y;
+            __bounds.width = _layout.height;
+            __bounds.height = _layout.width;
+            super_draw(__bounds, _style);
+        };
+    }`;
+    const scene=engine.analyze(source,{entry:"page",assets:{s_strip:{width:100,height:12,originX:0,originY:0}},sourceFor(name){
+        return name==="PivotSource"?{path:"scripts/arbitrary_source.gml",source:library}:null;
+    }});
+    clean(scene);
+    const image=scene.nodes[0], command=image.spriteDraws[0];
+    assert.deepStrictEqual([image.x,image.y,image.width,image.height],[25,30,6,40]);
+    assert.strictEqual(image.spriteDraws.length,1);
+    assert.deepStrictEqual([command.x,command.y,command.width,command.height,command.scaleX,command.scaleY,command.angle],[6,0,100,12,0.4,0.5,270]);
+    assert.deepStrictEqual([command.sprite.index,command.sprite.color,command.sprite.alpha],[2,"#40c020",0.25]);
+    assert(!Object.prototype.hasOwnProperty.call(image.sprite,"props"));
+    assert.doesNotThrow(()=>JSON.stringify(scene));
+});
+
+test("sprite source method aliases keep each ancestor and native clone drops overrides", () => {
+    const scene=engine.analyze(preamble+`function FirstSource(_asset) : SpriteImage(_asset) constructor {
+        offset = 2;
+        static super_draw = draw;
+        static draw = function(_layout, _style) {
+            _layout.x += offset;
+            super_draw(_layout, _style);
+        };
+    }
+    function SecondSource(_asset) : FirstSource(_asset) constructor {
+        static super_draw = draw;
+        static draw = function(_layout, _style) {
+            _layout.y += 3;
+            super_draw(_layout, _style);
+        };
+    }
+    function page() {
+        var source = new SecondSource(s_part);
+        var first = new Image(undefined, source); first.size(20, 30);
+        var second = new Image(undefined, source.clone()); second.size(20, 30);
+    }`,{entry:"page",assets:{s_part:{width:10,height:10,originX:1,originY:2}}});
+    clean(scene);
+    assert.deepStrictEqual([scene.nodes[0].spriteDraws[0].x,scene.nodes[0].spriteDraws[0].y],[4,9]);
+    assert.strictEqual(scene.nodes[1].spriteDraws,undefined);
+    assert.deepStrictEqual([scene.nodes[1].sprite.name,scene.nodes[1].sprite.scale],["s_part",1]);
+    assert.doesNotThrow(()=>JSON.stringify(scene));
+});
+
+test("source image dimensions, fields, member calls and background drawing use GML contracts", () => {
+    const scene=engine.analyze(preamble+`function SizedSource(_asset) : SpriteImage(_asset) constructor {
+        __width = 30;
+        static get_width = function() { return __width; };
+        static get_height = function() { return 50; };
+        static super_draw = draw;
+        static draw = function(_layout, _style = undefined) {
+            var rectangle = {x: _layout.x, y: _layout.y, width: get_width(), height: get_height()};
+            super_draw(rectangle, _style);
+        };
+    }
+    function page() {
+        var source = new SizedSource(s_initial);
+        source.sprite = s_replacement;
+        source.__width = 42;
+        var image = new Image(undefined, source);
+        image.size(AUTOV(0.5), AUTOV(0.5));
+        image.style.angle = 180;
+        var panel = new Float(undefined); panel.size(80,90);
+        panel.style.background_image = source;
+        panel.style.angle = 270;
+        new Label(undefined,string(source.get_width())+"/"+string(is_struct(source)));
+    }`,{entry:"page",scale:2,assets:{s_initial:{width:8,height:9},s_replacement:{width:10,height:20}}});
+    clean(scene);
+    const image=scene.nodes[0],panel=scene.nodes[1];
+    assert.deepStrictEqual([image.width,image.height],[42,50]);
+    assert.deepStrictEqual([image.spriteDraws[0].sprite.name,image.spriteDraws[0].angle,image.spriteDraws[0].scaleX],["s_replacement",180,4.2]);
+    assert.strictEqual(panel.backgroundDraws[0].angle,0,"background_image.draw receives no element style");
+    assert.deepStrictEqual(texts(scene),["42/true"]);
+});
+
+test("custom image draws capture extra commands, empty draws and local failures without fallback", () => {
+    const scene=engine.analyze(preamble+`function ExtraSource(_asset) : SpriteImage(_asset) constructor {
+        static draw = function(_layout, _style) {
+            var transform = matrix_build(2, 3, 0, 0, 0, 0, 1, 1, 1);
+            matrix_set(matrix_world, transform);
+            draw_sprite_ext(sprite, 0, -5, -7, 1, 2, 90, c_white, 0.75);
+        };
+    }
+    function EmptySource(_asset) : SpriteImage(_asset) constructor {
+        static draw = function(_layout, _style) {};
+    }
+    function BrokenSource(_asset) : SpriteImage(_asset) constructor {
+        static draw = function(_layout, _style) { throw "fixture failure"; };
+    }
+    function page() {
+        new Image(undefined,new ExtraSource(s_part));
+        new Image(undefined,new EmptySource(s_part));
+        new Image(undefined,new BrokenSource(s_part));
+        var remaining = new Image(undefined,s_part);
+    }`,{entry:"page",assets:{s_part:{width:10,height:12}}});
+    assert.strictEqual(scene.nodes.length,4);
+    const command=scene.nodes[0].spriteDraws[0];
+    assert.deepStrictEqual([command.x,command.y,command.scaleY,command.angle],[-5,-7,2,90]);
+    assert.deepStrictEqual(command.matrix.map(value=>value || 0),[1,0,0,1,2,3]);
+    assert.deepStrictEqual(scene.nodes[1].spriteDraws,[]);
+    assert.deepStrictEqual(scene.nodes[2].spriteDraws,[]);
+    assert.strictEqual(scene.nodes[3].spriteDraws,undefined);
+    assert(scene.diagnostics.some(note=>/Custom SpriteImage.draw stopped: fixture failure/.test(note.message)));
+});
+
+test("custom sprite draw commands and recursive source calls remain bounded", () => {
+    const scene=engine.analyze(preamble+`function ManySource(_asset) : SpriteImage(_asset) constructor {
+        static draw = function(_layout,_style) {
+            repeat(300)draw_sprite(sprite,0,0,0);
+        };
+    }
+    function page() { new Image(undefined,new ManySource(s_part)); }`,{entry:"page",assets:{s_part:{width:1,height:1}}});
+    assert.strictEqual(scene.nodes[0].spriteDraws.length,256);
+    assert(scene.diagnostics.some(note=>/256 draw calls/.test(note.message)));
+    const recursive=engine.analyze(preamble+`function RecursiveSource(_asset) : SpriteImage(_asset) constructor {
+        static draw = function(_layout,_style) {draw(_layout,_style);};
+    }
+    function page() {new Image(undefined,new RecursiveSource(s_part));new Label(undefined,"still built");}`,
+        {entry:"page",assets:{s_part:{width:1,height:1}}});
+    assert(recursive.diagnostics.some(note=>/Recursive helper or call limit/.test(note.message)));
+    assert.deepStrictEqual(texts(recursive),["still built"]);
+});
+
+test("numeric color literals survive source channel arithmetic and captured enabled or dark tints", () => {
+    const library=`function multiply_channels(_first,_second) {
+        global.multiplications++;
+        var c1,c2,t;
+        c1=_first; c2=_second;
+        t=((c1 & 255)*(c2 & 255))>>8;
+        c1=c1>>8; c2=c2>>8;
+        t|=((c1 & 255)*(c2 & 255)) & 65280;
+        c1=c1 & 65280; c2=c2>>8;
+        t|=((c1*c2) & 16711680);
+        return t;
+    }`;
+    const scene=engine.analyze(preamble+`function PaintedSource(_asset,_tint):SpriteImage(_asset,0,_tint) constructor {
+        static super_draw=draw;
+        static draw=function(_bounds,_style){super_draw(_bounds,_style);};
+    }
+    function page(){
+        global.multiplications=0;
+        var tint=multiply_channels(#636B81,#B5C1CE);
+        var bright=new Image(undefined,new PaintedSource(s_stroke,tint));
+        var dark=new Image(undefined,new PaintedSource(s_stroke,merge_color(tint,c_black,0.5)));
+        var alternative=new Image(undefined,new PaintedSource(s_stroke,merge_colour(tint,c_black,0.5)));
+        new Label(undefined,string(is_real(#123456))+"/"+string(#123456==$563412)+"/"+string(global.multiplications));
+    }`,{entry:"page",assets:{s_stroke:{width:32,height:8}},sourceFor(name){return name==="multiply_channels"?{path:"arbitrary_color_helper.gml",source:library}:null;}});
+    clean(scene);
+    const images=scene.nodes.filter(node=>node.type==="Image");
+    assert.deepStrictEqual(images.map(node=>node.sprite.color),["#455067","#222833","#222833"]);
+    assert.deepStrictEqual(images.map(node=>node.spriteDraws[0].sprite.color),["#455067","#222833","#222833"]);
+    assert.deepStrictEqual(texts(scene),["true/true/1"]);
+});
+
+test("standard RGB color functions and native aliases preserve packed channel values", () => {
+    const scene=engine.analyze(preamble+`
+    #macro saved_mix merge_color
+    #macro merge_color modified_mix
+    function modified_mix(_first,_second,_amount){return saved_mix(_first,_second,_amount);}
+    function page(){
+        var color=make_color_rgb(18,52,86);
+        var alias=make_colour_rgb(18,52,86);
+        new Label(undefined,string(color==#123456)+"/"+string(alias==color));
+        new Label(undefined,string(color_get_red(color))+"/"+string(colour_get_green(color))+"/"+string(color_get_blue(color)));
+        var mixed=merge_color(color,make_color_rgb(38,72,106),0.5);
+        new Image(undefined,new SpriteImage(s_sample,0,mixed));
+        new Label(undefined,string(merge_colour(color,c_white,-1)==color)+"/"+string(merge_colour(color,c_white,2)==c_white));
+    }`,{entry:"page",assets:{s_sample:{width:1,height:1}}});
+    clean(scene);
+    assert.deepStrictEqual(texts(scene),["true/true","18/52/86","true/true"]);
+    assert.strictEqual(scene.nodes.find(node=>node.type==="Image").sprite.color,"#1c3e60");
+});
+
 console.log("GooWee universal preview: " + count + " tests passed.");

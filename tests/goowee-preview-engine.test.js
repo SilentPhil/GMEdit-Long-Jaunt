@@ -245,7 +245,7 @@ test("project source supplies SDF effect settings without helper-name recognitio
 	assert.deepStrictEqual(style.sdfEffect,{dropShadowEnable:true,dropShadowSoftness:18,dropShadowOffsetX:0,
 		dropShadowOffsetY:2,dropShadowColour:0,dropShadowAlpha:0.6,custom_gain:0.72});
 	assert.deepStrictEqual([style.fontResource,style.fontSize,style.color,style.fontAlpha,style.nativeSdf,style.sdfSpread],
-		["font_soft",16,"#7DA9D5",0.75,true,12]);
+		["font_soft",16,"#7da9d5",0.75,true,12]);
 	assert(!r.diagnostics.some(d=>/SDF effect/.test(d.message)));
 });
 
@@ -463,7 +463,7 @@ test("colors, visibility and source lines survive analysis", () => {
 	text.draw_disable();
 	}`);
 	const label=node(r,"text");
-	assert.strictEqual(label.style.color,"#7DA9D5"); assert.strictEqual(label.style.fontSize,22);
+	assert.strictEqual(label.style.color,"#7da9d5"); assert.strictEqual(label.style.fontSize,22);
 	assert.strictEqual(label.style.alignH,2); assert.strictEqual(label.hidden,true); assert.strictEqual(label.line,3);
 	const aliases=preview('function ui(){var a=new Image(undefined,new SpriteImage(s_icon,0,Color.red,1,false,1,0.5));}');
 	assert.strictEqual(aliases.nodes[0].sprite.color,"#ff0000");assert.strictEqual(aliases.nodes[0].sprite.scale9,0.5);

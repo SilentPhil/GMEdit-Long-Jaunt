@@ -21,6 +21,7 @@
 	function isStruct(value){return isKind(value,"struct");}
 	function closureValue(fn,env,boundSelf){return tagged({fn:fn,env:env,boundSelf:boundSelf},"closure");}
 	function methodValue(receiver,name){return tagged({receiver:receiver,method:name},"method");}
+	function isCallable(value){return isKind(value,"closure") || isKind(value,"method") || isKind(value,"builtin");}
 	function sameValue(a,b){
 		if(a===b)return true;
 		if(isKind(a,"closure") && isKind(b,"closure"))return a.fn===b.fn && a.boundSelf===b.boundSelf;
@@ -35,7 +36,7 @@
 	function safeKey(k) { return k !== "__proto__" && k !== "prototype" && k !== "constructor"; }
 	function shortName(s) { return s.replace(/^gw_/, ""); }
 	function sourceKey(path){var key=String(path || "").replace(/\\/g,"/");return /^[A-Za-z]:\//.test(key)?key.toLowerCase():key;}
-	function isNativeAliasTarget(name){return /^(?:array_(?:map|filter|foreach|find_index|any|all|push|pop|copy|concat|create|length|sort|get_index|contains|clone)|ds_(?:map|priority)_\w+|surface_\w+|sprite_get_\w+|sprite_exists|sprite_delete|draw_sprite(?:_part)?(?:_ext)?|draw_surface(?:_part)?(?:_ext)?|matrix_\w+|string(?:_\w+)?|real)$/.test(name);}
+	function isNativeAliasTarget(name){return /^(?:array_(?:map|filter|foreach|find_index|any|all|push|pop|copy|concat|create|length|sort|get_index|contains|clone)|ds_(?:map|priority)_\w+|surface_\w+|sprite_get_\w+|sprite_exists|sprite_delete|draw_sprite(?:_part)?(?:_ext)?|draw_surface(?:_part)?(?:_ext)?|matrix_\w+|make_colou?r_rgb|merge_colou?r|colou?r_get_(?:red|green|blue)|string(?:_\w+)?|real)$/.test(name);}
 	function fontName(value) { return typeof value === "string" ? value : isUnknown(value) ? value.name : null; }
 	function lexRaw(source) {
 		var out = [];
@@ -328,7 +329,7 @@
 		min = min || 1;
 		if (++this.depth > 150) { this.depth--; this.next(); return {k:"unknown"}; }
 		var token = this.next(), v = token.v, node;
-		if (token.k === "number") node = {k:"literal",value:v[0] === "#" ? v : v[0] === "$" ? parseInt(v.slice(1),16) : Number(v),line:token.line};
+		if (token.k === "number") node = {k:"literal",value:v[0] === "#" ? parseInt(v.slice(5,7)+v.slice(3,5)+v.slice(1,3),16) : v[0] === "$" ? parseInt(v.slice(1),16) : Number(v),line:token.line};
 		else if (token.k === "string") node = {k:"literal",value:v,line:token.line};
 		else if (v === "function") node = this.func(token.line);
 		else if (v === "new") { var cls = this.next().v; if (this.peek("<") && !this.typeGroup("<",">")) this.fail("Incomplete constructor type."); var args = this.args(); node = {k:"new",name:cls,args:args,line:token.line}; }
@@ -751,14 +752,10 @@
 			if (!isUnknown(obj) && obj && safeKey(key) && (typeof obj === "object")) {
 				if(isKind(obj,"dsMap")){if(obj.values.size>=2048 && !obj.values.has(key))this.warn(n.line,"Preview map capped at 2048 entries.");else obj.values.set(key,value);return value;}
 				if (isKind(obj,"sprite") && key==="sprite") {
-					if(isKind(value,"sprite") && value.virtual){
-						["name","virtual","width","height","originX","originY","layers"].forEach(function(field){obj[field]=value[field];});
-					}else{
-						obj.name=typeof value==="string"?value:isUnknown(value)?value.name:"";
-						["virtual","width","height","originX","originY","layers"].forEach(function(field){delete obj[field];});
-					}
+					setSpriteResource(obj,value);
 					this.captureInfo=new WeakMap();return value;
 				}
+				if(isKind(obj,"sprite") && obj.props){obj.props[key]=value;return value;}
 				if (isKind(obj,"textStyle")) {
 					if (key === "font") { obj.fontResource = fontName(value); return value; }
 					if (key === "sdf_size_pt") { obj.fontSizeUnit = typeof value === "number" && value > 0 ? "sdf" : "native"; if (obj.fontSizeUnit === "sdf") obj.fontSize = value; return value; }
@@ -779,8 +776,11 @@
 			this.resolveFunction(obj.name);
 			if (own(this.global,obj.name)) obj=this.global[obj.name];
 		}
-		if (isKind(obj,"sprite") && key === "clone") return tagged({spriteReceiver:obj},"spriteClone");
-		if (isKind(obj,"sprite") && key === "sprite") return obj.virtual?obj:obj.name;
+		if(isKind(obj,"sprite")){
+			if(obj.props && own(obj.props,key)){var spriteField=obj.props[key];return isKind(spriteField,"closure")?closureValue(spriteField.fn,spriteField.env,obj):spriteField;}
+			if(key === "sprite")return obj.virtual?obj:obj.name;
+			if(/^(?:draw|clone|get_width|get_height)$/.test(key))return methodValue(obj,key);
+		}
 		if (isKind(obj,"textStyle")) {
 			if (key === "clone") return tagged({textStyleReceiver:obj},"textStyleClone");
 			if (key === "font") return obj.fontResource || null;
@@ -879,7 +879,7 @@
 				var target=this.eval(n.target,env);
 				if(!target || isUnknown(target) || typeof target!=="object" || Array.isArray(target)){this.warn(n.line,"with requires a known struct in preview; instance iteration was omitted.");break;}
 				var scope=dict();Object.keys(env).forEach(function(key){scope[key]=env[key];});scope.other=env.self || null;
-				scope.self=isNode(target) || isStruct(target) ? target : structValue("struct",target);return this.execute(n.body,scope);
+				scope.self=isNode(target) || isStruct(target) || isKind(target,"sprite") ? target : structValue("struct",target);return this.execute(n.body,scope);
 			case "fn": if (n.name) env[n.name] = closureValue(n,env); break;
 			case "enum": var en=dict(),next=0;for(i=0;i<n.members.length;i++){var m=n.members[i];var value=m.value?this.eval(m.value,env):next;if(safeKey(m.name))en[m.name]=value;next=typeof value === "number"?value+1:unknown(m.name);}if(safeKey(n.name))env[n.name]=en;break;
 			case "vars": for (i = 0; i < n.vars.length; i++) {
@@ -966,7 +966,7 @@
 				statement.vars.forEach(function(variable) {
 					if(!safeKey(variable.name) || !variable.value)return;
 					if(variable.value.k === "fn")receiver.props[variable.name]=closureValue(variable.value,env);
-					else if(variable.value.k === "id" && !own(env,variable.value.name) && own(receiver.props,variable.value.name) && isKind(receiver.props[variable.value.name],"closure")) {
+					else if(variable.value.k === "id" && !own(env,variable.value.name) && own(receiver.props,variable.value.name) && isCallable(receiver.props[variable.value.name])) {
 						// Keep each constructor's saved method in its lexical scope as
 						// well: further descendants can reuse the same alias name.
 						env[variable.name]=receiver.props[variable.name]=receiver.props[variable.value.name];
@@ -983,11 +983,31 @@
 		if (isKind(value,"sprite")) return value;
 		return tagged({sprite:true,name:typeof value === "string" ? value : isUnknown(value) ? value.name : "",index:typeof args[1] === "number" ? args[1] : 0,color:args[2] == null ? "#ffffff" : args[2],alpha:alpha,scale:typeof args[5] === "number" ? args[5] : 1,scale9:typeof args[6] === "number" ? args[6] : 1},"sprite");
 	}
+	function setSpriteResource(image,value){
+		if(isKind(value,"sprite") && value.virtual){
+			["name","virtual","width","height","originX","originY","layers"].forEach(function(field){image[field]=value[field];});
+		}else{
+			image.name=typeof value==="string"?value:isUnknown(value)?value.name:"";
+			["virtual","width","height","originX","originY","layers"].forEach(function(field){delete image[field];});
+		}
+	}
+	function spriteInstance(image){
+		if(image.props)return image;
+		// GML source fields and methods stay off the serializable render descriptor.
+		var props=dict();Object.defineProperty(image,"props",{value:props});
+		["index","color","alpha","scale","premultiplied"].forEach(function(key){
+			Object.defineProperty(props,key,{enumerable:true,get:function(){return image[key];},set:function(value){image[key]=value;}});
+		});
+		Object.defineProperty(props,"sprite",{enumerable:true,get:function(){return image.virtual?image:image.name;},set:function(value){setSpriteResource(image,value);}});
+		Object.defineProperty(props,"scale_9_slice",{enumerable:true,get:function(){return image.scale9;},set:function(value){image.scale9=value;}});
+		["draw","clone","get_width","get_height"].forEach(function(key){props[key]=methodValue(image,key);});
+		return image;
+	}
 	State.prototype.construct = function(name,args,line,env) {
 		var dynamic=this.get(env || dict(),name);if(isKind(dynamic,"closure") && dynamic.fn.constructor && dynamic.fn.name)name=dynamic.fn.name;
 		else if(isUnknown(dynamic) && dynamic.name!==name && /^[A-Za-z_]\w*$/.test(dynamic.name)){var dynamicDefinition=this.resolveFunction(dynamic.name);if(dynamicDefinition && dynamicDefinition.constructor)name=dynamic.name;}
 		var type = shortName(name);
-		if (type === "SpriteImage") return spriteValue(args[0],args);
+		if (type === "SpriteImage") return spriteInstance(spriteValue(args[0],args));
 		if (type === "TextStyle") {
 			var resource = fontName(args[0]), font = resource && typeof this.options.fontFor === "function" ? this.options.fontFor(resource) : null;
 			var sdfSize = typeof args[4] === "number" && args[4]>0 ? args[4] : 0;
@@ -1081,6 +1101,7 @@
 		for(var i=this.nodes.length-1;i>=0;i--)if(removed.has(this.nodes[i].id))this.nodes.splice(i,1);
 	};
 	State.prototype.method = function(n,name,args,line) {
+		if(isKind(n,"sprite"))return this.spriteMethod(n,name,args,line);
 		if (isKind(n,"binding")) {
 			if(name === "update" && !n.updated && ++this.dataUpdates <= 64) {
 				n.updated=true;
@@ -1140,6 +1161,47 @@
 		}
 		return n;
 	};
+	State.prototype.spriteMethod = function(image,name,args,line){
+		if(name==="clone")return spriteInstance(tagged(Object.assign({},image),"sprite"));
+		var asset=this.spriteAsset(image);
+		if(name==="get_width" || name==="get_height")return asset?asset[name==="get_width"?"width":"height"]:unknown(name);
+		if(name!=="draw")return unknown("SpriteImage."+name);
+		var rect=isStruct(args[0])?args[0].props:args[0],style=isStruct(args[1])?args[1].props:args[1];
+		if(!asset || !rect || ![rect.x,rect.y,rect.width,rect.height,asset.width,asset.height].every(Number.isFinite) || asset.width<=0 || asset.height<=0){
+			this.warn(line,"SpriteImage.draw requires an available sprite and finite layout bounds.");return null;
+		}
+		var tint=color(image.color,"#ffffff"),opacity=image.alpha,angle=0;
+		if(style){
+			var blend=color(style.additional_color_blend,"#ffffff");
+			tint="#"+[1,3,5].map(function(index){return Math.floor(parseInt(tint.slice(index,index+2),16)*parseInt(blend.slice(index,index+2),16)/255).toString(16).padStart(2,"0");}).join("");
+			if(style.sprite_alpha!=null)opacity*=style.sprite_alpha;
+			angle=style.angle==null?0:style.angle;
+		}
+		var sx=rect.width/asset.width,sy=rect.height/asset.height;
+		var x=rect.x+(asset.originX || 0)*sx,y=rect.y+(asset.originY || 0)*sy;
+		if(style && style.sprite_is_flip_horizontal)sx=-sx;
+		var captured=tagged(Object.assign({},image),"sprite");captured.scale9=image.scale9;
+		this.graphicsCall("draw_sprite_ext",[captured,image.index,x,y,sx*image.scale,sy*image.scale,angle,tint,opacity],line);
+		return null;
+	};
+	State.prototype.captureSpriteDraw = function(image,node,style){
+		var callback=image && image.props && image.props.draw;
+		if(!isKind(callback,"closure"))return null;
+		// Capture commands, not pixels: drawing may extend beyond the element bounds.
+		var target=tagged({width:node.width,height:node.height,layers:[],freed:false},"surface");
+		var previousStack=this.surfaceStack,previousMatrices=this.matrices,previousPath=this.currentPath;
+		this.surfaceStack=[target];this.matrices=dict();this.currentPath=node.sourcePath;
+		var beforeWarnings=this.diagnostics.length;
+		try{
+			this.invoke(callback.fn,[{x:0,y:0,width:node.width,height:node.height},style],callback.env,image);
+		}catch(error){
+			node.approximate=true;this.warn(error.line || node.line,"Custom SpriteImage.draw stopped: "+String(error.message || error).slice(0,200));
+		}finally{
+			this.surfaceStack=previousStack;this.matrices=previousMatrices;this.currentPath=previousPath;
+		}
+		if(this.diagnostics.length>beforeWarnings)node.approximate=true;
+		return target.layers;
+	};
 	State.prototype.replaceText = function(text, key, value, line) {
 		if (typeof key !== "string" && typeof key !== "number") { this.warn(line,"Dynamic text replacement name omitted from preview."); return text; }
 		var token = "{" + key + "}";
@@ -1174,6 +1236,20 @@
 	};
 	State.prototype.call = function(name,args,line,env) {
 		var short = shortName(name);
+		if(/^(?:make_colou?r_rgb|merge_colou?r|colou?r_get_(?:red|green|blue))$/.test(name)){
+			var required=/get_/.test(name)?1:3;
+			if(args.length<required || !args.slice(0,required).every(Number.isFinite)){
+				this.warn(line,name+" requires finite numeric color values.");return unknown(name);
+			}
+			if(/get_/.test(name))return (args[0]>>(/red$/.test(name)?0:/green$/.test(name)?8:16))&255;
+			var channels;
+			if(/^make_/.test(name))channels=args.slice(0,3).map(function(value){return Math.max(0,Math.min(255,Math.trunc(value)));});
+			else{
+				var amount=Math.max(0,Math.min(1,args[2]));
+				channels=[0,8,16].map(function(shift){return Math.trunc(((args[0]>>shift)&255)*(1-amount)+((args[1]>>shift)&255)*amount);});
+			}
+			return channels[0]|(channels[1]<<8)|(channels[2]<<16);
+		}
 		if(/^preview_/.test(name)){
 			if(!this.previewDepth){this.warn(line,"Preview helper " + name + " is only available inside preview annotations.");return unknown(name);}
 			if(name==="preview_override"){
@@ -1220,8 +1296,8 @@
 		if (/^c_/.test(name)) return unknown(name);
 		if (name === "method") {
 			var target=args[1],scope=args[0];
-			if(isKind(target,"closure")){var closure=dict();Object.keys(target.env || {}).forEach(function(k){closure[k]=target.env[k];});if(scope && !isUnknown(scope) && !isNode(scope) && !isStruct(scope))Object.keys(scope).forEach(function(k){if(safeKey(k))closure[k]=scope[k];});return closureValue(target.fn,closure,isNode(scope) || isStruct(scope) ? scope : target.boundSelf);}
-			if(isKind(target,"method"))return methodValue(isNode(scope) ? scope : target.receiver,target.method);
+			if(isKind(target,"closure")){var closure=dict();Object.keys(target.env || {}).forEach(function(k){closure[k]=target.env[k];});if(scope && !isUnknown(scope) && !isNode(scope) && !isStruct(scope) && !isKind(scope,"sprite"))Object.keys(scope).forEach(function(k){if(safeKey(k))closure[k]=scope[k];});return closureValue(target.fn,closure,isNode(scope) || isStruct(scope) || isKind(scope,"sprite") ? scope : target.boundSelf);}
+			if(isKind(target,"method"))return methodValue(isNode(scope) || isKind(scope,"sprite") ? scope : target.receiver,target.method);
 			return unknown(name);
 		}
 		if(name==="method_call" && Array.isArray(args[1])){
@@ -1230,7 +1306,7 @@
 			if(isKind(callable,"method"))return this.method(callable.receiver,callable.method,args[1],line);
 		}
 		if(/^(?:variable_struct_|struct_)(?:get_names|get|set|exists|remove)$/.test(name)){
-			var record=args[0],fields=isStruct(record) || isNode(record)?record.props:record;
+			var record=args[0],fields=isStruct(record) || isNode(record) || isKind(record,"sprite") && record.props?record.props:record;
 			if(!fields || isUnknown(fields) || typeof fields!=="object" || Array.isArray(fields))return unknown(name);
 			if(/get_names$/.test(name))return Object.keys(fields).filter(safeKey).slice(0,2048);
 			var key=args[1];if(typeof key!=="string" || !safeKey(key))return unknown(name);
@@ -1245,12 +1321,12 @@
 			if(name==="is_infinity")return args[0]===Infinity || args[0]===-Infinity;
 			if(name==="is_undefined")return args[0]==null;
 			if(name==="is_array")return Array.isArray(args[0]);
-			if(name==="is_struct")return !!args[0] && typeof args[0]==="object" && !Array.isArray(args[0]) && !args[0][valueBrand] || isStruct(args[0]) || isNode(args[0]);
+			if(name==="is_struct")return !!args[0] && typeof args[0]==="object" && !Array.isArray(args[0]) && !args[0][valueBrand] || isStruct(args[0]) || isNode(args[0]) || isKind(args[0],"sprite");
 			if(name==="is_method")return isKind(args[0],"closure") || isKind(args[0],"method");
 			return typeof args[0]===({is_real:"number",is_numeric:"number",is_string:"string",is_bool:"boolean"})[name];
 		}
 		if(name==="variable_struct_names_count" || name==="struct_names_count"){
-			var counted=isStruct(args[0]) || isNode(args[0])?args[0].props:args[0];return counted && typeof counted==="object" && !isUnknown(counted)?Object.keys(counted).filter(safeKey).length:unknown(name);
+			var counted=isStruct(args[0]) || isNode(args[0]) || isKind(args[0],"sprite") && args[0].props?args[0].props:args[0];return counted && typeof counted==="object" && !isUnknown(counted)?Object.keys(counted).filter(safeKey).length:unknown(name);
 		}
 		if(name==="string_format" && typeof args[0]==="number"){
 			var formatted=args[0].toFixed(Math.max(0,Math.min(32,Number(args[2]) || 0)));
@@ -1444,7 +1520,14 @@
 			n.style.color = color(n.props.color_override,n.style.color); n.style.alignH = s.text_alignment.horizontal || 0; n.style.alignV = s.text_alignment.vertical || 0;
 			n.style.spriteAlpha = typeof s.sprite_alpha === "number" ? s.sprite_alpha : 1; n.style.additionalColorBlend = color(s.additional_color_blend,"#ffffff"); n.style.flipHorizontal = s.sprite_is_flip_horizontal === true; n.style.angle = typeof s.angle === "number" ? s.angle : 0;
 			n.background = isKind(s.background_image,"sprite") ? s.background_image : null;
-			[n.sprite,n.background].forEach(function(sprite) { if (sprite) sprite.color = color(sprite.color,"#ffffff"); });
+			if(n.sprite && n.sprite.props){
+				["width","height"].forEach(function(axis){
+					var measure=n.sprite.props["get_"+axis];if(!isKind(measure,"closure"))return;
+					var value=self.invoke(measure.fn,[],measure.env,n.sprite);
+					if(Number.isFinite(value) && value>=0){n.spriteDimensions=n.spriteDimensions || {};n.spriteDimensions[axis]=value;}
+					else{n.approximate=true;self.warn(n.line,"Custom SpriteImage.get_"+axis+" requires a finite nonnegative size.");}
+				});
+			}
 		});
 		var layoutOptions={
 			width:this.width,height:this.height,scale:this.scale,assets:this.options.assets,
@@ -1476,6 +1559,16 @@
 			scroll.thumb.size[1]=unit("ABS",Math.max(0,thumbHeight));scrollChanged=true;
 		});
 		if(scrollChanged)roots=Layout.layout(this.nodes,layoutOptions);
+		var hiddenNodes=new Set();
+		this.nodes.forEach(function(n){
+			var isHidden=n.hidden || hiddenNodes.has(n.parentId);if(isHidden)hiddenNodes.add(n.id);
+			if(!isHidden){
+				var style=Object.assign({angle:0,sprite_alpha:null,sprite_is_flip_horizontal:false,additional_color_blend:16777215},n._style);
+				var foreground=self.captureSpriteDraw(n.sprite,n,style),background=self.captureSpriteDraw(n.background,n,null);
+				if(foreground)n.spriteDraws=foreground;if(background)n.backgroundDraws=background;
+			}
+			["sprite","background"].forEach(function(key){if(n[key]){n[key]=tagged(Object.assign({},n[key]),"sprite");n[key].color=color(n[key].color,"#ffffff");}});
+		});
 		this.nodes.forEach(function(n){delete n._style;delete n.scrollPreview;n.props={};});
 		return roots;
 	};

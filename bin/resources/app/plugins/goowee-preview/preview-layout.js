@@ -141,6 +141,7 @@
                 return node._textMetrics[AXES[axis]];
             }
             if (type === "Image") {
+                if (node.spriteDimensions && Number.isFinite(node.spriteDimensions[AXES[axis]])) return node.spriteDimensions[AXES[axis]];
                 var sprite = node.sprite, asset = sprite && (options.assets || {})[sprite.name];
                 if (sprite && sprite.layers && Number.isFinite(sprite[AXES[axis]])) return sprite[AXES[axis]];
                 if (asset && Number.isFinite(asset[AXES[axis]])) return asset[AXES[axis]];
