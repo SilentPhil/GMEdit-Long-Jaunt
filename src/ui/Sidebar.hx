@@ -23,6 +23,11 @@ using tools.HtmlTools;
 	static var panel:DivElement;
 	static var sizer:DivElement;
 	static var outer:DivElement;
+	static function dispatchResize() {
+		var e:UIEvent = cast Main.document.createEvent('UIEvents');
+		e.initUIEvent('resize', true, false, Main.window, 0);
+		Main.window.dispatchEvent(e);
+	}
 	private static function sync() {
 		var n = list.length;
 		var v = n == 0 ? "none" : "";
@@ -31,9 +36,7 @@ using tools.HtmlTools;
 			outer.style.display = v;
 			Splitter.syncMain();
 			// force Ace to note changes:
-			var e:UIEvent = cast Main.document.createEvent('UIEvents');
-			e.initUIEvent('resize', true, false, Main.window, 0); 
-			Main.window.dispatchEvent(e);
+			dispatchResize();
 		}
 		select.style.display = "none";
 		tabs.style.display = n <= 1 ? "none" : "";
@@ -54,13 +57,11 @@ using tools.HtmlTools;
 		if (curr != item.el) {
 			if (curr != null) panel.removeChild(curr);
 			panel.appendChild(item.el);
+			// Hidden tabs are detached. Let their contents measure the final
+			// dock dimensions after reattachment, just like BottomPanel.set().
+			Main.window.requestAnimationFrame(function(_) dispatchResize());
 		}
 		select.onchange = fn;
-		/*
-		if (panel.children[0] != null) {
-			panel.removeChild(panel.children[0]);
-		}
-		panel.appendChild(item.el);*/
 	}
 	public static function add(name:String, el:Element) {
 		var item = map[name];
