@@ -721,7 +721,7 @@
 	State.prototype.get = function(env, name) {
 		if(this.previewDepth && /^preview_/.test(name))return tagged({builtin:name},"builtin");
 		if (own(env,name)) return env[name];
-		if (env.self && own(env.self.props,name)) { var field=env.self.props[name];return isKind(field,"closure") ? closureValue(field.fn,field.env,env.self) : field; }
+		if (env.self && own(env.self.props,name)) { var field=env.self.props[name];return isKind(field,"closure") ? closureValue(field.fn,field.env,field.boundSelf || env.self) : field; }
 		if (env.self && name === "style") return env.self._style;
 		if (isNode(env.self) && /^(layout|size_actual|padding_actual|margin_actual|children|parent|child_count|_measure_margin)$/.test(name)) return this.member(env.self,name,name,0);
 		if (env.self && /^(size|size_min|size_max|margin|padding|alignment|aspectratio|orientation|text|sprite|alpha|progress|draw_disable|draw_enable|draw_set_enable|is_draw_disabled|set_codename)$/.test(name)) return methodValue(env.self,name);
@@ -777,7 +777,7 @@
 			if (own(this.global,obj.name)) obj=this.global[obj.name];
 		}
 		if(isKind(obj,"sprite")){
-			if(obj.props && own(obj.props,key)){var spriteField=obj.props[key];return isKind(spriteField,"closure")?closureValue(spriteField.fn,spriteField.env,obj):spriteField;}
+			if(obj.props && own(obj.props,key)){var spriteField=obj.props[key];return isKind(spriteField,"closure")?closureValue(spriteField.fn,spriteField.env,spriteField.boundSelf || obj):spriteField;}
 			if(key === "sprite")return obj.virtual?obj:obj.name;
 			if(/^(?:draw|clone|get_width|get_height)$/.test(key))return methodValue(obj,key);
 		}
@@ -799,7 +799,7 @@
 			if (isNode(obj) && key === "children") return obj.children;
 			if (isNode(obj) && (key === "child_count" || key === "_measure_margin")) return methodValue(obj,key);
 			if (key === "parent") return this.nodes.find(function(n) { return n.id === obj.parentId; });
-			if (obj.props && own(obj.props,key)) { var field=obj.props[key];return isKind(field,"closure") ? closureValue(field.fn,field.env,obj) : field; }
+			if (obj.props && own(obj.props,key)) { var field=obj.props[key];return isKind(field,"closure") ? closureValue(field.fn,field.env,field.boundSelf || obj) : field; }
 			if(isKind(obj,"binding") && key==="update" || isNode(obj) && /^(?:size|size_min|size_max|margin|padding|alignment|aspectratio|orientation|justify|set_render_scale|disable_affect_by_gui_scale|separate_render|push_all_canvases_to_array|text|sprite|is_draw_disabled|draw_disable|draw_enable|draw_set_enable|set_codename|progress|alpha|set_parent|relocate|clear|add_surface_render_callback|get_base_layout|enable|disable)$/.test(key))return methodValue(obj,key);
 			return isStruct(obj)?null:unknown(name);
 		}
@@ -1114,7 +1114,7 @@
 			}
 			return n;
 		}
-		if (own(n.props,name) && isKind(n.props[name],"closure")) return this.invoke(n.props[name].fn,args,n.props[name].env,n);
+		if (own(n.props,name) && isKind(n.props[name],"closure")) return this.invoke(n.props[name].fn,args,n.props[name].env,n.props[name].boundSelf || n);
 		if(isStruct(n))return unknown(n.type+"."+name+"(...)");
 		if(name === "child_count")return n.children.length;
 		if(name === "_measure_margin") {

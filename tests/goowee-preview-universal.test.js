@@ -870,4 +870,33 @@ test("standard RGB color functions and native aliases preserve packed channel va
     assert.strictEqual(scene.nodes.find(node=>node.type==="Image").sprite.color,"#1c3e60");
 });
 
+test("callbacks stored on another owner retain their explicitly bound receiver", () => {
+    const scene=engine.analyze(preamble+`
+    function Meter() constructor {
+        value=0;
+        static add=function(amount){value+=amount;};
+    }
+    function Relay(callback) constructor {
+        saved=callback;
+        static perform=function(amount){saved(amount);};
+    }
+    function page(){
+        var meter=new Meter();
+        var relay=new Relay(method(meter,meter.add));
+        relay.perform(1);
+        relay.saved(2);
+        var panel=new Float(undefined);
+        panel.saved=relay.saved;
+        panel.saved(4);
+        var ink=new SpriteImage(s_sample);
+        ink.saved=panel.saved;
+        ink.saved(8);
+        var plain=new Meter();
+        plain.add(16);
+        new Label(undefined,string(meter.value)+"/"+string(plain.value));
+    }`,{entry:"page"});
+    clean(scene);
+    assert.deepStrictEqual(texts(scene),["15/16"]);
+});
+
 console.log("GooWee universal preview: " + count + " tests passed.");
