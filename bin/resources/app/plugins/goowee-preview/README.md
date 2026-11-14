@@ -20,6 +20,15 @@ does not remove other panels. **Toggle GooWee preview** is also available in the
 command palette.
 
 - Select an entry function when a script contains several UI factories.
+- Highlight an element's variable name in the code to select it and center the
+  preview without changing zoom. The crosshair button toggles this behavior and
+  remembers the setting. This also works in a dependency's tab while the preview
+  is locked. Names are matched within their source file and function; comments,
+  strings and the visible reference image are ignored. Hidden elements can also
+  be selected: a dashed selection frame shows their position without enabling
+  their content. For
+  repeated instances from one declaration, the currently selected instance is
+  kept, or the first instance is selected.
 - Click the **lock icon** beside the function selector to pin that script.
   The selector stays available and lists functions from the pinned file, even
   while another editor tab is active. Choosing one updates the pinned preview

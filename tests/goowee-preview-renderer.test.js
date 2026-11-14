@@ -95,6 +95,20 @@ let count=0;
 async function test(name,callback) { await callback(); count++; console.log("ok - "+name); }
 async function run() {
     asset("ink"); asset("intrinsic");
+    await test("source selection outlines hidden controls without revealing pixels or hit targets",async()=>{
+        const f=fixture(), parent=node({id:"parent",hidden:true}), child=node({id:"child",x:120,y:210,parentId:"parent"});
+        parent.children=[child];
+        const model={roots:[parent],nodes:[parent,child],width:400,height:300}, strokes=[];
+        f.canvas.context.strokeRect=function(x,y,w,h) { strokes.push({x,y,w,h,color:this.strokeStyle}); };
+        const view=await f.render(model,{selected:child.id});
+        assert(strokes.some(s=>s.color==="#55ccff" && s.x===120 && s.y===210 && s.w===3 && s.h===5));
+        assert(!f.canvas.context.draws.some(d=>d.kind==="image"),"Hidden content must remain hidden");
+        assert.strictEqual(f.renderer.hitTest(view.x+121,view.y+211),null);
+        strokes.length=0;
+        await f.render(model,{hovered:child.id});
+        assert(!strokes.some(s=>s.color==="#73baff"),"Hover must not reveal hidden controls");
+        f.renderer.dispose();
+    });
     await test("captured commands replace intrinsic pixels and apply style transforms only once",async()=>{
         const f=fixture(), item=node({alpha:0.5,style:{angle:270,flipHorizontal:true,spriteAlpha:0.1,additionalColorBlend:"#000000"},spriteDraws:[layer({x:12,y:20,width:16,height:6,angle:90,sprite:{name:"ink",alpha:0.4,color:"#ffffff"}})]});
         const view=await f.render(scene(item)), draws=f.canvas.context.draws.filter(draw=>draw.kind==="image");

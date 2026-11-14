@@ -10,6 +10,7 @@
     "preview-fonts.js",
     "preview-renderer.js",
     "preview-references.js",
+    "preview-source-selection.js",
     "goowee-preview.js"
   ],
   "stylesheets": [

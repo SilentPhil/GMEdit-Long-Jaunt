@@ -17,6 +17,7 @@
     var view, panX = 0, panY = 0, zoomAnchor, spaceDown = false, stageHovered = false, drag, suppressCanvasClick = false;
     var hoveredId = null, hoverPointer = null, ctrlDown = false;
     var pinned = null, sceneFile = null, editingSession = null;
+    var sourceSelection, sourceSelectionTimer, followSelectionButton, centerNodeId = null;
     var copying = false, copyFeedbackTimer, copyVersion = 0;
     // Images stay in memory; paths and offsets are keyed by script and entry function.
     var referenceToggle, referenceToolbar, referenceShow, referenceFile, referenceName, referenceError, referenceLockButton;
@@ -43,6 +44,7 @@
         prefs.outlines = prefs.outlines === true;
         prefs.approximateOutlines = prefs.approximateOutlines !== false;
         prefs.sharpPixels = prefs.sharpPixels === true;
+        prefs.followSelection = prefs.followSelection !== false;
     }
     function dimension(value, fallback) {
         var n = Number(value);
@@ -167,6 +169,9 @@
         if (!active) return;
         if (pinned && pinned.project !== Project.current) pinned = null;
         var editingFile = GmlFile.current === excludedFile ? null : GmlFile.current;
+        if (sourceSelection) sourceSelection.off("changeSelection", scheduleSourceSelection);
+        sourceSelection = editingFile && editingFile.codeEditor && editingFile.codeEditor.session.selection;
+        if (sourceSelection) sourceSelection.on("changeSelection", scheduleSourceSelection);
         var file = pinned ? pinned.file : editingFile;
         var next = file && file.codeEditor ? file.codeEditor.session : null;
         // The pinned root still updates, while edits to the active nested script
@@ -315,6 +320,7 @@
             updateLock();
             updateCopy();
             updateReference();
+            scheduleSourceSelection();
             requestDraw();
         } catch (error) {
             status.textContent = "Preview could not be built";
@@ -428,6 +434,23 @@
         if (!visibilityState || !visibilityState.hidden.size) return;
         visibilityState.hidden.clear(); visibilityState.history = [];
         visibilityChanged();
+    }
+    function scheduleSourceSelection() {
+        clearTimeout(sourceSelectionTimer);
+        sourceSelectionTimer = setTimeout(followSourceSelection, 80);
+    }
+    function followSourceSelection() {
+        if (!active || !visible || !prefs.followSelection || !scene || currentReference() || !sourceSelection || drag) return;
+        var file = GmlFile.current, buffer = file && file.codeEditor && file.codeEditor.session;
+        if (!buffer || buffer.selection !== sourceSelection) return;
+        var resource = getResources(), sourcePath = resource.relativeSourcePath(file.path);
+        if (!sourcePath) return;
+        var node = GooWeePreviewSourceSelection.find(scene.nodes, buffer.getValue(), sourceSelection.getRange(),
+            function(path) { return (path == null ? sourcePath : resource.relativeSourcePath(path) || "").toLowerCase(); }, selectedId);
+        if (!node) return;
+        selectNode(node, false);
+        centerNodeId = node.id;
+        requestDraw();
     }
     function selectNode(node, revealSource) {
         selectedId = node ? node.id : null;
@@ -701,6 +724,16 @@
             surface: {container: canvasSurface, viewport: stage}
         };
         view = renderer.render(scene, options);
+        if (centerNodeId) {
+            var target = nodesById.get(centerNodeId);
+            centerNodeId = null;
+            if (target && !currentReference()) {
+                var offset = GooWeePreviewSourceSelection.centerOffset(target, view, stage.clientWidth, stage.clientHeight);
+                panX += offset.x; panY += offset.y; zoomAnchor = null;
+                options.panX = panX; options.panY = panY;
+                view = renderer.render(scene, options);
+            }
+        }
         if (zoomAnchor) {
             // Resizing the canvas can clamp scroll offsets or remove scrollbars.
             // Anchor after that resize, in actual canvas coordinates.
@@ -775,7 +808,7 @@
         spaceDown = false; stageHovered = false; ctrlDown = false; clearHover(); endDrag();
     }
     function resetView() {
-        cancelNavigation(); view = null; zoomAnchor = null; panX = panY = 0; suppressCanvasClick = false;
+        cancelNavigation(); centerNodeId = null; view = null; zoomAnchor = null; panX = panY = 0; suppressCanvasClick = false;
         if (stage) stage.scrollLeft = stage.scrollTop = 0;
     }
     function setupNavigation() {
@@ -942,6 +975,17 @@
         showAllButton.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M1 8s2.5-4 7-4 7 4 7 4-2.5 4-7 4-7-4-7-4z"/><circle cx="8" cy="8" r="2"/></svg>';
         showAllButton.onclick = function() { stage.focus({preventScroll: true}); showAllHidden(); };
         updateVisibilityControls();
+        followSelectionButton = element("button", "gw-follow-selection", null, toolbar); followSelectionButton.type = "button";
+        followSelectionButton.setAttribute("aria-label", "Follow code selection");
+        followSelectionButton.title = "Follow code selection: select and center the element highlighted in the editor";
+        followSelectionButton.setAttribute("aria-pressed", String(prefs.followSelection));
+        followSelectionButton.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="4"/><path d="M8 1v4m0 6v4M1 8h4m6 0h4"/></svg>';
+        followSelectionButton.onclick = function() {
+            prefs.followSelection = !prefs.followSelection; save();
+            followSelectionButton.setAttribute("aria-pressed", String(prefs.followSelection));
+            centerNodeId = null;
+            if (prefs.followSelection) scheduleSourceSelection();
+        };
         var refreshButton = element("button", "", "Refresh", toolbar); refreshButton.type = "button";
         refreshButton.title = "Reload sprites and rebuild the preview";
         refreshButton.onclick = function() { resetResources(); refresh(); };
@@ -1093,6 +1137,9 @@
             clearTimeout(timer); if (frame) cancelAnimationFrame(frame); frame = null;
             if (session) session.off("change", schedule); session = null;
             if (editingSession) editingSession.off("change", schedule); editingSession = null;
+            if (sourceSelection) sourceSelection.off("changeSelection", scheduleSourceSelection);
+            sourceSelection = null; centerNodeId = null; followSelectionButton = null;
+            clearTimeout(sourceSelectionTimer);
             listeners.splice(0).forEach(function(remove) { remove(); });
             window.removeEventListener("resize", requestDraw);
             if (observer) observer.disconnect(); observer = null;

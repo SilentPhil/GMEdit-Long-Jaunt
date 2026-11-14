@@ -7,11 +7,11 @@
 .goowee-preview button { cursor: pointer; }
 .goowee-preview button:hover { border-color: var(--color-primary, #66cfff); }
 .goowee-preview button:disabled { cursor: default; opacity: .45; }
-.goowee-preview .gw-lock, .goowee-preview .gw-copy, .goowee-preview .gw-reference-lock, .goowee-preview .gw-hide-selected, .goowee-preview .gw-show-all { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 26px; padding: 3px 4px; }
-.goowee-preview .gw-lock svg, .goowee-preview .gw-copy svg, .goowee-preview .gw-reference-lock svg, .goowee-preview .gw-hide-selected svg, .goowee-preview .gw-show-all svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.goowee-preview .gw-lock, .goowee-preview .gw-follow-selection, .goowee-preview .gw-copy, .goowee-preview .gw-reference-lock, .goowee-preview .gw-hide-selected, .goowee-preview .gw-show-all { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 26px; padding: 3px 4px; }
+.goowee-preview .gw-lock svg, .goowee-preview .gw-follow-selection svg, .goowee-preview .gw-copy svg, .goowee-preview .gw-reference-lock svg, .goowee-preview .gw-hide-selected svg, .goowee-preview .gw-show-all svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
 .goowee-preview .gw-copy-status { position: absolute; top: 100%; right: 6px; z-index: 2; max-width: calc(100% - 24px); padding: 4px 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; pointer-events: none; background: var(--background-color, #292f38); border: 1px solid var(--color-border, #59606b); border-radius: 2px; }
 .goowee-preview .gw-copy-status:empty { display: none; }
-.goowee-preview .gw-lock[aria-pressed=true], .goowee-preview .gw-reference-lock[aria-pressed=true] { color: var(--color-primary, #66cfff); border-color: currentColor; background: #55ccff22; }
+.goowee-preview .gw-lock[aria-pressed=true], .goowee-preview .gw-follow-selection[aria-pressed=true], .goowee-preview .gw-reference-lock[aria-pressed=true] { color: var(--color-primary, #66cfff); border-color: currentColor; background: #55ccff22; }
 .goowee-preview :focus-visible { outline: 1px solid var(--color-primary, #66cfff); outline-offset: -1px; }
 .goowee-preview .gw-entry { flex: 1 1 160px; width: 100%; min-width: 0; }
 .goowee-preview .gw-dimension { width: 56px; }

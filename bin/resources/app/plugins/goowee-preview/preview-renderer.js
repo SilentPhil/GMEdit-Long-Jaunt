@@ -679,21 +679,23 @@
                 if (usedImages.has(item.url)) return true;
                 tilePixels -= item.pixels; return false;
             });
-            function highlight(id, color, width) {
+            function highlight(id, color, width, includeHidden) {
                 var index = painted.findIndex(function(node) { return node.id === id; });
-                if (index < 0) return;
-                var node = painted[index];
+                var node = index >= 0 ? painted[index] : includeHidden && (scene.nodes || []).find(function(node) { return node.id === id; });
+                if (!node) return;
                 ctx.save();
-                if (paintedClips[index]) applyClip(paintedClips[index]);
+                if (index >= 0 && paintedClips[index]) applyClip(paintedClips[index]);
                 ctx.strokeStyle = color;
-                ctx.setLineDash([]);
+                // Hidden controls retain an inspectable layout, without painting
+                // their content or making them mouse hit-test targets.
+                ctx.setLineDash(index < 0 ? [4 / scale, 3 / scale] : []);
                 ctx.lineWidth = width / scale;
                 ctx.strokeRect(node.x, node.y, node.width, node.height);
                 ctx.restore();
             }
             if (!exporting) {
                 if (options.hovered !== options.selected) highlight(options.hovered,"#73baff",1);
-                highlight(options.selected,"#55ccff",2);
+                highlight(options.selected,"#55ccff",2,true);
             }
             return {scale: scale, bounds: box, x: transform.x, y: transform.y};
         }
