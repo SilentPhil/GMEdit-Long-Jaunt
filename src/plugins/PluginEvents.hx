@@ -109,4 +109,7 @@ extern class PluginEvents {
 	 * You can use this to apply editor hooks/modifications.
 	 */
 	static function editorCreated(e:{editor:AceWrap, options:AceWrapOptions}):Void;
+
+	/** A fresh item list for this editor popup; additions do not persist. */
+	static function editorContextMenu(e:{editor:AceWrap, event:MouseEvent, items:Array<electron.Menu.MenuItem>}):Void;
 }

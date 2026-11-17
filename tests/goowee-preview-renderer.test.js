@@ -95,6 +95,30 @@ let count=0;
 async function test(name,callback) { await callback(); count++; console.log("ok - "+name); }
 async function run() {
     asset("ink"); asset("intrinsic");
+    await test("forced drawing reveals only the requested hidden branch and restores source visibility",async()=>{
+        const f=fixture(), parent=node({id:"hidden-parent",hidden:true}), child=node({id:"forced-child",parentId:parent.id,hidden:true}), sibling=node({id:"sibling",parentId:parent.id});
+        parent.children=[child,sibling];
+        const model={roots:[parent],nodes:[parent,child,sibling],width:400,height:300};
+        const forced=new Set([child.id]);
+        const view=await f.render(model,{forcedNodeIds:forced});
+        assert.strictEqual(f.canvas.context.draws.filter(d=>d.kind==="image").length,1,"Hidden ancestors and siblings must not paint");
+        assert.strictEqual(f.renderer.hitTest(view.x+101,view.y+201),child);
+        assert(child.hidden && parent.hidden,"Visibility overrides must not mutate source nodes");
+        await f.render(model,{forcedNodeIds:new Set()});
+        assert(!f.canvas.context.draws.some(d=>d.kind==="image"));
+        const exported=await f.renderer.exportImage(model,null,{forcedNodeIds:forced});
+        assert(exported.width>0 && exported.height>0,"Forced pixels participate in clipboard export");
+        f.renderer.dispose();
+    });
+    await test("forced containers respect descendants' own visibility and manual hiding",async()=>{
+        const {hiddenNodes}=require("../bin/resources/app/plugins/goowee-preview/preview-renderer");
+        const parent=node({id:"parent",hidden:true}), visible=node({id:"visible",parentId:parent.id}), hidden=node({id:"hidden",hidden:true,parentId:parent.id});
+        parent.children=[visible,hidden];
+        const model={roots:[parent],nodes:[parent,visible,hidden]};
+        assert.deepStrictEqual([...hiddenNodes(model,null,new Set([parent.id]))],[hidden]);
+        assert(hiddenNodes(model,new Set([visible.id]),new Set([parent.id])).has(visible));
+        assert(!hiddenNodes(model,new Set([visible.id]),new Set([visible.id])).has(visible));
+    });
     await test("source selection outlines hidden controls without revealing pixels or hit targets",async()=>{
         const f=fixture(), parent=node({id:"parent",hidden:true}), child=node({id:"child",x:120,y:210,parentId:"parent"});
         parent.children=[child];

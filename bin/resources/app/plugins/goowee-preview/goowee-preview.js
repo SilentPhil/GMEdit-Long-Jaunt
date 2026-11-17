@@ -10,8 +10,9 @@
     var prefs, dock, scene, selectedId, timer, frame, textContext, active = false, visible = false;
     var entryByFile = new WeakMap();
     var entryChoices = [], entryChoiceFile = null;
-    var hideSelectedButton, showAllButton, visibilityByFile = new WeakMap(), visibilityState = null;
+    var hideSelectedButton, showAllButton, resetForcesButton, visibilityByFile = new WeakMap(), visibilityState = null;
     var nodeKeys = new Map(), nodesById = new Map(), hiddenNodeIds = new Set(), effectiveHiddenIds = new Set();
+    var forcedNodeIds = new Set();
     var listeners = [], command, paletteCommand, hideCheckbox;
     var localization, localizationProject, localizationSignature;
     var view, panX = 0, panY = 0, zoomAnchor, spaceDown = false, stageHovered = false, drag, suppressCanvasClick = false;
@@ -348,7 +349,7 @@
             record = {project: Project.current, entries: new Map()}; visibilityByFile.set(currentFile, record);
         }
         var entry = scene.entry || "";
-        if (!record.entries.has(entry)) record.entries.set(entry, {hidden: new Set(), history: []});
+        if (!record.entries.has(entry)) record.entries.set(entry, {hidden: new Set(), forces: {drawing: new Set()}, history: []});
         visibilityState = record.entries.get(entry);
         nodeKeys = new Map(); nodesById = new Map();
         var groups = new Map(), bases = new Map(), codenames = new Map();
@@ -382,6 +383,10 @@
         if (!scene.sourceIncomplete) {
             var availableKeys = new Set(nodeKeys.values());
             visibilityState.hidden.forEach(function(key) { if (!availableKeys.has(key)) visibilityState.hidden.delete(key); });
+            Object.keys(visibilityState.forces).forEach(function(kind) {
+                var overrides = visibilityState.forces[kind];
+                Array.from(overrides.keys()).forEach(function(key) { if (!availableKeys.has(key)) overrides.delete(key); });
+            });
             visibilityState.history = visibilityState.history.filter(function(key) { return visibilityState.hidden.has(key); });
         }
         selectedId = previous === visibilityState && selectionKey ?
@@ -389,20 +394,16 @@
         resolveVisibility();
     }
     function resolveVisibility() {
-        hiddenNodeIds = new Set(); effectiveHiddenIds = new Set();
+        hiddenNodeIds = new Set(); effectiveHiddenIds = new Set(); forcedNodeIds = new Set();
         if (!scene || !visibilityState) return;
         scene.nodes.forEach(function(node) {
             if (visibilityState.hidden.has(nodeKeys.get(node.id))) hiddenNodeIds.add(node.id);
+            if (visibilityState.forces.drawing.has(nodeKeys.get(node.id))) forcedNodeIds.add(node.id);
         });
-        scene.nodes.forEach(function(node) {
-            var current = node, visited = new Set();
-            while (current && !visited.has(current.id)) {
-                if (current.hidden || hiddenNodeIds.has(current.id)) { effectiveHiddenIds.add(node.id); break; }
-                visited.add(current.id); current = nodesById.get(current.parentId);
-            }
-        });
+        GooWeePreviewRenderer.hiddenNodes(scene, hiddenNodeIds, forcedNodeIds).forEach(function(node) { effectiveHiddenIds.add(node.id); });
     }
     function updateVisibilityControls() {
+        if (resetForcesButton) resetForcesButton.disabled = !hasForces();
         if (hideSelectedButton) hideSelectedButton.disabled = !scene || !nodesById.has(selectedId) || effectiveHiddenIds.has(selectedId) || !!currentReference();
         if (showAllButton) showAllButton.disabled = !visibilityState || !visibilityState.hidden.size;
         if (tree) tree.querySelectorAll(".gw-node").forEach(function(button) {
@@ -422,6 +423,7 @@
         var key = nodeKeys.get(selectedId);
         if (!key || visibilityState.hidden.has(key)) return;
         visibilityState.hidden.add(key); visibilityState.history.push(key);
+        visibilityState.forces.drawing.delete(key);
         visibilityChanged();
     }
     function undoHide() {
@@ -434,6 +436,75 @@
         if (!visibilityState || !visibilityState.hidden.size) return;
         visibilityState.hidden.clear(); visibilityState.history = [];
         visibilityChanged();
+    }
+    function hasForces() {
+        return !!visibilityState && Object.keys(visibilityState.forces).some(function(kind) { return visibilityState.forces[kind].size > 0; });
+    }
+    function resetForces() {
+        if (!hasForces()) return;
+        // Every force kind owns a Set/Map keyed by the stable element key.
+        // Reset the registry, including future force kinds, then rebuild so
+        // overrides affecting evaluation/layout also revert to source values.
+        Object.keys(visibilityState.forces).forEach(function(kind) { visibilityState.forces[kind].clear(); });
+        refresh();
+    }
+    function elementContextMenu(event, node) {
+        event.preventDefault(); event.stopPropagation();
+        if (!node || !visibilityState) return;
+        selectNode(node, false);
+        $gmedit["electron.MenuFallback"].popupMenu(elementMenu(node), {x: event.clientX, y: event.clientY});
+    }
+    function elementMenu(node) {
+        var state = visibilityState, key = nodeKeys.get(node.id), checked = state.forces.drawing.has(key);
+        var menu = new Electron_Menu();
+        menu.append(new Electron_MenuItem({label: "Force drawing", type: "checkbox", checked: checked, click: function() {
+            if (!active || visibilityState !== state) return;
+            if (checked) state.forces.drawing.delete(key);
+            else { state.forces.drawing.add(key); state.hidden.delete(key); }
+            visibilityChanged();
+        }}));
+        menu.append(new Electron_MenuItem({label: "Select and center", click: function() {
+            if (!active || visibilityState !== state) return;
+            if (!visible) setVisible(true, true);
+            else if (dock) dock.set(title);
+            clearTimeout(sourceSelectionTimer);
+            var target = scene && scene.nodes.find(function(n) { return nodeKeys.get(n.id) === key; });
+            if (!target || visibilityState !== state) return;
+            if (currentReference()) { referenceShow.checked = false; updateReference(); }
+            selectNode(target, false);
+            centerNodeId = target.id;
+            requestDraw();
+        }}));
+        menu.append(new Electron_MenuItem({label: state.hidden.has(key) ? "Unhide" : "Hide", click: function() {
+            if (!active || visibilityState !== state) return;
+            if (state.hidden.has(key)) {
+                state.hidden.delete(key);
+                state.history = state.history.filter(function(previous) { return previous !== key; });
+            } else {
+                state.hidden.add(key);
+                state.history.push(key);
+                state.forces.drawing.delete(key);
+            }
+            visibilityChanged();
+        }}));
+        return menu;
+    }
+    function editorContextMenu(context) {
+        if (!active || !scene || !visibilityState) return;
+        var editor = context.editor, buffer = editor.session, file = buffer && buffer.gmlFile;
+        if (!file || !file.path) return;
+        var event = context.event;
+        var pos = event && (event.clientX || event.clientY) ? editor.renderer.screenToTextCoordinates(event.clientX, event.clientY) : editor.getCursorPosition();
+        var range = GooWeePreviewSourceSelection.wordRange(buffer.getLine(pos.row), pos.row, pos.column);
+        if (!range) return;
+        var resource = getResources(), sourcePath = resource.relativeSourcePath(file.path);
+        if (!sourcePath) return;
+        var node = GooWeePreviewSourceSelection.find(scene.nodes, buffer.getValue(), range,
+            function(path) { return (path == null ? sourcePath : resource.relativeSourcePath(path) || "").toLowerCase(); }, selectedId);
+        if (!node) return;
+        var item = new Electron_MenuItem({label: "GUI Element on preview", submenu: elementMenu(node)});
+        var index = context.items.findIndex(function(item) { return item.id === "sub-search"; });
+        context.items.splice(index >= 0 ? index + 1 : 0, 0, item);
     }
     function scheduleSourceSelection() {
         clearTimeout(sourceSelectionTimer);
@@ -457,7 +528,7 @@
         tree.querySelectorAll(".gw-node").forEach(function(button) { button.setAttribute("aria-pressed", button.dataset.id === String(selectedId) ? "true" : "false"); });
         selection.textContent = node ? node.name + " · " + node.type + " · L" + node.line + " · " +
             Math.round(node.width) + " × " + Math.round(node.height) + " at " + Math.round(node.x) + ", " + Math.round(node.y) +
-            (node.approximate ? " · approximate" : "") + (node.hidden ? " · hidden by source" : effectiveHiddenIds.has(node.id) ? " · hidden in preview" : "") :
+            (node.approximate ? " · approximate" : "") + (forcedNodeIds.has(node.id) ? " · forced drawing" : node.hidden ? " · hidden by source" : effectiveHiddenIds.has(node.id) ? " · hidden in preview" : "") :
             "Select an element to inspect it; double-click to open its source line.";
         function unitText(value) { return value && value.unit ? value.unit + "(" + (typeof value.value === "number" ? value.value : "?") + ")" : "ABS(" + (typeof value === "number" ? value : "?") + ")"; }
         if (node && node.size) selection.textContent += " · size " + node.size.map(unitText).join(" × ");
@@ -475,6 +546,7 @@
             button.style.paddingLeft = (8 + Math.min(depth, 20) * 12) + "px";
             button.title = (node.sourcePath || "Current script") + ":" + node.line + " · double-click to navigate";
             button.onclick = function() { selectNode(node, false); };
+            button.oncontextmenu = function(event) { elementContextMenu(event, node); };
             button.ondblclick = function() { selectNode(node, true); };
             button.onkeydown = function(event) { if (event.key === "Enter") { event.preventDefault(); selectNode(node, true); } };
             node.children.forEach(function(child) { add(child, depth + 1); });
@@ -686,7 +758,7 @@
         copying = true; updateCopy(); var version = ++copyVersion;
         var message;
         try {
-            var image = await renderer.exportImage(scene, currentReference(), {sharpPixels: prefs.sharpPixels, hiddenNodeIds: hiddenNodeIds}), electron = window.Electron_API;
+            var image = await renderer.exportImage(scene, currentReference(), {sharpPixels: prefs.sharpPixels, hiddenNodeIds: hiddenNodeIds, forcedNodeIds: forcedNodeIds}), electron = window.Electron_API;
             if (!active || version !== copyVersion) return;
             if (!electron && typeof window.require === "function") {
                 try { electron = window.require("electron"); } catch (_) { }
@@ -721,6 +793,7 @@
             outlines: prefs.outlines, approximateOutlines: prefs.approximateOutlines, selected: selectedId, hovered: hoveredId,
             panX: panX, panY: panY, reference: currentReference(), sharpPixels: prefs.sharpPixels,
             hiddenNodeIds: hiddenNodeIds,
+            forcedNodeIds: forcedNodeIds,
             surface: {container: canvasSurface, viewport: stage}
         };
         view = renderer.render(scene, options);
@@ -974,6 +1047,11 @@
         showAllButton.title = "Show all elements hidden in this preview (U)";
         showAllButton.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M1 8s2.5-4 7-4 7 4 7 4-2.5 4-7 4-7-4-7-4z"/><circle cx="8" cy="8" r="2"/></svg>';
         showAllButton.onclick = function() { stage.focus({preventScroll: true}); showAllHidden(); };
+        resetForcesButton = element("button", "gw-reset-forces", null, toolbar); resetForcesButton.type = "button";
+        resetForcesButton.setAttribute("aria-label", "Reset all forces");
+        resetForcesButton.title = "Reset all forced overrides for every element in this preview";
+        resetForcesButton.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M3 5a5 5 0 1 1-1 5M3 1v4h4"/><path d="m7 6 3 4m0-4-3 4"/></svg>';
+        resetForcesButton.onclick = resetForces;
         updateVisibilityControls();
         followSelectionButton = element("button", "gw-follow-selection", null, toolbar); followSelectionButton.type = "button";
         followSelectionButton.setAttribute("aria-label", "Follow code selection");
@@ -1082,6 +1160,15 @@
         canvas = element("canvas", "", null, canvasSurface); canvas.setAttribute("aria-label", "GooWee layout preview; use Elements below for keyboard navigation");
         empty = element("div", "gw-empty", "", stage);
         canvas.onclick = function(event) { if (currentReference() || event.button !== 0 || spaceDown || drag || suppressCanvasClick) return; selectNode(hitAt(event.clientX, event.clientY, event.ctrlKey), false); };
+        canvas.oncontextmenu = function(event) {
+            if (currentReference() || drag) { event.preventDefault(); return; }
+            var node = hitAt(event.clientX, event.clientY, event.ctrlKey), selected = nodesById.get(selectedId);
+            if (selected && effectiveHiddenIds.has(selected.id) && view) {
+                var rect = canvas.getBoundingClientRect(), x = (event.clientX - rect.left - view.x) / view.scale, y = (event.clientY - rect.top - view.y) / view.scale;
+                if (x >= selected.x && y >= selected.y && x <= selected.x + selected.width && y <= selected.y + selected.height) node = selected;
+            }
+            elementContextMenu(event, node);
+        };
         canvas.ondblclick = function(event) { if (currentReference() || event.button !== 0 || spaceDown || drag || suppressCanvasClick) return; selectNode(hitAt(event.clientX, event.clientY, event.ctrlKey), true); };
         var details = element("div", "gw-details", null, outer);
         var elements = element("details", "", null, details);
@@ -1105,6 +1192,7 @@
             active = true;
             buildUI();
             listen(GMEdit, "activeFileChange", bindFile);
+            listen(GMEdit, "editorContextMenu", editorContextMenu);
             listen(GMEdit, "fileClose", function(event) {
                 var closed = event && event.file;
                 if (closed) visibilityByFile.delete(closed);
@@ -1153,7 +1241,8 @@
             entryChoices = []; entryChoiceFile = null;
             visibilityByFile = new WeakMap(); visibilityState = null;
             nodeKeys.clear(); nodesById.clear(); hiddenNodeIds.clear(); effectiveHiddenIds.clear();
-            hideSelectedButton = showAllButton = null;
+            forcedNodeIds.clear();
+            hideSelectedButton = showAllButton = resetForcesButton = null;
             pinned = null; sceneFile = null; lockButton = null; copyButton = null; copyStatus = null;
             referenceToggle = referenceToolbar = referenceShow = referenceFile = referenceName = referenceError = referenceLockButton = null;
             referenceLocked = false;

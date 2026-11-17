@@ -20,6 +20,29 @@ does not remove other panels. **Toggle GooWee preview** is also available in the
 command palette.
 
 - Select an entry function when a script contains several UI factories.
+- Right-click an element variable in the code to open **GUI Element on preview**.
+  This submenu uses the same actions as the element's preview context menu and
+  also works for hidden elements and dependencies of a locked preview. It uses
+  the identifier under the pointer, independently of the follow-selection toggle.
+  The element must exist in the currently analyzed preview.
+- **Select and center** selects the element and centers the view at the current
+  zoom even with automatic selection disabled. It reveals the preview panel and
+  switches from the reference image to the GUI when needed. **Hide / Unhide**
+  toggles manual preview hiding; Unhide restores source-driven visibility, while
+  **Force drawing** can override elements hidden by the source. Menu hiding also
+  participates in the existing undo-hide and show-all commands.
+- Right-click an element (Ctrl for a nested element) or its **Elements** row and
+  check **Force drawing** to override its visibility in the preview. For a hidden
+  element selected from code, right-click its selection frame. Hidden ancestors
+  do not block the forced element, but unrelated siblings remain hidden. Child
+  elements retain their own visibility flags. The override also applies to image
+  copying and survives Refresh per file/function during this session. Uncheck it
+  to restore source-driven visibility; game code is never modified.
+- **Reset all forces** (the circular-arrow icon beside the visibility buttons)
+  clears every forced override for all elements in the current file/function and
+  rebuilds the preview. It is disabled when no forces are active. New force kinds
+  belong in the per-entry `forces` registry as a Set or Map of stable element keys;
+  the shared reset clears all registered kinds, including future ones.
 - Highlight an element's variable name in the code to select it and center the
   preview without changing zoom. The crosshair button toggles this behavior and
   remembers the setting. This also works in a dependency's tab while the preview

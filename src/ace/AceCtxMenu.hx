@@ -180,7 +180,12 @@ class AceCtxMenu {
 			var um = editor.session.getUndoManager();
 			undo.enabled = um.hasUndo();
 			redo.enabled = um.hasRedo();
-			menu.popupAsync(ev);
+			// Build a disposable item list so plugins can add context-dependent
+			// actions without retaining them in the editor's persistent menu.
+			var context = {editor: editor, event: ev, items: menu.items.copy()};
+			plugins.PluginEvents.editorContextMenu(context);
+			electron.MenuFallback.contextEvent = ev;
+			electron.MenuFallback.popupMenu(cast {items: context.items}, {async: true});
 			return false;
 		});
 		//

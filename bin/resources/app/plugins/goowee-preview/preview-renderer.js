@@ -5,6 +5,25 @@
 })(typeof window !== "undefined" ? window : null, function() {
     "use strict";
 
+    function hiddenNodes(scene, hiddenIds, forcedIds) {
+        var all = new Set(), byId = new Map(), parents = new Map(), pending = (scene.nodes || []).concat(scene.roots || []);
+        while (pending.length) {
+            var node = pending.pop(); if (!node || all.has(node)) continue;
+            all.add(node); byId.set(node.id, node);
+            (node.children || []).forEach(function(child) { parents.set(child, node); pending.push(child); });
+        }
+        var hidden = new Set();
+        all.forEach(function(node) {
+            var current = node, seen = new Set();
+            while (current && !seen.has(current)) {
+                seen.add(current);
+                if (forcedIds && forcedIds.has(current.id)) break;
+                if (current.hidden || hiddenIds && hiddenIds.has(current.id)) { hidden.add(node); break; }
+                current = byId.get(current.parentId) || parents.get(current);
+            }
+        });
+        return hidden;
+    }
     function color(value, fallback) {
         if (typeof value === "number" && Number.isFinite(value)) {
             return "rgb(" + (value & 255) + "," + ((value >> 8) & 255) + "," + ((value >> 16) & 255) + ")";
@@ -419,42 +438,20 @@
             }
             return rect;
         }
-        function manuallyHiddenNodes(scene, ids) {
-            var hidden = new Set();
-            if (!ids || !ids.size) return hidden;
-            var all = new Set(), byId = new Map(), children = new Map();
-            var pending = (scene.nodes || []).concat(scene.roots || []);
-            while (pending.length) {
-                var node = pending.pop();
-                if (!node || all.has(node)) continue;
-                all.add(node); byId.set(node.id, node);
-                children.set(node, new Set(node.children || []));
-                (node.children || []).forEach(function(child) { pending.push(child); });
-            }
-            // Some separately rendered canvases are also roots. Their logical
-            // parent still owns their visibility, irrespective of paint order.
-            all.forEach(function(node) {
-                var parent = byId.get(node.parentId);
-                if (parent) children.get(parent).add(node);
-                if (ids.has(node.id)) pending.push(node);
-            });
-            while (pending.length) {
-                var current = pending.pop();
-                if (!current || hidden.has(current)) continue;
-                hidden.add(current);
-                var nested = children.get(current);
-                if (nested) nested.forEach(function(child) { pending.push(child); });
-            }
-            return hidden;
-        }
         function bounds(scene, contentOnly, excluded) {
             var nodes = [], visited = new Set();
+            excluded = excluded || hiddenNodes(scene);
             function include(rect, clip) {
                 var visible = intersect(clip, rect);
                 if (visible.width > 0 && visible.height > 0) nodes.push(visible);
             }
             function visit(n, clip) {
-                if (n.hidden || excluded && excluded.has(n) || visited.has(n)) return;
+                if (visited.has(n)) return;
+                if (excluded.has(n)) {
+                    visited.add(n);
+                    (n.children || []).forEach(function(child) { visit(child, n.clipChildren ? intersect(clip, n) : clip); });
+                    return;
+                }
                 visited.add(n);
                 var visible = intersect(clip,n);
                 if (!contentOnly) include(n, clip);
@@ -489,7 +486,7 @@
             reference = referenceWidth > 0 && referenceHeight > 0 ? reference : null;
             var hasScene = scene && scene.roots && scene.roots.length;
             if (!hasScene && reference) scene = {roots: [], width: referenceWidth, height: referenceHeight};
-            var manuallyHidden = manuallyHiddenNodes(scene, options.hiddenNodeIds);
+            var manuallyHidden = hiddenNodes(scene, options.hiddenNodeIds, options.forcedNodeIds);
             nineSliceScale = Number.isFinite(scene.guiScale) && scene.guiScale > 0 ? scene.guiScale : 1;
             var exporting = !!exportContext;
             var contentBox = reference ? bounds(scene) : null;
@@ -497,7 +494,7 @@
                 y: exporting ? 0 : contentBox.y + (Number.isFinite(reference.y) ? reference.y : 0), width: referenceWidth, height: referenceHeight} : null;
             // Hiding is a view filter: layout, Fit and reference alignment stay
             // fixed. The exported image is cropped to the remaining visible UI.
-            var box = exporting ? referenceBox || bounds(scene, true, manuallyHidden) : options.viewport ? {x: 0, y: 0, width: scene.width, height: scene.height} : contentBox || bounds(scene);
+            var box = exporting ? referenceBox || bounds(scene, true, manuallyHidden) : options.viewport ? {x: 0, y: 0, width: scene.width, height: scene.height} : contentBox || bounds(scene, false, hiddenNodes(scene, null, options.forcedNodeIds));
             if (exporting) {
                 var right = Math.ceil(box.x + box.width), bottom = Math.ceil(box.y + box.height);
                 box = {x: Math.floor(box.x), y: Math.floor(box.y), width: right - Math.floor(box.x), height: bottom - Math.floor(box.y)};
@@ -558,7 +555,15 @@
             var visited = new Set();
             usedImages.clear();
             function drawNode(node, depth, clip) {
-                if (node.hidden || manuallyHidden.has(node) || visited.has(node)) return;
+                if (visited.has(node)) return;
+                if (manuallyHidden.has(node)) {
+                    visited.add(node);
+                    var hiddenClip = node.clipChildren ? intersect(clip, node) : clip;
+                    if (node.clipChildren) { ctx.save(); applyClip(hiddenClip); }
+                    (node.children || []).forEach(function(child) { drawNode(child, depth + 1, hiddenClip); });
+                    if (node.clipChildren) ctx.restore();
+                    return;
+                }
                 visited.add(node);
                 ctx.save();
                 if (Number.isFinite(node.alpha)) ctx.globalAlpha *= Math.max(0, Math.min(1, node.alpha));
@@ -704,7 +709,7 @@
             // Snapshot the view filter before loading assets asynchronously.
             // Undo/show-all in the editor must not change an in-flight copy.
             var hiddenNodeIds = new Set(options && options.hiddenNodeIds || []);
-            var renderOptions = {reference: reference, sharpPixels: options && options.sharpPixels === true, hiddenNodeIds: hiddenNodeIds};
+            var renderOptions = {reference: reference, sharpPixels: options && options.sharpPixels === true, hiddenNodeIds: hiddenNodeIds, forcedNodeIds: new Set(options && options.forcedNodeIds || [])};
             if (!exportContext) {
                 // Export has its own canvas, caches and camera: copying never
                 // resizes the live view or changes its hit-test coordinates.
@@ -779,5 +784,5 @@
             dispose: function() { alive = false; this.clearImages(); painted = []; paintedDepths = []; paintedClips = []; paintedBounds = []; }
         };
     }
-    return {create: create, color: color};
+    return {create: create, color: color, hiddenNodes: hiddenNodes};
 });

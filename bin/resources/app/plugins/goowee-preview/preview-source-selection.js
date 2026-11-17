@@ -39,5 +39,13 @@
         return {x: width / 2 - ((node.x + node.width / 2) * view.scale + view.x),
             y: height / 2 - ((node.y + node.height / 2) * view.scale + view.y)};
     }
-    return {find: find, centerOffset: centerOffset};
+    function wordRange(line, row, column) {
+        if (!Number.isInteger(column) || column < 0 || column > line.length) return null;
+        if (!/[A-Za-z_0-9]/.test(line[column] || "")) return null;
+        var start = column, end = column;
+        while (start > 0 && /\w/.test(line[start - 1])) start--;
+        while (end < line.length && /\w/.test(line[end])) end++;
+        return /^[A-Za-z_]\w*$/.test(line.slice(start, end)) ? {start:{row:row,column:start},end:{row:row,column:end}} : null;
+    }
+    return {find: find, centerOffset: centerOffset, wordRange: wordRange};
 });
