@@ -22,6 +22,53 @@ using tools.ERegTools;
  * @author YellowAfterlife
  */
 @:keep class GmlAPILoader {
+	/** Registered by Constructor while enabled; the core does not read plugin settings. */
+	public static var runtimeFnamesProvider(default, null):GmlRuntimeFnamesProvider = null;
+	static var unreadableRuntimeFnames:String = null;
+	public static function registerRuntimeFnamesProvider(provider:GmlRuntimeFnamesProvider):Void {
+		runtimeFnamesProvider = provider;
+		refreshRuntimeFnames();
+	}
+	public static function unregisterRuntimeFnamesProvider(provider:GmlRuntimeFnamesProvider):Void {
+		if (runtimeFnamesProvider != provider) return;
+		runtimeFnamesProvider = null;
+		refreshRuntimeFnames();
+	}
+	public static function hasRuntimeFnames(versionName:String):Bool {
+		return FileSystem.canSync && runtimeFnamesProvider != null
+			&& runtimeFnamesProvider.supportsVersion(versionName);
+	}
+	public static function usesRuntimeFnames(versionName:String):Bool {
+		return Preferences.current.apiFnamesRuntime != null
+			&& Preferences.current.apiFnamesRuntime[versionName] == true;
+	}
+	public static function getRuntimeFnamesPath(versionName:String):String {
+		if (!hasRuntimeFnames(versionName)) return null;
+		try {
+			var path = runtimeFnamesProvider.getPath(versionName);
+			if (path != null && path != unreadableRuntimeFnames
+				&& FileSystem.existsSync(path) && FileSystem.statSync(path).isFile()) return path;
+		} catch (error:Dynamic) {
+			js.html.Console.warn("Could not resolve runtime fnames:", error);
+		}
+		return null;
+	}
+	/** Called after runtime selection, project or runtime search directory changes. */
+	public static function refreshRuntimeFnames():Void {
+		var version = GmlAPI.version;
+		if (version != null && usesRuntimeFnames(version.name)) reloadFnames();
+		ui.preferences.PrefFnames.refresh();
+	}
+	public static function reloadFnames():Void {
+		GmlAPI.init();
+		ace.AceTooltips.resetCache();
+		// Repaint all visible editors, including secondary editor panes.
+		for (element in Main.document.querySelectorAll(".ace_editor")) {
+			var editor:ace.AceWrap = (cast element).aceEditor;
+			if (editor != null) editor.session.bgTokenizer.start(0);
+		}
+	}
+
 	static var getContent_rx = new RegExp("\r\n", "g");
 	public static function getCustomFnames(dir:String):Array<String> {
 		var out = [];
@@ -50,14 +97,32 @@ using tools.ERegTools;
 		}
 		return "fnames";
 	}
+	static function loadDefaultFnames(dir:String, versionName:String, fn:String->Void):Void {
+		// Retry files that may have become readable since the last API reload.
+		unreadableRuntimeFnames = null;
+		if (usesRuntimeFnames(versionName)) {
+			var path = getRuntimeFnamesPath(versionName);
+			if (path != null) {
+				getContent(path, function(text) {
+					if (text != null) fn(text);
+					else {
+						unreadableRuntimeFnames = path;
+						getContent(dir + "/fnames", fn);
+					}
+				});
+			} else getContent(dir + "/fnames", fn);
+		} else getContent(dir + "/" + getFnamesFile(dir, versionName), fn);
+	}
 	static function getContent(path:String, fn:String->Void):Void {
 		if (FileSystem.canSync) {
-			var rp = path;
-			if (FileSystem.existsSync(rp)) {
-				var s = FileSystem.readFileSync(rp, "utf8");
-				s = NativeString.replaceExt(s, getContent_rx, "\n");
-				fn(s);
-			} else fn(null);
+			var s:String = null;
+			try {
+				if (FileSystem.existsSync(path)) s = FileSystem.readFileSync(path, "utf8");
+			} catch (error:Dynamic) {
+				js.html.Console.warn('Could not read API file $path:', error);
+			}
+			if (s != null) s = NativeString.replaceExt(s, getContent_rx, "\n");
+			fn(s);
 		} else {
 			FileSystem.readTextFile(path, function(e, s) {
 				fn(e == null ? s : null);
@@ -150,7 +215,11 @@ using tools.ERegTools;
 		for (file in apiFiles) {
 			if (file == "default") {
 				useDefault = true;
-				file = getFnamesFile(dir, ctx.versionName);
+				cx.call(function(_, done) loadDefaultFnames(dir, ctx.versionName, done), null, function(s:String) {
+					if (s != null) ctx.raw = ctx.raw.nzcct("\n", s);
+					else Main.window.alert("Couldn't find fnames in " + dir);
+				});
+				continue;
 			}
 			cx.call(getContent, '$dir/$file', function(s:String) {
 				if (s != null) {
@@ -352,6 +421,10 @@ using tools.ERegTools;
 			#end
 		});
 	}
+}
+typedef GmlRuntimeFnamesProvider = {
+	supportsVersion:String->Bool,
+	getPath:String->Null<String>,
 }
 typedef GmlAPILoadContext = {
 	conf:GmlVersionConfig,

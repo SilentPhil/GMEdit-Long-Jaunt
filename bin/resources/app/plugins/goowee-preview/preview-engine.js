@@ -805,6 +805,8 @@
 		}
 		if (obj && !isUnknown(obj) && own(obj,key)) return obj[key];
 		if(obj && typeof obj==="object" && !obj[valueBrand])return null;
+		// GMEdit's imported Color.* names must be numeric before expressions use them.
+		if (isUnknown(obj) && obj.name === "Color" && own(this.global,"c_" + key)) return this.global["c_" + key];
 		var en = /(?:gw_)?(?:Align|Orientation)\.(left|top|center|right|bottom|horizontal|vertical)$/.exec(name);
 		if (en) return ({left:0,top:0,center:1,right:2,bottom:2,horizontal:0,vertical:1})[en[1]];
 		return unknown(name);

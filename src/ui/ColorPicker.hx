@@ -1,51 +1,49 @@
 package ui;
+import ace.AceWrap;
+import ace.extern.AcePos;
+import ace.extern.AceRange;
+import ace.extern.AceToken;
 import js.lib.RegExp;
-import js.html.Event;
-import js.html.InputElement;
-import Main.aceEditor;
 
-/**
- * If you, dear reader, are enthusiastic about color pickers,
- * consider writing a proper one and sending a pull request.
- * @author YellowAfterlife
- */
+/** Edits a color literal in its original session, independent of selection. */
 class ColorPicker {
-	public static var element:InputElement;
 	public static var rxGml:RegExp;
-	private static var rxJs:RegExp;
-	private static var prefix:String;
-	private static var isBGR:Bool = true;
-	private static function changed(e:Event) {
-		aceEditor.session.selection.selectWord();
-		var word = aceEditor.getSelectedText();
-		var curr = rxGml.exec(word);
-		if (curr == null) return;
-		var hexc = element.value;
-		hexc = hexc.toUpperCase();
-		var next = rxJs.exec(hexc);
-		if (next == null) return;
-		if (isBGR) {
-			aceEditor.insert(curr[1] + next[3] + next[2] + next[1]);
-		} else {
-			aceEditor.insert(curr[1] + next[1] + next[2] + next[3]);
-		}
-	}
+
 	public static function open(value:String) {
-		var vals = rxGml.exec(value);
-		isBGR = value.charCodeAt(0) != "#".code;
-		element.value = "#" + (isBGR
-			? vals[4] + vals[3] + vals[2]
-			: vals[2] + vals[3] + vals[4]
-		);
-		element.click();
+		var editor = Main.aceEditor;
+		var pos = editor.getCursorPosition();
+		var token = editor.session.getTokenAtPos(pos);
+		if (token != null && token.value == value) openToken(editor, pos, token);
 	}
+
+	public static function openToken(editor:AceWrap, pos:AcePos, token:AceToken):Void {
+		var value = token.value;
+		var vals = rxGml.exec(value);
+		if (vals == null || editor.getOption("readOnly") == true) return;
+		var isBGR = vals[1] != "#";
+		var initial = "#" + (isBGR ? vals[4] + vals[3] + vals[2] : vals[2] + vals[3] + vals[4]);
+		var session = editor.session;
+		var start = session.doc.createAnchor(pos.row, token.start);
+		var end = session.doc.createAnchor(pos.row, token.start + value.length);
+		function detach():Void {
+			start.detach();
+			end.detach();
+		}
+		ColorDialog.show("Change color", initial, function(color) {
+			var range = AceRange.fromPair(start.getPosition(), end.getPosition());
+			detach();
+			if (editor.getOption("readOnly") == true) return;
+			if (session.getTextRange(range) != value) return;
+			// Keeping an unchanged literal also preserves its original letter case.
+			if (color.toLowerCase() == initial.toLowerCase()) return;
+			var hex = color.substring(1).toUpperCase();
+			var next = vals[1] + (isBGR ? hex.substr(4, 2) + hex.substr(2, 2) + hex.substr(0, 2) : hex);
+			session.doc.replace(range, next);
+		}, null, detach);
+	}
+
 	public static function init() {
-		element = cast Main.document.querySelector("#color-picker");
-		element.addEventListener("change", changed);
-		//
 		var hp = "([0-9a-fA-F]{2})";
-		var hp3 = hp + hp + hp;
-		rxGml = new RegExp("^(0x|\\$||#)" + hp3 + "$", "");
-		rxJs = new RegExp("^#" + hp3 + "$", "");
+		rxGml = new RegExp("^(0x|\\$|#)" + hp + hp + hp + "$", "");
 	}
 }

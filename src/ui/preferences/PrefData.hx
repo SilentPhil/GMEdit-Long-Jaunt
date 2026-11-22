@@ -13,6 +13,7 @@ import haxe.DynamicAccess;
 		ukSpelling: false,
 		apiFeatureFlags: [],
 		apiFnames: {},
+		apiFnamesRuntime: {},
 		compMatchMode: PrefMatchMode.AceSmart,
 		compKeywords: true,
 		compFilterSnippets: true,
@@ -173,6 +174,8 @@ typedef PrefDataImpl = {
 	apiFeatureFlags:Array<String>,
 	/** API version name -> directory name inside that version's custom_fnames directory. */
 	apiFnames:DynamicAccess<String>,
+	/** API versions that use the active runtime provider instead of a bundled set. */
+	apiFnamesRuntime:DynamicAccess<Bool>,
 	
 	detectTab:Bool,
 	tabSize:Int,

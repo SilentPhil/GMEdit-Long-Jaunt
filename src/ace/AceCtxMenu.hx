@@ -183,6 +183,32 @@ class AceCtxMenu {
 			// Build a disposable item list so plugins can add context-dependent
 			// actions without retaining them in the editor's persistent menu.
 			var context = {editor: editor, event: ev, items: menu.items.copy()};
+			// A right-click can leave the caret/selection elsewhere. Resolve the
+			// color from the pointer, including the first character of the token.
+			// Ace moves its hidden textarea (a sibling of the scroller) under the
+			// mouse on right-button down. Check bounds, not the event target.
+			var scroller = editor.renderer.scroller;
+			var bounds = scroller.getBoundingClientRect();
+			if (ev.clientX >= bounds.left && ev.clientX < bounds.left + scroller.clientWidth
+				&& ev.clientY >= bounds.top && ev.clientY < bounds.top + scroller.clientHeight
+				&& editor.getOption("readOnly") != true) {
+				var colorPos = editor.renderer.screenToTextCoordinates(ev.clientX, ev.clientY);
+				var colorSession = editor.session;
+				var colorToken = colorSession.getTokenAt(colorPos.row, colorPos.column + 1);
+				if (colorToken != null && colorToken.type == "numeric"
+					&& colorPos.column >= colorToken.start
+					&& colorPos.column < colorToken.start + colorToken.value.length
+					&& ui.ColorPicker.rxGml.test(colorToken.value)) {
+					context.items.unshift(new MenuItem({id: "sep-color", type: MenuItemType.Sep}));
+					context.items.unshift(new MenuItem({
+						id: "change-color",
+						label: "Change color...",
+						click: function() {
+							if (editor.session == colorSession) ui.ColorPicker.openToken(editor, colorPos, colorToken);
+						}
+					}));
+				}
+			}
 			plugins.PluginEvents.editorContextMenu(context);
 			electron.MenuFallback.contextEvent = ev;
 			electron.MenuFallback.popupMenu(cast {items: context.items}, {async: true});

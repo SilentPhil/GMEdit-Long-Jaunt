@@ -2,8 +2,6 @@ package ui;
 import electron.Electron;
 import electron.Menu;
 import gml.file.GmlFileBackup;
-import js.html.Element;
-import js.html.InputElement;
 import js.html.MouseEvent;
 import ui.ChromeTabs;
 import ui.treeview.TreeView;
@@ -32,10 +30,6 @@ class ChromeTabMenu {
 	static var pinAsMenuItems:Array<MenuItem>;
 	static var unpinItem:MenuItem;
 	static var closeIdleItem:MenuItem;
-	static var colorInput:InputElement;
-	static var colorDialog:Element;
-	static var colorTarget:ChromeTab;
-	static var colorInitial:Null<String>;
 	static var resetColorItem:MenuItem;
 	static var copyColorItem:MenuItem;
 	public static function show(el:ChromeTab, ev:MouseEvent) {
@@ -81,82 +75,6 @@ class ChromeTabMenu {
 				var chromeTab:ChromeTab = cast tab;
 				if (test(chromeTab)) chromeTab.closeButton.click();
 			}
-		}
-		function writeClipboard(text:String):Void {
-			if (Electron != null && Electron.clipboard != null) {
-				Electron.clipboard.writeText(text);
-			} else {
-				var clipboard:Dynamic = (Main.window.navigator:Dynamic).clipboard;
-				if (clipboard == null) {
-					electron.Dialog.showWarning("Clipboard access is unavailable.");
-				} else clipboard.writeText(text);
-			}
-		}
-		function pasteColor(text:String, tab:ChromeTab, ?input:InputElement):Void {
-			text = text != null ? StringTools.trim(text) : "";
-			if (!~/^#[0-9a-fA-F]{6}$/.match(text)) {
-				electron.Dialog.showWarning("Clipboard does not contain a valid #RRGGBB color.");
-				return;
-			}
-			if (input != null) input.value = text;
-			if (tab != null) tab.tabColor = text;
-		}
-		function readColorFromClipboard(tab:ChromeTab, ?input:InputElement):Void {
-			if (Electron != null && Electron.clipboard != null) {
-				pasteColor(Electron.clipboard.readText(), tab, input);
-			} else {
-				var clipboard:Dynamic = (Main.window.navigator:Dynamic).clipboard;
-				if (clipboard == null) {
-					electron.Dialog.showWarning("Clipboard access is unavailable.");
-				} else clipboard.readText().then(function(text) pasteColor(text, tab, input));
-			}
-		}
-		function closeColorDialog(apply:Bool):Void {
-			colorDialog.style.display = "none";
-			if (!apply && colorTarget != null) colorTarget.tabColor = colorInitial;
-			colorTarget = null;
-		}
-		colorDialog = Main.document.createDivElement();
-		colorDialog.className = "lw_modal";
-		colorDialog.style.display = "none";
-		Main.document.body.appendChild(colorDialog);
-		var colorOverlay = Main.document.createDivElement();
-		colorOverlay.className = "overlay";
-		colorOverlay.addEventListener("click", function(_) closeColorDialog(false));
-		colorDialog.appendChild(colorOverlay);
-		var colorWindow = Main.document.createDivElement();
-		colorWindow.className = "window";
-		colorDialog.appendChild(colorWindow);
-		colorWindow.appendChild(Main.document.createTextNode("Tab color"));
-		colorWindow.appendChild(Main.document.createBRElement());
-		colorInput = Main.document.createInputElement();
-		colorInput.type = "color";
-		colorInput.value = "#5188d9";
-		colorWindow.appendChild(colorInput);
-		colorInput.addEventListener("input", function(_) {
-			if (colorTarget != null) colorTarget.tabColor = colorInput.value;
-		});
-		var colorButtons = Main.document.createDivElement();
-		colorButtons.className = "buttons";
-		colorWindow.appendChild(colorButtons);
-		function addColorButton(label:String, click:Void->Void):Void {
-			if (colorButtons.childNodes.length > 0) {
-				colorButtons.appendChild(Main.document.createTextNode(" "));
-			}
-			var button = Main.document.createInputElement();
-			button.type = "button";
-			button.value = label;
-			button.addEventListener("click", function(_) click());
-			colorButtons.appendChild(button);
-		}
-		addColorButton("Copy", function() {
-			writeClipboard(colorInput.value.toUpperCase());
-		});
-		addColorButton("Paste", function() {
-			readColorFromClipboard(colorTarget, colorInput);
-		});
-		for (apply in [true, false]) {
-			addColorButton(apply ? "Apply" : "Cancel", function() closeColorDialog(apply));
 		}
 
 		menu = new Menu();
@@ -219,11 +137,12 @@ class ChromeTabMenu {
 			id: "set-color",
 			label: "Set tab color...",
 			click: function() {
-				colorTarget = target;
-				colorInitial = target.tabColor;
-				if (colorInitial != null) colorInput.value = colorInitial;
-				colorDialog.style.display = "";
-				colorInput.focus();
+				var tab = target;
+				var initial = tab.tabColor;
+				ColorDialog.show("Tab color", initial != null ? initial : "#5188d9",
+					function(color) tab.tabColor = color,
+					function(color) tab.tabColor = color,
+					function() tab.tabColor = initial);
 			}
 		}));
 		menu.append(resetColorItem = new MenuItem({
@@ -236,13 +155,16 @@ class ChromeTabMenu {
 			label: "Copy tab color",
 			click: function() {
 				var color = target.tabColor;
-				if (color != null) writeClipboard(color);
+				if (color != null) ColorDialog.writeClipboard(color);
 			}
 		}));
 		menu.append(new MenuItem({
 			id: "paste-color",
 			label: "Paste tab color",
-			click: function() readColorFromClipboard(target)
+			click: function() {
+				var tab = target;
+				ColorDialog.readClipboard(function(color) tab.tabColor = color);
+			}
 		}));
 		menu.appendSep("color-sep");
 		

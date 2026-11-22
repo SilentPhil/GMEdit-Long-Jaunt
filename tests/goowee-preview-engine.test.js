@@ -262,7 +262,7 @@ test("TextStyle effect getters, setters and clones retain project reference sema
 		var plain=new Label(undefined,"Plain");plain.style.text_style=cleared;
 		var state=new Label(undefined,string(style.is_native_sdf)+":"+string(detached.is_native_sdf));
 	}`);
-	assert.deepStrictEqual(node(r,"original").style.sdfEffect,{glowEnable:true,glowStart:0,glowEnd:9,glowColour:"#000000"});
+	assert.deepStrictEqual(node(r,"original").style.sdfEffect,{glowEnable:true,glowStart:0,glowEnd:9,glowColour:0});
 	assert.deepStrictEqual(node(r,"shared").style.sdfEffect,node(r,"original").style.sdfEffect);
 	assert.strictEqual(node(r,"original").style.color,"#ffffff");assert.strictEqual(node(r,"shared").style.color,"#ff0000");
 	assert.deepStrictEqual(node(r,"other").style.sdfEffect,{outlineEnable:true,outlineDistance:4});
@@ -467,6 +467,25 @@ test("colors, visibility and source lines survive analysis", () => {
 	assert.strictEqual(label.style.alignH,2); assert.strictEqual(label.hidden,true); assert.strictEqual(label.line,3);
 	const aliases=preview('function ui(){var a=new Image(undefined,new SpriteImage(s_icon,0,Color.red,1,false,1,0.5));}');
 	assert.strictEqual(aliases.nodes[0].sprite.color,"#ff0000");assert.strictEqual(aliases.nodes[0].sprite.scale9,0.5);
+});
+
+test("imported color constants retain numeric semantics in expressions", () => {
+	const saved = `function ui() {
+		var image = new Image(undefined, new SpriteImage(s_fixture, 0, merge_color(#336699, c_white, 0.25)));
+		var label = new Label(undefined, string(c_white == #ffffff) + "/" + string(c_blue >> 16) + "/" + string(color_get_green(c_dkgray)));
+		if (c_white != #ffffff) image.sprite(new SpriteImage(s_fixture, 0, c_red));
+	}`;
+	const disk = preview(saved), buffer = preview(saved.replace(/\bc_(\w+)\b/g, "Color.$1"));
+	assert.deepStrictEqual(buffer.nodes, disk.nodes);
+	assert.deepStrictEqual(buffer.diagnostics, disk.diagnostics);
+	assert.strictEqual(node(buffer, "label").text, "true/255/64");
+	assert.notStrictEqual(node(buffer, "image").sprite.color, "#ffffff");
+	assert(!buffer.diagnostics.some(note => /finite numeric color/.test(note.message)));
+});
+
+test("declared Color members take precedence over imported color constants", () => {
+	const result = preview('function ui(){var Color={white:#123456};var image=new Image(undefined,new SpriteImage(s_fixture,0,Color.white));}');
+	assert.strictEqual(node(result, "image").sprite.color, "#123456");
 });
 
 test("arbitrary JavaScript, property constructors and filesystem names cannot execute", () => {
