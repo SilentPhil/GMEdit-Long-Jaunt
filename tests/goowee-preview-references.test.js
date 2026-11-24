@@ -352,4 +352,19 @@ test("a failed shared write restores all local function overrides without alteri
     assert.strictEqual(f.storage.load(second).filePath, "E:\\second.png");
     assert.strictEqual(f.project.config, null);
 });
+test("reference locks persist per entry for shared and local images", () => {
+    const f=fixture();
+    const first=f.storage.context(f.project,"scripts/menu/menu.gml","first","first");
+    const second=f.storage.context(f.project,"scripts/menu/menu.gml","second","first");
+    f.storage.save(first,"C:/Work/Example/refs/shared.png",1,2,true);
+    f.storage.save(second,"D:/Private/local.png",3,4,false);
+    assert.strictEqual(f.storage.load(first).locked,true);
+    assert.strictEqual(f.storage.load(second).locked,false);
+    const reopened=create(f.preferences,f.projectProperties);
+    assert.strictEqual(reopened.load(first).locked,true);
+    reopened.save(first,"C:/Work/Example/refs/shared.png",1,2,false);
+    assert.strictEqual(reopened.load(first).locked,false);
+    assert.strictEqual(f.storage.load(second).locked,false);
+});
+
 console.log("GooWee reference storage: " + count + " checks passed.");

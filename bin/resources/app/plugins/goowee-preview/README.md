@@ -59,7 +59,9 @@ command palette.
   Root edits and edits to
   the active nested script still update it from unsaved buffers. **Refresh**
   also rebuilds the pinned target. Click the lock again to follow the active tab.
-  Closing the pinned file, changing projects or reloading the plugin releases it.
+  Closing the pinned file releases it. Saved scripts retain their selected function
+  and pin across project switches and plugin reloads; missing files are skipped.
+  Unsaved scripts cannot be restored after reload.
 - Click the **crossed-out eye** or press **H** to hide the selected element and
   its children in the preview. **Ctrl + H** undoes the last hide; repeated presses
   undo earlier hides. The **eye** button or **U** restores all manually hidden
@@ -93,7 +95,8 @@ command palette.
   focused, **arrow keys** move it by 1 pixel; **Shift + arrows** move it by 10.
   The **lock icon beside X/Y** disables dragging and arrow-key movement while
   leaving the X/Y fields editable. Space + left drag and middle drag still pan
-  the view. The offset lock resets to unlocked when the plugin reloads.
+  the view. The offset lock is saved with this reference and restored when returning
+  to its script/function or reloading the plugin. Older records default to unlocked.
   The copy button exports the reference while it is shown. Each entry function
   in a script remembers its own image path and X/Y offsets, including when the
   preview is pinned. Switching the function dropdown restores that function's
@@ -117,9 +120,15 @@ command palette.
   its dropdown (or Script body if there are no entries). Saving that script's
   reference converts its old record to the function-specific format. Other functions
   start without a reference; editing one never changes another function's record.
-  Both visibility toggles remain temporary: the toolbar starts disabled on reload.
+  Both reference visibility toggles are saved separately for each project.
   Unsaved scripts or browser files without a local path can only keep a reference
   in memory until the plugin closes.
+- Preview display settings (checkboxes, viewport size, GUI scale, zoom, dock position,
+  selection tool), the last saved script/function and its pin are stored locally
+  in GMEdit preferences under `gooWeePreview.projects`, keyed by project directory.
+  Switching projects restores their own settings. Existing global display settings
+  provide initial defaults; moving a project to a new path starts a new local profile.
+  Reference records remain in their existing shared/local storage described above.
 - Use **Fit content**, **Fit viewport**, or a fixed zoom with scrolling.
 - Hold **Space** and drag with the **left mouse button** to pan the preview.
   You can also drag with the **middle mouse button**, without holding Space.

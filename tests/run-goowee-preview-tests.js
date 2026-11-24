@@ -707,8 +707,8 @@ async function runBrowserTests() {
     state.openFile(file);await settle();
     check(!canvas.hidden && latestRenderOptions.reference && referenceName.textContent.includes("reference fixture.png") && referenceX.value==="-8" && referenceY.value==="-7",
         "Returning to a GooWee tab must preserve the session reference and its logical offsets");
-    check(state.saveCount===referenceSaveCount && state.projectSaves.length===referenceProjectSaves && JSON.stringify(state.preferences.current)===referencePrefs,
-        "An unnamed script's Blob reference and checkbox states must remain in memory without global or project preference writes");
+    check(state.saveCount>referenceSaveCount && state.projectSaves.length===referenceProjectSaves && !JSON.stringify(state.preferences.current).includes("reference fixture.png"),
+        "Checkbox settings must persist while unnamed Blob references remain session-only");
     referenceToggle.click();emitChange(zoom,"fit");await paint();
 
     // Actual disk files persist by script; project-owned paths are portable.
@@ -886,6 +886,10 @@ function another_window(){var target=new Button(undefined);target.size(120,40);}
         pointer(canvas,"pointerdown",refPoint.x,refPoint.y,4,1);pointer(window,"pointermove",refPoint.x-10,refPoint.y+4,4,1);pointer(window,"pointerup",refPoint.x-10,refPoint.y+4,0,1);await paint();
         check(close(latestView.x,lockedCamera.x+10) && close(latestView.y,lockedCamera.y+14) && referenceX.value==="44" && referenceY.value===lockedOffsets[1],
             "Space-left and middle-button camera panning must keep working while the reference offset is locked");
+        state.openFile(beta);await settle();
+        check(referenceLock.getAttribute("aria-pressed")==="false","An empty reference in another script must not inherit the lock");
+        state.openFile(alpha);await settle();
+        check(referenceLock.getAttribute("aria-pressed")==="true" && projectReferences(referenceProject)[alphaRelative].locked===true,"Reference lock must restore with its saved image and offsets");
         referenceLock.click();await paint();
         pointer(canvas,"pointerdown",refPoint.x,refPoint.y,1,0);pointer(window,"pointermove",refPoint.x+14,refPoint.y+8,1,0);await paint();
         window.dispatchEvent(new Event("blur"));
@@ -1007,6 +1011,7 @@ function another_window(){var target=new Button(undefined);target.size(120,40);}
         relocated.writeConfigJsonFileSync("goowee_preview.json",referenceProject.readConfigJsonFileSync("goowee_preview.json"));
         const relocatedAlpha=state.newFile("alpha",state.fixtureSource,path.join(relocatedDirectory,alphaRelative));
         $gmedit["gml.Project"].current=relocated;GMEdit.emit("projectOpen",{});state.openFile(relocatedAlpha);await settle();
+        if (!referenceToggle.checked) { referenceToggle.click(); await paint(); }
         await waitForReference(()=>referenceName.textContent==="shared-a.png" && !!latestRenderOptions.reference,
             "A moved project must resolve its saved reference relative to its new directory");
         check(referenceX.value==="14" && referenceY.value==="-6" && latestRenderOptions.reference.image.naturalWidth===80 && latestRenderOptions.reference.image.naturalHeight===48,
@@ -1340,8 +1345,18 @@ function duplicate_window() {
         lockedRoot.codeEditor={session:closedSession}; tabs.impl.tabEls.push({gmlFile:lockedRoot});
         state.openFile(lockedRoot); await settle(); lock.click(); await settle();
         $gmedit["gml.Project"].current={...lockProject}; GMEdit.emit("projectOpen",{}); await settle();
-        check(lock.getAttribute("aria-pressed")==="false","Opening a different project must release the previous project's pin");
-        lock.click(); await settle(); $gmedit["gml.Project"].current=null; GMEdit.emit("projectClose",{}); state.openFile(null); await settle();
+        check(lock.getAttribute("aria-pressed")==="true","Reopening the same project directory must restore its pin");
+        const savedLockProject=$gmedit["gml.Project"].current;
+        const projectSharp=panel.querySelector('[aria-label="Sharp pixels"]');
+        projectSharp.checked=true;projectSharp.dispatchEvent(new Event("change"));
+        const secondProject={...lockProject,dir:path.join(lockDirectory,"second-project")};
+        $gmedit["gml.Project"].current=secondProject;GMEdit.emit("projectOpen",{});await settle();
+        check(lock.getAttribute("aria-pressed")==="false","Another project directory must not inherit a pin");
+        projectSharp.checked=false;projectSharp.dispatchEvent(new Event("change"));
+        $gmedit["gml.Project"].current=savedLockProject;GMEdit.emit("projectOpen",{});await settle();
+        check(projectSharp.checked && lock.getAttribute("aria-pressed")==="true","Project-specific flags and the pinned source must restore together");
+        check(entry.value==="other_window" || entry.value==="locked_window","Restoring a project must restore its entry function");
+         $gmedit["gml.Project"].current=null; GMEdit.emit("projectClose",{}); state.openFile(null); await settle();
         check(lock.getAttribute("aria-pressed")==="false" && lock.disabled && closedSession.listenerCount("change")===0,"Closing a project must clear the pin and release its session");
         $gmedit["ui.ChromeTabs"]=savedTabs; $gmedit["gml.GmlAPI"].gmlLookup=savedLookup;
         $gmedit["gml.Project"].current=savedProject; GMEdit.emit("projectOpen",{}); state.openFile(refreshFile); await settle();

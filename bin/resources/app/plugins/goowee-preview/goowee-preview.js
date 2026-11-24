@@ -36,9 +36,83 @@
         if (parent) parent.appendChild(el);
         return el;
     }
-    function save() { Preferences.current.gooWeePreview = prefs; Preferences.save(); }
-    function loadPreferences() {
-        prefs = Preferences.current.gooWeePreview || (Preferences.current.gooWeePreview = {});
+    var settingsProjectKey = null, restoringSource = false, settingsSaveError = "";
+    var settingKeys = ["position","hide","width","height","guiScale","outlines","approximateOutlines","sharpPixels","followSelection","selectionTool","showReferenceControls","showReference","zoom","source","entries"];
+    function projectSettingsKey(project) {
+        if (!project || !project.dir) return null;
+        var path = require("path"), api = /^[A-Za-z]:|^\\\\/.test(project.dir) ? path.win32 : path;
+        var key = api.resolve(project.dir).replace(/\\/g,"/").replace(/\/$/,"");
+        return api === path.win32 ? key.toLowerCase() : key;
+    }
+    function save() {
+        var root = Preferences.current.gooWeePreview || (Preferences.current.gooWeePreview = {});
+        var target = root;
+        if (settingsProjectKey) {
+            if (!root.projects || typeof root.projects !== "object") root.projects = {};
+            target = root.projects[settingsProjectKey] = {};
+        }
+        settingKeys.forEach(function(key) { if (prefs[key] !== undefined) target[key] = prefs[key]; });
+        try { Preferences.save(); settingsSaveError = ""; }
+        catch (error) { settingsSaveError = "Preview settings could not be saved: " + (error.message || error); }
+        if (status) { status.title = settingsSaveError; if (!settingsSaveError) status.textContent = status.textContent.replace(" · settings not saved", ""); if (settingsSaveError && !status.textContent.includes("settings not saved")) status.textContent += " · settings not saved"; }
+    }
+    function rememberSource() {
+        if (restoringSource || !currentFile || !currentFile.path || !scene || sceneFile !== currentFile) return;
+        if (settingsProjectKey && !projectSettingsKey({dir:currentFile.path}).startsWith(settingsProjectKey + "/")) return;
+        var nextSource = {path:currentFile.path, entry:scene.entry || "", locked:!!pinned};
+        if (!settingsSaveError && JSON.stringify(prefs.source) === JSON.stringify(nextSource) && prefs.entries && prefs.entries[currentFile.path] === nextSource.entry) return;
+        prefs.source = nextSource;
+        prefs.entries = prefs.entries || {};
+        prefs.entries[currentFile.path] = scene.entry || "";
+        save();
+    }
+    function restoreSource() {
+        var saved = prefs.source;
+        if (!saved || typeof saved.path !== "string" || typeof saved.entry !== "string") return;
+        restoringSource = true;
+        try {
+            var tabs = $gmedit["ui.ChromeTabs"], files = [GmlFile.current];
+            if (tabs && tabs.impl && tabs.impl.tabEls) Array.prototype.forEach.call(tabs.impl.tabEls, function(tab) { files.push(tab.gmlFile); });
+            var file = files.find(function(file) { return file && file.path === saved.path && file.codeEditor; });
+            if (!file && require("fs").existsSync(saved.path)) file = GmlFile.open(saved.path.split(/[\\/]/).pop(), saved.path);
+            if (!file || !file.codeEditor) return;
+            entryByFile.set(file, saved.entry);
+            if (saved.locked === true) pinned = {file:file, entry:saved.entry || null, project:Project.current};
+            else if (file !== GmlFile.current) GmlFile.open(file.name, file.path);
+        } finally { restoringSource = false; }
+    }
+    function syncPreferences() {
+        if (!outer) return;
+        [["Show bounds","outlines"],["Show approximate bounds","approximateOutlines"],["Sharp pixels","sharpPixels"],["Reference","showReferenceControls"],["Show reference","showReference"]].forEach(function(pair) {
+            var input = outer.querySelector('[aria-label="'+pair[0]+'"]'); if (input) input.checked = !!prefs[pair[1]];
+        });
+        [["Preview viewport width","width"],["Preview viewport height","height"],["GooWee GUI scale","guiScale"]].forEach(function(pair) { outer.querySelector('[aria-label="'+pair[0]+'"]').value = prefs[pair[1]]; });
+        if (!Array.from(zoomSelect.options).some(function(option) {return option.value === prefs.zoom;})) element("option", "", Math.round(Number(prefs.zoom)*100)+"%", zoomSelect).value = prefs.zoom;
+        zoomSelect.value = prefs.zoom;
+        followSelectionButton.setAttribute("aria-pressed", String(prefs.followSelection));
+        outer.querySelectorAll(".gw-tool").forEach(function(button) { button.setAttribute("aria-pressed", String(button.dataset.tool === prefs.selectionTool)); });
+    }
+    function switchProject(closing) {
+        var reveal = visible && outer && outer.clientWidth > 0 && outer.clientHeight > 0;
+        persistReference(); detach(); pinned = null; entryByFile = new WeakMap();
+        visibilityByFile = new WeakMap(); loadPreferences(closing ? null : Project.current);
+        syncPreferences(); resetView(); resetResources();
+        if (!closing) restoreSource();
+        bindFile(closing ? GmlFile.current : undefined); setVisible(!prefs.hide, reveal);
+        if (closing) showEmpty("Open a GooWee script in a project.");
+    }
+    function loadPreferences(project) {
+        settingsSaveError = ""; if (status) status.title = "";
+        var root = Preferences.current.gooWeePreview || (Preferences.current.gooWeePreview = {});
+        settingsProjectKey = projectSettingsKey(arguments.length ? project : Project.current);
+        var stored = settingsProjectKey && root.projects && root.projects[settingsProjectKey];
+        prefs = {};
+        settingKeys.forEach(function(key) { if (root[key] !== undefined && key !== "source" && key !== "entries") prefs[key] = root[key]; });
+        if (!settingsProjectKey) { prefs.source = root.source; prefs.entries = root.entries; }
+        if (stored && typeof stored === "object") Object.assign(prefs, stored);
+        prefs.showReference = prefs.showReference !== false;
+        prefs.showReferenceControls = prefs.showReferenceControls === true;
+        prefs.zoom = /^(fit|viewport)$/.test(prefs.zoom) || Number(prefs.zoom)>=0.02 && Number(prefs.zoom)<=8 ? String(prefs.zoom) : "fit";
         prefs.position = ["right", "bottom", "left-bottom"].includes(prefs.position) ? prefs.position : "right";
         prefs.width = dimension(prefs.width, 1920); prefs.height = dimension(prefs.height, 1080);
         prefs.guiScale = Number(prefs.guiScale) >= 0.25 && Number(prefs.guiScale) <= 4 ? Number(prefs.guiScale) : 1;
@@ -175,6 +249,7 @@
         sourceSelection = editingFile && editingFile.codeEditor && editingFile.codeEditor.session.selection;
         if (sourceSelection) sourceSelection.on("changeSelection", scheduleSourceSelection);
         var file = pinned ? pinned.file : editingFile;
+        if (file && !entryByFile.has(file) && prefs.entries && typeof prefs.entries[file.path] === "string") entryByFile.set(file, prefs.entries[file.path]);
         var next = file && file.codeEditor ? file.codeEditor.session : null;
         // The pinned root still updates, while edits to the active nested script
         // trigger a rebuild against its live buffer instead of its saved source.
@@ -295,6 +370,7 @@
                 return;
             }
             scene = result; sceneFile = currentFile;
+            rememberSource();
             bindVisibility();
             if (result.entries.length) {
                 setEntryChoices(result.entries, result.entry || "", false);
@@ -317,6 +393,7 @@
             }
             status.textContent = (currentFile.name || "Script") + (noEntry ? " · no preview function found" : " · " + result.nodes.length + " elements · static preview" + (result.previewHints ? " · source hints" : ""));
             if (pinned) status.textContent += " · locked";
+            if (settingsSaveError) status.textContent += " · settings not saved";
             status.title = noEntry ? empty.textContent : "Updates from the unsaved editor buffer, indexed project code and explicit preview hints. Unresolved runtime dependencies appear in Preview notes." + (localeInfo.language ? " Localization: " + localeInfo.language + "." : "");
             if (!result.nodes.some(function(node) { return node.id === selectedId; })) selectedId = null;
             buildDetails();
@@ -666,7 +743,7 @@
             if (!entries) { entries = new Map(); referenceSession.set(referenceTargetFile, entries); }
             entries.set(referenceTargetEntry, {project: referenceTargetProject,
                 contextKey: referenceContext && referenceContext.localKey, file: referencePath ? null : file,
-                filePath: referencePath, x: referenceX, y: referenceY, dirty: referenceDirty, error: error || ""});
+                filePath: referencePath, x: referenceX, y: referenceY, locked: referenceLocked, dirty: referenceDirty, error: error || ""});
         }
     }
     function persistReference() {
@@ -674,7 +751,7 @@
         rememberReference();
         if (!referenceDirty || !referencePath || !referenceContext) return;
         try {
-            var record = referenceStore.save(referenceContext, referencePath, referenceX, referenceY);
+            var record = referenceStore.save(referenceContext, referencePath, referenceX, referenceY, referenceLocked);
             referenceDirty = false;
             rememberReference();
             referenceName.title = record.path + " · " + (record.scope === "project" ? "Saved in project settings" : "Saved locally on this computer");
@@ -694,7 +771,7 @@
         if (drag && drag.kind === "reference") endDrag();
         persistReference(); discardPendingReference();
         if (referenceURL) URL.revokeObjectURL(referenceURL);
-        referenceImage = referenceURL = null; referencePath = ""; referenceX = referenceY = 0; referenceDirty = false;
+        referenceImage = referenceURL = null; referencePath = ""; referenceX = referenceY = 0; referenceDirty = false; referenceLocked = false;
         referenceContext = context; referenceTargetFile = currentFile; referenceTargetProject = project;
         referenceTargetEntry = entry; referenceDefaultEntry = defaultEntry;
         referenceName.textContent = "No file selected"; referenceName.title = ""; referenceError.textContent = "";
@@ -704,17 +781,17 @@
         var temporaryEntries = currentFile && referenceSession.get(currentFile);
         var temporary = temporaryEntries && temporaryEntries.get(entry);
         if (temporary && temporary.project === project && (!temporary.contextKey || temporary.contextKey === (context && context.localKey))) {
-            referenceX = temporary.x; referenceY = temporary.y; referencePath = temporary.filePath || "";
+            referenceLocked = temporary.locked === true; referenceX = temporary.x; referenceY = temporary.y; referencePath = temporary.filePath || "";
             referenceDirty = temporary.dirty; referenceError.textContent = temporary.error;
             loadReference(temporary.file, referencePath, true);
         } else if (record) {
-            referencePath = record.filePath; referenceX = record.x; referenceY = record.y;
+            referenceLocked = record.locked === true; referencePath = record.filePath; referenceX = record.x; referenceY = record.y;
             referenceName.textContent = record.filePath.split(/[\\/]/).pop(); referenceName.title = record.path;
             loadReference(null, record.filePath, true);
         }
         referenceInputs.forEach(function(input, index) { input.value = index ? referenceY : referenceX; });
         outer.querySelector(".gw-reference-choose").disabled = !currentFile || entry === null;
-        updateReference();
+        updateReferenceLock();
     }
     function referenceFilePath(file) {
         if (typeof file.path === "string" && file.path) return file.path;
@@ -1039,7 +1116,7 @@
             var custom = zoomSelect.querySelector("[data-custom-zoom]");
             if (!custom) { custom = element("option", "", "", zoomSelect); custom.dataset.customZoom = "true"; }
             custom.value = String(next); custom.textContent = Math.round(next * 1000) / 10 + "%";
-            zoomSelect.value = custom.value; requestDraw();
+            zoomSelect.value = custom.value; prefs.zoom = custom.value; save(); requestDraw();
         }, {passive: false});
     }
     function buildUI() {
@@ -1062,7 +1139,7 @@
             if (pinned) pinned = null;
             else if (sceneFile === currentFile && scene && !lockButton.disabled) pinned = {file: currentFile, entry: scene.entry || null, project: Project.current};
             else return;
-            bindFile(); refresh();
+            rememberSource(); bindFile(); refresh();
         };
         updateLock();
         copyButton = element("button", "gw-copy", null, toolbar); copyButton.type = "button";
@@ -1123,9 +1200,9 @@
         [["fit", "Fit content"], ["viewport", "Fit viewport"], ["0.25", "25%"], ["0.5", "50%"], ["1", "100%"], ["2", "200%"]].forEach(function(pair) {
             var option = element("option", "", pair[1], zoomSelect); option.value = pair[0];
         });
-        zoomSelect.onchange = function() { resetView(); requestDraw(); };
+        zoomSelect.onchange = function() { prefs.zoom = zoomSelect.value; save(); resetView(); requestDraw(); };
         var outlineLabel = element("label", "", null, tools);
-        var outlines = element("input", "", null, outlineLabel); outlines.type = "checkbox"; outlines.checked = prefs.outlines;
+        var outlines = element("input", "", null, outlineLabel); outlines.type = "checkbox"; outlines.setAttribute("aria-label", "Show bounds"); outlines.checked = prefs.outlines;
         outlineLabel.appendChild(document.createTextNode("Bounds"));
         outlines.onchange = function() { prefs.outlines = outlines.checked; save(); requestDraw(); };
         var approximateLabel = element("label", "", null, tools);
@@ -1145,7 +1222,7 @@
         referenceToggle.setAttribute("aria-label", "Reference");
         referenceLabel.appendChild(document.createTextNode("Reference"));
         referenceLabel.title = "Show reference controls for the current script and entry function";
-        referenceToggle.onchange = updateReference;
+        referenceToggle.onchange = function() { prefs.showReferenceControls = referenceToggle.checked; save(); updateReference(); };
         referenceToolbar = element("div", "gw-toolbar gw-reference-toolbar", null, outer); referenceToolbar.hidden = true;
         referenceToolbar.setAttribute("aria-label", "Reference controls");
         ["X", "Y"].forEach(function(axis) {
@@ -1167,7 +1244,7 @@
         referenceLockButton = element("button", "gw-reference-lock", null, referenceToolbar); referenceLockButton.type = "button";
         referenceLockButton.setAttribute("aria-label", "Lock reference offset");
         referenceLockButton.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><rect x="3" y="7" width="10" height="7" rx="1.5"/><path/><path d="M8 10v2"/></svg>';
-        referenceLockButton.onclick = function() { if (drag && drag.kind === "reference") endDrag(); referenceLocked = !referenceLocked; updateReferenceLock(); };
+        referenceLockButton.onclick = function() { if (drag && drag.kind === "reference") endDrag(); referenceLocked = !referenceLocked; referenceDirty = true; persistReference(); updateReferenceLock(); };
         referenceLockButton.setAttribute("aria-pressed", "false");
         referenceLockButton.title = "Lock reference dragging and arrow keys (X/Y fields remain editable)";
         referenceLockButton.querySelector("path").setAttribute("d", "M5 7V5a3 3 0 0 1 6 0");
@@ -1185,7 +1262,7 @@
         referenceShow = element("input", "", null, showReferenceLabel); referenceShow.type = "checkbox"; referenceShow.checked = true;
         referenceShow.setAttribute("aria-label", "Show reference");
         showReferenceLabel.appendChild(document.createTextNode("Show reference"));
-        referenceShow.onchange = updateReference;
+        referenceShow.onchange = function() { prefs.showReference = referenceShow.checked; save(); updateReference(); };
         referenceError = element("span", "gw-reference-error", "", referenceToolbar); referenceError.setAttribute("role", "alert");
         status = element("div", "gw-status", "Open a GooWee script", outer); status.setAttribute("role", "status");
         var workspace = element("div", "gw-workspace", null, outer);
@@ -1243,20 +1320,20 @@
             loadPreferences();
             referenceStore = GooWeePreviewReferences.create(Preferences, ProjectProperties);
             active = true;
-            buildUI();
+            buildUI(); syncPreferences(); restoreSource();
             listen(GMEdit, "activeFileChange", bindFile);
             listen(GMEdit, "editorContextMenu", editorContextMenu);
             listen(GMEdit, "fileClose", function(event) {
                 var closed = event && event.file;
                 if (closed) visibilityByFile.delete(closed);
-                if (pinned && pinned.file === closed) pinned = null;
+                if (pinned && pinned.file === closed) { pinned = null; if (prefs.source) prefs.source.locked = false; save(); }
                 bindFile(closed);
             });
             listen(GMEdit, "fileSave", function() { resetResources(); bindFile(); });
             listen(GMEdit, "fileReload", function() { resetResources(); bindFile(); });
             listen(GMEdit, "fileRename", function() { resetResources(); bindFile(); });
-            listen(GMEdit, "projectOpen", function() { pinned = null; visibilityByFile = new WeakMap(); resetResources(); bindFile(); });
-            listen(GMEdit, "projectClose", function() { pinned = null; visibilityByFile = new WeakMap(); resetResources(); bindFile(GmlFile.current); showEmpty("Open a GooWee script in a project."); });
+            listen(GMEdit, "projectOpen", function() { switchProject(false); });
+            listen(GMEdit, "projectClose", function() { switchProject(true); });
             window.addEventListener("resize", requestDraw);
             listenDOM(window, "beforeunload", persistReference);
             command = {name: "toggleGooWeePreview", exec: function() { setVisible(!visible, true); save(); }};

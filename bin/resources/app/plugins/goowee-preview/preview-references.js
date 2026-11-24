@@ -120,7 +120,9 @@
                 if (!absolute(record.path, flavor(record.path))) return null;
                 filePath = flavor(record.path).normalize(record.path);
             }
-            return {path: record.path, filePath: filePath, x: record.x, y: record.y, scope: scope};
+            var result = {path: record.path, filePath: filePath, x: record.x, y: record.y, scope: scope};
+            if (typeof record.locked === "boolean") result.locked = record.locked;
+            return result;
         }
         function load(ctx) {
             if (!ctx) return null;
@@ -149,7 +151,7 @@
             if (!ctx.project || typeof ctx.project.writeConfigJsonFileSync !== "function") throw new Error("Project reference settings are unavailable.");
             ctx.project.writeConfigJsonFileSync(configFile, data);
         }
-        function save(ctx, imagePath, x, y) {
+        function save(ctx, imagePath, x, y, locked) {
             if (!ctx) throw new Error("Save this script before saving its reference.");
             var imageAPI = flavor(imagePath);
             if (!absolute(imagePath, imageAPI)) throw new Error("A reference must have an absolute file path.");
@@ -157,6 +159,7 @@
             imagePath = imageAPI.normalize(imagePath);
             var relative = ctx.scriptKey && ctx.projectDir && imageAPI === ctx.pathAPI ? relativeInside(ctx.projectDir, imagePath, imageAPI) : null;
             var record = {path: relative ? token + relative : imagePath, x: x, y: y};
+            if (typeof locked === "boolean") record.locked = locked;
             var settings = localSettings(), localRecords = map(settings && settings.localReferences);
             var previousLocal = get(localRecords, ctx.localKey), localEntries = entries(previousLocal, ctx.defaultEntry);
             if (!relative) {
