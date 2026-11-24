@@ -170,6 +170,9 @@ function setupFixture(config) {
         "gml.GmlAPI": {gmlMacros: {DIM: {expr: "sprite_get_width(s_preview_badge)"}}},
         "ui.project.ProjectProperties": {save(project,properties) {state.projectSaves.push({project,properties:JSON.parse(JSON.stringify(properties))});}},
         "electron.Dialog": {showOpenDialog(options,callback) {state.folderOptions=options;callback(state.folderSelection ? [state.folderSelection] : null);}} };
+    window.Electron_Menu = class { constructor(){this.items=[];} append(item){this.items.push(item);} };
+    window.Electron_MenuItem = class { constructor(options){Object.assign(this,options);} };
+    $gmedit["electron.MenuFallback"] = {popupMenu(menu){state.lastMenu=menu;}};
     $gmedit["gml.file.GmlFile"].open = function(name, sourcePath, navigation) { state.externalNavigations.push({name, path: sourcePath, navigation}); };
     window.AceCommands = { add(command) { state.commands.set(command.name, command); }, remove(command) { state.commands.delete(command.name); }, addToPalette(command) { state.palette.add(command); }, removeFromPalette(command) { state.palette.delete(command); } };
     window.aceEditor = { gotoLine(line) { state.navigations.push(line); }, focus() {} };
@@ -359,6 +362,9 @@ async function runBrowserTests() {
     GMEdit.sidebar.set("GooWee Preview");
     await settle();
     let panel = currentPanel();
+    check(panel.querySelector('[data-tool="interactive"]').getAttribute("aria-pressed")==="true", "Interactive selection must be the default tool");
+    check(panel.querySelectorAll(".gw-tools .gw-tool").length===2,"The left toolbar must contain two selection tools");
+    panel.querySelector('[data-tool="all"]').click(); await settle();
     if (state.config.sampleName) {
         const sampleProject=state.loadProject(state.config.projectPath), name=state.config.sampleName;
         sampleProject.properties.gooWeePreview={localeLanguage:"Russian"};
@@ -756,6 +762,54 @@ async function runBrowserTests() {
         referenceToggle.click();await paint();
         check(/no.*file|not.*selected/i.test(referenceName.textContent) && referenceX.value==="0" && referenceY.value==="0",
             "A new saved script must begin with its own empty reference and zero offsets");
+        {
+            const stateSource=`#import "games.keevee.gw"
+function state_window(){
+    var target=new Button(undefined);target.size(120,40);
+    var caption=new Label(target,"Idle");
+    target.mouseover.add(method({caption:caption},function(){caption.text("Hover");}));
+    /* @goowee-preview code
+        preview_state(target,"Custom",function(control){control.size(190,60);caption.text("Custom");});
+    */
+}
+function another_window(){var target=new Button(undefined);target.size(120,40);}
+`;
+            const file=state.newFile("state_preview",stateSource);
+            state.openFile(file);await settle();
+            const target=()=>latestScene.nodes.find(node=>node.name==="target");
+            const hitBox=()=>{const n=target(),box=canvas.getBoundingClientRect();return {clientX:box.left+latestView.x+(n.x+5)*latestView.scale,clientY:box.top+latestView.y+(n.y+5)*latestView.scale};};
+            canvas.dispatchEvent(new MouseEvent("contextmenu",{bubbles:true,cancelable:true,ctrlKey:true,...hitBox()}));await paint();
+            check(state.lastMenu.items.some(item=>item.label==="Preview state") && latestRenderOptions.selected===target().id,"Ctrl-right-click over a caption must select its owning button");
+            panel.querySelector('[data-tool="interactive"]').click();await settle();
+            canvas.dispatchEvent(new MouseEvent("contextmenu",{bubbles:true,cancelable:true,...hitBox()}));
+            check(state.lastMenu.items.some(item=>item.label==="Preview state"),"Interactive tool must expose button states without Ctrl");
+            panel.querySelector('[data-tool="all"]').click();await settle();
+            function stateMenu(){
+                const row=[...panel.querySelectorAll(".gw-node")].find(item=>item.dataset.id===target().id);
+                row.dispatchEvent(new MouseEvent("contextmenu",{bubbles:true,cancelable:true,clientX:20,clientY:20}));
+                return state.lastMenu.items.find(item=>item.label==="Preview state").submenu.items;
+            }
+            async function choose(name){stateMenu().find(item=>item.label===name).click();await settle();}
+            check(stateMenu().find(item=>item.label==="From source").checked,"State menu must initially select From source");
+            await choose("hover");
+            check(target().previewState==="hover" && latestScene.nodes.some(node=>node.text==="Hover"),"Hover menu must apply registered visual callbacks");
+            await choose("Custom");
+            check(target().width===190 && latestScene.nodes.some(node=>node.text==="Custom"),"Manual state must rebuild layout and text");
+            file.codeEditor.session.edit("\n"+stateSource.replace('    var target=', '    var inserted=new Label(undefined,"New");\n    var target='));await settle();
+            check(target().previewState==="Custom" && target().width===190,"State selection must survive changed node ids and source lines");
+            emitChange(entry,"another_window");await settle();
+            check(target().previewState===null,"States must be isolated by entry");
+            emitChange(entry,"state_window");await settle();
+            check(target().previewState==="Custom","Returning to an entry must restore its state");
+            await choose("From source");
+            check(target().width===120 && latestScene.nodes.some(node=>node.text==="Idle"),"From source must discard prior state effects");
+            await choose("pressed");
+            const reset=panel.querySelector(".gw-reset-forces");
+            check(reset && !reset.disabled,"State override must enable Reset forces");reset.click();await settle();
+            check(target().previewState===null && target().width===120,"Reset forces must remove the state override");
+            check(file.codeEditor.session.source.startsWith("\n#import"),"State actions must preserve unsaved editor source");
+            state.openFile(alpha);await settle();
+        }
         const legacy=state.newFile("legacy",state.fixtureSource,path.join(referenceDirectory,legacyRelative));
         state.openFile(legacy);await settle();
         check(latestRenderOptions.reference && referenceName.textContent==="shared-a.png" && referenceX.value==="5" && referenceY.value==="6" && !referenceProject.existsSync("#config/goowee_preview.json"),

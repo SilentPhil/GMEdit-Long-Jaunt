@@ -31,7 +31,7 @@ command palette.
   toggles manual preview hiding; Unhide restores source-driven visibility, while
   **Force drawing** can override elements hidden by the source. Menu hiding also
   participates in the existing undo-hide and show-all commands.
-- Right-click an element (Ctrl for a nested element) or its **Elements** row and
+- Right-click an element (Ctrl prioritizes interactive controls) or its **Elements** row and
   check **Force drawing** to override its visibility in the preview. For a hidden
   element selected from code, right-click its selection frame. Hidden ancestors
   do not block the forced element, but unrelated siblings remain hidden. Child
@@ -135,13 +135,18 @@ command palette.
 - Select an element on the canvas or in **Elements** to inspect its position and
   size and original unit expressions. Double-click, or press Enter in the element
   list, to navigate to its line, including helpers in another script.
-- **Ctrl + click** selects the deepest visible element under the pointer,
-  through overlapping frame/container bounds. Use it to select a text label
-  covered by a separate frame canvas. **Ctrl + double-click** opens that
-  element's source line. Ordinary clicks keep selecting in drawing order.
+- The left toolbar has two square tools: **Select interactive elements** (default)
+  selects Buttons, Textboxes and scroll controls, including custom controls derived
+  from these primitives. Static labels, images and panels are ignored. **Select all
+  elements** retains ordinary selection in drawing order. The tool is remembered.
+- **Ctrl + click / right-click / double-click** prioritizes interactive controls
+  over their nested labels and images. In the all-elements tool, when no interactive
+  control is under the pointer, Ctrl selects the deepest visible element as before.
+  Double-click navigates to the selected element's source. The Elements tree remains
+  available for explicit selection of any node, including hidden/static content.
 - Hovering shows a thin blue outline around the element that a click will select.
-  Holding or releasing **Ctrl** immediately switches the outline to match nested
-  selection, even without moving the pointer. Hover leaves the current selection
+  Holding or releasing **Ctrl** immediately switches the outline to match the selection
+  priority, even without moving the pointer. Hover leaves the current selection
   intact and is hidden while panning or when the pointer leaves the preview.
 - Open **Preview notes** for unresolved values and omitted code. Notes link to
   the relevant source lines. **Refresh** also reloads sprites, fonts and localization.
@@ -221,6 +226,52 @@ their contents with the same bounded interpreter as the rest of the script.
 They do not execute JavaScript, launch the game or modify project files.
 
 ### Compact tags beside normal code
+
+Right-click an element in the canvas or Elements tree and choose **Preview state**.
+Buttons (including controls derived from Button) automatically offer `idle`,
+`hover`, `pressed` and `disabled`. **From source** removes the override;
+**Reset forces** clears all state and drawing overrides. Selection is remembered
+per file, entry and stable element identity for the current plugin session.
+
+Each switch rebuilds from source. Button input flags are set before construction
+continues, then `mouseover` for hover, `mouseover` + `press` for pressed, or
+`mouseout` + `release` for idle/disabled are sampled once after construction.
+The default From source preview leaves callbacks dormant. No click is dispatched.
+Callbacks run only in the bounded interpreter; unsupported game operations still
+produce Preview notes. Animation/tween progression and runtime drawing are not
+simulated. For these cases describe the final visual state explicitly.
+
+Register custom states in a preview annotation (the callback receives the control
+and defaults `self` to it). Instance definitions override matching type definitions:
+
+```gml
+/* @goowee-preview code
+preview_state(button, "Highlighted", function(control) {
+    control.style.background_image = new gw_SpriteImage(s_background, 0, c_yellow);
+    caption.draw_disable();
+    control.size(240, 60);
+});
+*/
+```
+
+For all instances, use a constructor name in a setup block. This can live directly
+in `gw_Button.gml`; its setup is discovered even though the core Button constructor
+is modelled by the preview. A registered state replaces the automatic event recipe
+of the same name. Type callbacks also receive each concrete control:
+
+```gml
+/* @goowee-preview setup
+preview_state("gw_Button", "hover", function(control) {
+    control.mouseover.invoke_all();
+});
+*/
+```
+
+Custom names are arbitrary (up to 80 characters, 64 definitions per target).
+They run after the whole entry has been built, before layout, so they can change
+children, visibility, sprites, tint and size. Only the standard Button names set
+input flags during construction. Returning to From source reconstructs the
+original visual tree without accumulating changes from earlier selections.
 
 For small examples and state changes, add a `// @preview` or `/// @preview`
 tag to the existing statement. There is no need to create a separate preview
@@ -496,7 +547,8 @@ game-specific card classes, menu names or data catalogues.
 Plain builder objects with `.spawn()` methods (such as rough tab buttons) are
 expanded without becoming phantom visual roots. Explicit `DataBind.update()`
 calls sample their construction callback once; runtime arrays provide one labeled
-example item. Click/hover/step handlers remain dormant.
+example item. Click/hover/step handlers remain dormant unless explicitly sampled
+by a selected preview state (see above).
 GMEdit's indexed project macros and enums supply static constants. Entry wrappers
 retain their arguments, so different wrappers can select different states of a
 shared UI factory.

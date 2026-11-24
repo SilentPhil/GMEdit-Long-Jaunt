@@ -748,11 +748,16 @@
             render: render,
             exportImage: exportImage,
             hitTest: function(x, y, options) {
+                if (options && options.preferInteractive && !options.interactiveOnly) {
+                    var interactive = this.hitTest(x, y, {interactiveOnly:true, deep:options.deep});
+                    if (interactive) return interactive;
+                }
                 x = (x - transform.x) / transform.scale;
                 y = (y - transform.y) / transform.scale;
                 var deepest = null, depth = -1, area = Infinity;
                 for (var i = painted.length - 1; i >= 0; i--) {
                     var n = painted[i];
+                    if (options && options.interactiveOnly && !isInteractive(n)) continue;
                     var clip = paintedClips[i];
                     if (clip && !(x >= clip.x && y >= clip.y && x < clip.x + clip.width && y < clip.y + clip.height)) continue;
                     var rect = paintedBounds[i];
@@ -784,5 +789,7 @@
             dispose: function() { alive = false; this.clearImages(); painted = []; paintedDepths = []; paintedClips = []; paintedBounds = []; }
         };
     }
-    return {create: create, color: color, hiddenNodes: hiddenNodes};
+    // layoutType retains the primitive input behavior of custom derived controls.
+    function isInteractive(node) { return !!node && /^(Button|Textbox|Scroll|DragScroll|CanvasScroll|CanvasDragScroll)$/.test(node.layoutType || node.type); }
+    return {create: create, color: color, hiddenNodes: hiddenNodes, isInteractive:isInteractive};
 });

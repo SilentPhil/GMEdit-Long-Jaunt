@@ -46,6 +46,7 @@
         prefs.approximateOutlines = prefs.approximateOutlines !== false;
         prefs.sharpPixels = prefs.sharpPixels === true;
         prefs.followSelection = prefs.followSelection !== false;
+        prefs.selectionTool = prefs.selectionTool === "all" ? "all" : "interactive";
     }
     function dimension(value, fallback) {
         var n = Number(value);
@@ -248,6 +249,7 @@
             var setup = getResources().previewSetup();
             var result = GooWeePreviewEngine.analyze(source, {
                 width: prefs.width, height: prefs.height, scale: prefs.guiScale,
+                selectStates: selectedPreviewStates,
                 entry: pinned ? pinned.entry : entryByFile.get(currentFile), assets: projectAssets(), macros: projectMacros(),
                 macroFunctions: ($gmedit["gml.GmlAPI"] || {}).gmlMFuncs,
                 sourcePath: currentFile.path || "", sourceFor: getResources().sourceFor,
@@ -342,6 +344,50 @@
         aceEditor.gotoLine(Math.max(1, line || 1), 0, true);
         aceEditor.focus();
     }
+    function stableNodeKeys(scene) {
+        var keys = new Map(), localNodes = new Map();
+        var groups = new Map(), bases = new Map(), codenames = new Map();
+        scene.nodes.forEach(function(node) {
+            localNodes.set(node.id, node);
+            if (typeof node.codename === "string" && node.codename) codenames.set(node.codename, (codenames.get(node.codename) || 0) + 1);
+        });
+        scene.nodes.forEach(function(node) {
+            var base = JSON.stringify([(node.sourcePath || "").replace(/\\/g, "/"), node.type, node.name, typeof node.codename === "string" ? node.codename : ""]);
+            var group = JSON.stringify([localNodes.has(node.parentId) ? node.parentId : null, base]);
+            bases.set(node.id, {base: base, group: group});
+            if (!groups.has(group)) groups.set(group, []);
+            groups.get(group).push(node);
+        });
+        function keyFor(node, visiting) {
+            if (keys.has(node.id)) return keys.get(node.id);
+            if (visiting.has(node.id)) return "";
+            visiting.add(node.id);
+            var key;
+            if (typeof node.codename === "string" && codenames.get(node.codename) === 1) key = JSON.stringify(["codename", node.codename]);
+            else {
+                var base = bases.get(node.id), siblings = groups.get(base.group), parent = localNodes.get(node.parentId);
+                // Creation IDs and source line numbers shift while editing. Use
+                // the named source hierarchy instead. A changed duplicate count
+                // deliberately gets new keys rather than hiding a different item.
+                key = (parent ? keyFor(parent, visiting) : "") + "/" + JSON.stringify([base.base, siblings.length, siblings.indexOf(node)]);
+            }
+            visiting.delete(node.id); keys.set(node.id, key); return key;
+        }
+        scene.nodes.forEach(function(node) { keyFor(node, new Set()); });
+        return keys;
+    }
+    function selectedPreviewStates(result) {
+        var record = visibilityByFile.get(currentFile);
+        if (!record || record.project !== Project.current) return null;
+        var saved = record.entries.get(result.entry || "");
+        if (!saved || !saved.forces.states.size) return null;
+        var keys = stableNodeKeys(result), selected = Object.create(null);
+        result.nodes.forEach(function(node) {
+            var name = saved.forces.states.get(keys.get(node.id));
+            if ((node.previewStates || []).indexOf(name) >= 0) selected[node.previewStateKey] = name;
+        });
+        return selected;
+    }
     function bindVisibility() {
         var previous = visibilityState, selectionKey = nodeKeys.get(selectedId);
         var record = visibilityByFile.get(currentFile);
@@ -349,37 +395,11 @@
             record = {project: Project.current, entries: new Map()}; visibilityByFile.set(currentFile, record);
         }
         var entry = scene.entry || "";
-        if (!record.entries.has(entry)) record.entries.set(entry, {hidden: new Set(), forces: {drawing: new Set()}, history: []});
+        if (!record.entries.has(entry)) record.entries.set(entry, {hidden: new Set(), forces: {drawing: new Set(), states: new Map()}, history: []});
         visibilityState = record.entries.get(entry);
         nodeKeys = new Map(); nodesById = new Map();
-        var groups = new Map(), bases = new Map(), codenames = new Map();
-        scene.nodes.forEach(function(node) {
-            nodesById.set(node.id, node);
-            if (typeof node.codename === "string" && node.codename) codenames.set(node.codename, (codenames.get(node.codename) || 0) + 1);
-        });
-        scene.nodes.forEach(function(node) {
-            var base = JSON.stringify([(node.sourcePath || "").replace(/\\/g, "/"), node.type, node.name, typeof node.codename === "string" ? node.codename : ""]);
-            var group = JSON.stringify([nodesById.has(node.parentId) ? node.parentId : null, base]);
-            bases.set(node.id, {base: base, group: group});
-            if (!groups.has(group)) groups.set(group, []);
-            groups.get(group).push(node);
-        });
-        function keyFor(node, visiting) {
-            if (nodeKeys.has(node.id)) return nodeKeys.get(node.id);
-            if (visiting.has(node.id)) return "";
-            visiting.add(node.id);
-            var key;
-            if (typeof node.codename === "string" && codenames.get(node.codename) === 1) key = JSON.stringify(["codename", node.codename]);
-            else {
-                var base = bases.get(node.id), siblings = groups.get(base.group), parent = nodesById.get(node.parentId);
-                // Creation IDs and source line numbers shift while editing. Use
-                // the named source hierarchy instead. A changed duplicate count
-                // deliberately gets new keys rather than hiding a different item.
-                key = (parent ? keyFor(parent, visiting) : "") + "/" + JSON.stringify([base.base, siblings.length, siblings.indexOf(node)]);
-            }
-            visiting.delete(node.id); nodeKeys.set(node.id, key); return key;
-        }
-        scene.nodes.forEach(function(node) { keyFor(node, new Set()); });
+        nodeKeys = stableNodeKeys(scene);
+        scene.nodes.forEach(function(node) { nodesById.set(node.id, node); });
         if (!scene.sourceIncomplete) {
             var availableKeys = new Set(nodeKeys.values());
             visibilityState.hidden.forEach(function(key) { if (!availableKeys.has(key)) visibilityState.hidden.delete(key); });
@@ -457,6 +477,20 @@
     function elementMenu(node) {
         var state = visibilityState, key = nodeKeys.get(node.id), checked = state.forces.drawing.has(key);
         var menu = new Electron_Menu();
+        if (node.previewStates && node.previewStates.length) {
+            var statesMenu = new Electron_Menu();
+            function addState(label, name) {
+                statesMenu.append(new Electron_MenuItem({label: label, type: "radio", checked: name === (node.previewState || null), click: function() {
+                    if (!active || visibilityState !== state) return;
+                    if (name == null) state.forces.states.delete(key);
+                    else state.forces.states.set(key, name);
+                    refresh();
+                }}));
+            }
+            addState("From source", null);
+            node.previewStates.forEach(function(name) { addState(name, name); });
+            menu.append(new Electron_MenuItem({label: "Preview state", submenu: statesMenu}));
+        }
         menu.append(new Electron_MenuItem({label: "Force drawing", type: "checkbox", checked: checked, click: function() {
             if (!active || visibilityState !== state) return;
             if (checked) state.forces.drawing.delete(key);
@@ -532,6 +566,7 @@
             "Select an element to inspect it; double-click to open its source line.";
         function unitText(value) { return value && value.unit ? value.unit + "(" + (typeof value.value === "number" ? value.value : "?") + ")" : "ABS(" + (typeof value === "number" ? value : "?") + ")"; }
         if (node && node.size) selection.textContent += " · size " + node.size.map(unitText).join(" × ");
+        if (node && node.previewState) selection.textContent += " · state: " + node.previewState;
         if (node && revealSource) navigate(node.line, node.sourcePath);
         updateVisibilityControls();
         requestDraw();
@@ -589,7 +624,7 @@
             "Copy the entire interface at original size with a transparent background";
         stage.title = (showing ? (referenceLocked ? "Reference offset locked; use X/Y fields to adjust. " :
             "Drag with the left mouse button to move the reference. Arrow keys move by 1 px; Shift + arrows by 10 px. ") :
-            "Hover to preview selection; hold Ctrl for nested elements. ") +
+            "Hover to preview selection; hold Ctrl to prioritize interactive controls (otherwise select nested elements). ") +
             "Middle drag or Space + left drag to pan; Ctrl + wheel to zoom. Choose Fit content to reset the view.";
         // Keep the pointer position across refreshes and reference toggles so a
         // stationary pointer can regain its highlight when the GUI returns.
@@ -827,7 +862,7 @@
     function hitAt(clientX, clientY, deep) {
         if (currentReference()) return null;
         var rect = canvas.getBoundingClientRect();
-        return renderer.hitTest(clientX - rect.left, clientY - rect.top, {deep: deep});
+        return renderer.hitTest(clientX - rect.left, clientY - rect.top, {deep: deep, interactiveOnly:prefs.selectionTool === "interactive", preferInteractive:deep});
     }
     function setHovered(id, redraw) {
         if (id === hoveredId) return false;
@@ -1153,9 +1188,27 @@
         referenceShow.onchange = updateReference;
         referenceError = element("span", "gw-reference-error", "", referenceToolbar); referenceError.setAttribute("role", "alert");
         status = element("div", "gw-status", "Open a GooWee script", outer); status.setAttribute("role", "status");
-        stage = element("div", "gw-stage", null, outer);
+        var workspace = element("div", "gw-workspace", null, outer);
+        var tools = element("div", "gw-tools", null, workspace);
+        tools.setAttribute("role", "toolbar"); tools.setAttribute("aria-label", "Selection tools"); tools.setAttribute("aria-orientation", "vertical");
+        function addSelectionTool(mode, label, icon) {
+            var button = element("button", "gw-tool", null, tools);
+            button.type = "button"; button.dataset.tool = mode;
+            button.title = label; button.setAttribute("aria-label", label);
+            button.setAttribute("aria-pressed", String(prefs.selectionTool === mode));
+            button.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">' + icon + '</svg>';
+            button.onclick = function() {
+                prefs.selectionTool = mode; save();
+                tools.querySelectorAll("button").forEach(function(item) { item.setAttribute("aria-pressed", String(item.dataset.tool === mode)); });
+                if (mode === "interactive" && !GooWeePreviewRenderer.isInteractive(nodesById.get(selectedId))) selectNode(null, false);
+                refreshHover(); requestDraw();
+            };
+        }
+        addSelectionTool("interactive", "Select interactive elements", '<path d="M9 12V5a2 2 0 0 1 4 0v6l2-1 5 3v5l-3 3h-6l-6-7 2-2 3 3"/>');
+        addSelectionTool("all", "Select all elements", '<path d="m5 3 14 10-7 1-3 7Z"/>');
+        stage = element("div", "gw-stage", null, workspace);
         stage.tabIndex = 0;
-        stage.title = "Hover to preview selection; hold Ctrl for nested elements. Middle drag or Space + left drag to pan; Ctrl + wheel to zoom. Choose Fit content to reset the view.";
+        stage.title = "Hover to preview selection; hold Ctrl to prioritize interactive controls (otherwise select nested elements). Middle drag or Space + left drag to pan; Ctrl + wheel to zoom. Choose Fit content to reset the view.";
         canvasSurface = element("div", "gw-surface", null, stage);
         canvas = element("canvas", "", null, canvasSurface); canvas.setAttribute("aria-label", "GooWee layout preview; use Elements below for keyboard navigation");
         empty = element("div", "gw-empty", "", stage);
@@ -1163,7 +1216,7 @@
         canvas.oncontextmenu = function(event) {
             if (currentReference() || drag) { event.preventDefault(); return; }
             var node = hitAt(event.clientX, event.clientY, event.ctrlKey), selected = nodesById.get(selectedId);
-            if (selected && effectiveHiddenIds.has(selected.id) && view) {
+            if (selected && effectiveHiddenIds.has(selected.id) && view && prefs.selectionTool === "all" && !event.ctrlKey) {
                 var rect = canvas.getBoundingClientRect(), x = (event.clientX - rect.left - view.x) / view.scale, y = (event.clientY - rect.top - view.y) / view.scale;
                 if (x >= selected.x && y >= selected.y && x <= selected.x + selected.width && y <= selected.y + selected.height) node = selected;
             }

@@ -1,5 +1,5 @@
 /* GooWee source preview. This is a bounded, allowlisted abstract interpreter, not
- * a GML runtime: callbacks and unknown calls are never executed. No eval/Function.
+ * a GML runtime: callbacks run only through explicit preview sampling. No eval/Function.
  * Public API: analyze(source, {width,height,entry,assets,constants}). Source lines
  * are 1-based; node bounds are absolute viewport pixels. See README.md. */
 (function(root, factory) {
@@ -485,6 +485,7 @@
 		this.previewHints=0;
 		this.captureInfo=new WeakMap();
 		this.functionStatics=new WeakMap();
+		this.previewStates=new Map();this.stateOccurrences=dict();
 		var constants = {true:true,false:false,undefined:null,noone:null,infinity:Infinity,pi:Math.PI,GUI_SCALE_FACTOR:this.scale,
 			c_white:16777215,c_black:0,c_red:255,c_green:32768,c_blue:16711680,c_yellow:65535,c_lime:65280,c_aqua:16776960,c_fuchsia:16711935,c_gray:8421504,c_grey:8421504,c_dkgray:4210752,c_ltgray:12632256,c_silver:12632256,c_orange:4235519,c_maroon:128,c_navy:8388608,c_olive:32896,c_purple:8388736,c_teal:8421376};
 		Object.keys(constants).forEach(function(k) { this.global[k] = constants[k]; },this);
@@ -719,9 +720,10 @@
 		});return found;
 	};
 	State.prototype.get = function(env, name) {
-		if(this.previewDepth && /^preview_/.test(name))return tagged({builtin:name},"builtin");
 		if (own(env,name)) return env[name];
 		if (env.self && own(env.self.props,name)) { var field=env.self.props[name];return isKind(field,"closure") ? closureValue(field.fn,field.env,field.boundSelf || env.self) : field; }
+		// Locals and instance fields may use preview_ names too.
+		if(this.previewDepth && /^preview_/.test(name))return tagged({builtin:name},"builtin");
 		if (env.self && name === "style") return env.self._style;
 		if (isNode(env.self) && /^(layout|size_actual|padding_actual|margin_actual|children|parent|child_count|_measure_margin)$/.test(name)) return this.member(env.self,name,name,0);
 		if (env.self && /^(size|size_min|size_max|margin|padding|alignment|aspectratio|orientation|text|sprite|alpha|progress|draw_disable|draw_enable|draw_set_enable|is_draw_disabled|set_codename)$/.test(name)) return methodValue(env.self,name);
@@ -770,6 +772,7 @@
 	};
 	State.prototype.member = function(obj, key, name, line) {
 		if (!safeKey(key)) return unknown(name);
+		if(isKind(obj,"callbacks"))return methodValue(obj,key);
 		if(isKind(obj,"dsMap"))return obj.values.has(key)?obj.values.get(key):null;
 		if(/^(?:gw_)?GooWee\.view$/.test(name))return null;
 		if (isUnknown(obj) && /^[A-Za-z_]\w*$/.test(obj.name)) {
@@ -1023,8 +1026,9 @@
 		if(type === "Margin") return {left:args[0],top:args[1],right:args[2],bottom:args[3]};
 		if(type === "Alignment") return {horizontal:args[0],vertical:args[1]};
 		if(type === "Rectangle") return {x:args[0] || 0,y:args[1] || 0,width:args[2] || 0,height:args[3] || 0};
+		if(type === "CallbackList")return tagged({callbacks:[]},"callbacks");
 		if(type === "DataBind") return tagged({dataBind:true,setter:args[0],getter:args[1],props:dict(),line:line,sourcePath:this.currentPath,updated:false},"binding");
-		if (/^(?:DataAccess|DataMutate|Delegate|CallbackList|ImageGroup|DrawingGroup|ImageSource|TexturePage)$/.test(type)) return unknown(name);
+		if (/^(?:DataAccess|DataMutate|Delegate|ImageGroup|DrawingGroup|ImageSource|TexturePage)$/.test(type)) return unknown(name);
 		var core=visualTypes.test(type);
 		// Modelled primitives/builders take precedence even when a dependency
 		// indexes their real definition. In particular GUI_SCROLL_PARAMS loads
@@ -1053,8 +1057,17 @@
 		var layoutType=type,parent = isNode(args[0]) ? args[0] : null, auto = /^(Image|Label|Button)$/.test(type);
 		var n = {id:"node-" + this.nextNodeId++,name:type,type:type,layoutType:layoutType,line:line,parentId:parent ? parent.id : null,children:[],x:0,y:0,width:0,height:0,text:"",sprite:null,background:null,style:{fontSize:16,color:"#000000",alignH:0,alignV:0},hidden:false,approximate:false,props:dict(),_style:{text_alignment:{horizontal:0,vertical:0}},size:[unit(auto ? "AUTO" : "REL",1),unit(auto ? "AUTO" : "REL",1)],margin:[0,0,0,0],padding:[0,0,0,0],alignment:[0,0],orientation:1};
 		tagged(n,"node");n.sourcePath=this.currentPath;
+		var stateSite=(parent ? parent.previewStateKey : "") + "/" + JSON.stringify([this.currentPath,line,type]);
+		var occurrence=this.stateOccurrences[stateSite] || 0;this.stateOccurrences[stateSite]=occurrence+1;
+		n.previewStateKey=stateSite + "#" + occurrence;
 		this.nodes.push(n); if (parent) parent.children.push(n);
-		if(type==="Button")Object.assign(n.props,{is_hover:false,is_down:false,is_down_right:false,is_enabled:true,is_disabled_to_press:false});
+		if(type==="Button") {
+			var selected=(this.options.selectedStates || {})[n.previewStateKey];
+			["mouseover","mouseheld","mouseout","press","press_hold","release","click","double_click","press_right","release_right","mouse_above"].forEach(function(event){n.props[event]=tagged({callbacks:[]},"callbacks");});
+			Object.assign(n.props,{is_hover:selected==="hover" || selected==="pressed",is_down:selected==="pressed",is_down_right:false,is_enabled:selected!=="disabled",is_disabled_to_press:false});
+		}
+		// Load project-owned setup annotations even for modelled library controls.
+		if(type === "Button")this.resolveFunction(name);
 		if (type === "Label") n.size = [unit("AUTOV",1),unit("AUTOV",1)];
 		if (type === "Label" || type === "Textbox") { n.text = this.text(args[1],n); }
 		if (type === "Image") n.sprite = spriteValue(args[1],[]);
@@ -1093,6 +1106,38 @@
 		else if (!/^(?:Canvas(?:Surface|Scroll|DragScroll)?|Container(?:Canvas)?|Control|Float|Panel|StackPanel|WrapPanel|Label|Image|Button|Scroll|DragScroll)$/.test(type)) { n.approximate = true; this.warn(line,"Custom control " + type + ": showing its outer bounds; implementation is outside this script."); }
 		return n;
 	};
+	// State callbacks stay in the interpreter, never in the serialized scene.
+	State.prototype.registerState = function(target, name, callback, line) {
+		if (!(isNode(target) || typeof target === "string" && /^[A-Za-z_]\w*$/.test(target)) || typeof name !== "string" || !name.trim() || name.length > 80 || !isKind(callback,"closure")) {
+			this.warn(line,"preview_state expects a control (or constructor name), a nonempty state name and a GML function.");return null;
+		}
+		var key=typeof target === "string" ? shortName(target) : target;
+		if(!this.previewStates.has(key))this.previewStates.set(key,new Map());
+		var states=this.previewStates.get(key);
+		if(states.size>=64 && !states.has(name)){this.warn(line,"Preview states are capped at 64 per control.");return null;}
+		states.set(name,callback);return null;
+	};
+	State.prototype.finishStates = function() {
+		var self=this;
+		this.nodes.slice().forEach(function(node) {
+			var states=new Map();
+			[node.layoutType,node.type,node].forEach(function(key){var registered=self.previewStates.get(key);if(registered)registered.forEach(function(callback,name){states.set(name,callback);});});
+			var names=node.layoutType === "Button" ? ["idle","hover","pressed","disabled"] : [];
+			states.forEach(function(callback,name){if(names.indexOf(name)<0)names.push(name);});
+			node.previewStates=names;
+			var selected=(self.options.selectedStates || {})[node.previewStateKey];
+			node.previewState=names.indexOf(selected)>=0 ? selected : null;
+			var callback=states.get(node.previewState);
+			self.previewDepth++;
+			try {
+				if(callback)self.invoke(callback.fn,[node],callback.env,callback.boundSelf || node);
+				else if(node.layoutType === "Button" && node.previewState) {
+					var events=node.previewState === "hover" ? ["mouseover"] : node.previewState === "pressed" ? ["mouseover","press"] : ["mouseout","release"];
+					events.forEach(function(event){self.method(node.props[event],"invoke_all",[],node.line);});
+				}
+			} finally {self.previewDepth--;}
+		});
+	};
 	State.prototype.text = function(v,n) { if (isUnknown(v)) { n.approximate = true; this.warn(n.line,"Dynamic text shown as a placeholder."); return "{" + v.name + "}"; } if(v && typeof v==="object"){n.approximate=true;this.warn(n.line,"A struct or array cannot be displayed as label text; supply a caption.");return Array.isArray(v)?"{array}":"{struct}";}return v == null ? "" : String(v); };
 	State.prototype.removeElements = function(element, includeSelf) {
 		if(!isNode(element))return;
@@ -1103,6 +1148,17 @@
 		for(var i=this.nodes.length-1;i>=0;i--)if(removed.has(this.nodes[i].id))this.nodes.splice(i,1);
 	};
 	State.prototype.method = function(n,name,args,line) {
+		if(isKind(n,"callbacks")) {
+			if(name === "add") {for(var i=0;i<args.length;i++){if(isCallable(args[i]) && n.callbacks.length<128)n.callbacks.push(args[i]);else this.warn(line,"CallbackList.add requires a function and is capped at 128 callbacks.");}return n;}
+			if(name === "clear"){n.callbacks=[];return n;}
+			if(name === "remove"){var index=n.callbacks.findIndex(function(callback){return sameValue(callback,args[0]);});if(index>=0)n.callbacks.splice(index,1);return n;}
+			if(name === "is_empty")return !n.callbacks.length;
+			if(name === "invoke_all") {
+				if(this.previewDepth){var self=this;n.callbacks.slice().forEach(function(callback){self.check();self.call("method_call",[callback,args],line,self.global);});}
+				return n;
+			}
+			this.warn(line,"Unsupported CallbackList."+name+"; use a preview override.");return unknown("CallbackList."+name);
+		}
 		if(isKind(n,"sprite"))return this.spriteMethod(n,name,args,line);
 		if (isKind(n,"binding")) {
 			if(name === "update" && !n.updated && ++this.dataUpdates <= 64) {
@@ -1254,6 +1310,7 @@
 		}
 		if(/^preview_/.test(name)){
 			if(!this.previewDepth){this.warn(line,"Preview helper " + name + " is only available inside preview annotations.");return unknown(name);}
+			if(name==="preview_state")return this.registerState(args[0],args[1],args[2],line);
 			if(name==="preview_override"){
 				if(typeof args[0]==="string" && /^[A-Za-z_]\w*(?:\.[A-Za-z_]\w*|\(\.\.\.\))*$/.test(args[0]) && isKind(args[1],"closure")){this.overrides[args[0]]=args[1];return null;}
 				this.warn(line,"preview_override expects a call path and a GML function.");return null;
@@ -1606,6 +1663,11 @@
 			if (error.sourcePath != null) state.currentPath = error.sourcePath;
 			state.warn(error.line || 1,error.previewSyntax ? error.message + " Preview waits for valid source." : state.truncated ? "Preview complexity limit reached; showing the partial layout." : "Preview stopped: " + String(error.message || error).slice(0,240) + ". Showing the partial layout.");
 			state.currentPath = previousPath;
+		}
+		try { state.finishStates(); } catch(error) { state.warn(error.line || 1,"Preview state stopped: " + String(error.message || error).slice(0,200)); }
+		if(typeof options.selectStates === "function" && !result.sourceIncomplete) {
+			var selected=options.selectStates(result);
+			if(selected && Object.keys(selected).length)return analyze(source,Object.assign({},options,{selectStates:null,selectedStates:selected}));
 		}
 		try { result.roots=state.layout(); } catch(error) { state.warn(1,"Could not resolve all layout bounds."); result.roots=state.nodes.filter(function(n){return !n.parentId;}); }
 		result.previewHints=state.previewHints;

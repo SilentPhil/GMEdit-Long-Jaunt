@@ -95,6 +95,26 @@ let count=0;
 async function test(name,callback) { await callback(); count++; console.log("ok - "+name); }
 async function run() {
     asset("ink"); asset("intrinsic");
+    await test("interactive picking skips decorations and retains clipping and visibility", async () => {
+        const f=fixture(), button=node({id:"button",type:"CustomAction",layoutType:"Button",x:0,y:0,width:100,height:50});
+        const label=node({id:"label",type:"Label",layoutType:"Label",parentId:button.id,x:0,y:0,width:100,height:50});
+        const staticNode=node({id:"static",type:"Image",layoutType:"Image",x:150,y:0,width:30,height:30});
+        button.children=[label];
+        const model={roots:[button,staticNode],nodes:[button,label,staticNode],width:300,height:100};
+        const view=await f.render(model);
+        const hit=(x,options)=>f.renderer.hitTest(view.x+x,view.y+10,options);
+        assert.strictEqual(hit(10),label);
+        assert.strictEqual(hit(10,{interactiveOnly:true}),button);
+        assert.strictEqual(hit(10,{deep:true,preferInteractive:true}),button);
+        assert.strictEqual(hit(155,{interactiveOnly:true}),null);
+        assert.strictEqual(hit(155,{deep:true,preferInteractive:true}),staticNode);
+        await f.render(model,{hiddenNodeIds:new Set([button.id])});
+        assert.strictEqual(hit(10,{interactiveOnly:true}),null);
+        await f.render(model);
+        button.clipChildren=true; button.width=5;
+        await f.render(model);
+        assert.strictEqual(hit(10,{interactiveOnly:true}),null);
+    });
     await test("forced drawing reveals only the requested hidden branch and restores source visibility",async()=>{
         const f=fixture(), parent=node({id:"hidden-parent",hidden:true}), child=node({id:"forced-child",parentId:parent.id,hidden:true}), sibling=node({id:"sibling",parentId:parent.id});
         parent.children=[child,sibling];

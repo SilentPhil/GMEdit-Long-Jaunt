@@ -623,4 +623,116 @@ test("source text wrapping can measure the selected font and edit characters", (
     assert.deepStrictEqual(scene.diagnostics,[]);
 });
 
+test("button states replay input branches and bound visual callbacks without click dispatch", () => {
+    const source=`function ui(){
+        var button=new Button(undefined);button.size(100,40);
+        var caption=new Label(button,"Idle");
+        caption.draw_set_enable(!button.is_down);
+        button.mouseover.add(method({caption:caption},function(){caption.text("Hover");}));
+        button.press.add(method({caption:caption},function(){caption.text("Pressed");}));
+        button.click.add(function(){var unwanted=new Label(undefined,"Click");});
+        var sibling=new Button(undefined);
+    }`;
+    function choose(name){return preview(source,{selectStates(result){const b=node(result,"button");return {[b.previewStateKey]:name};}});}
+    const base=preview(source);
+    assert.deepStrictEqual(node(base,"button").previewStates,["idle","hover","pressed","disabled"]);
+    assert.strictEqual(node(base,"caption").text,"Idle");
+    assert.strictEqual(node(choose("hover"),"caption").text,"Hover");
+    const pressed=choose("pressed");
+    assert.strictEqual(node(pressed,"caption").text,"Pressed");
+    assert.strictEqual(node(pressed,"caption").hidden,true);
+    assert.strictEqual(node(pressed,"sibling").previewState,null);
+    assert.strictEqual(pressed.nodes.length,3);
+    assert.strictEqual(node(choose("idle"),"caption").hidden,false);
+    assert.strictEqual(node(preview(source),"caption").text,"Idle");
+    assert.deepStrictEqual(pressed.diagnostics,[]);
+});
+
+test("manual instance states override type states and affect final layout and colors", () => {
+    const source=`/* @goowee-preview setup
+        preview_state("Button","Marked",function(target){target.size(150,60);});
+    */
+    function ui(){
+        var target=new Button(undefined);target.size(80,30);
+        var caption=new Label(target,"Caption");
+        /* @goowee-preview code
+            preview_state(target,"Marked",function(control){
+                control.size(220,70);caption.draw_disable();
+                control.style.background_image=new SpriteImage(s_pixel,0,c_red);
+            });
+        */
+    }`;
+    const r=preview(source,{selectStates(result){return {[node(result,"target").previewStateKey]:"Marked"};}});
+    assert.deepStrictEqual([node(r,"target").width,node(r,"target").height],[220,70]);
+    assert.strictEqual(node(r,"target").background.color,"#ff0000");
+    assert(node(r,"caption").hidden);
+    assert.deepStrictEqual(r.diagnostics,[]);
+    assert.doesNotThrow(()=>JSON.stringify(r));
+});
+
+test("modelled buttons load project-owned state setup without running library initialization", () => {
+    const r=preview('function ui(){var target=new Button(undefined);}',{
+        sourceFor(name){return name==="Button" ? {path:"library.gml",source:`
+            /* @goowee-preview setup
+                preview_state("gw_Button","Sample",function(target){target.size(123,45);});
+            */
+            function gw_Button(parent) constructor { var unwanted=new Label(undefined,"Runtime"); }
+        `}:null;},
+        selectStates(result){return {[node(result,"target").previewStateKey]:"Sample"};}
+    });
+    assert.strictEqual(r.nodes.length,1);
+    assert.strictEqual(node(r,"target").width,123);
+    assert.deepStrictEqual(r.diagnostics,[]);
+});
+
+test("invalid preview state definitions diagnose and state callback loops remain bounded", () => {
+    const invalid=preview('function ui(){var target=new Panel(undefined);/* @goowee-preview code preview_state(target,"",42); */}');
+    assert(invalid.diagnostics.some(d=>/preview_state expects/.test(d.message)));
+    const r=preview(`function ui(){var target=new Panel(undefined);
+        /* @goowee-preview code preview_state(target,"Loop",function(){while(true){}}); */
+    }`,{selectStates(result){return {[node(result,"target").previewStateKey]:"Loop"};}});
+    assert(r.diagnostics.some(d=>/capped|limit/.test(d.message)));
+});
+
+test("explicit callback lists remain dormant until sampled by a selected state", () => {
+    const source=`function ui(){var target=new Panel(undefined);var caption=new Label(target,"Initial");
+        var callbacks=new gw_CallbackList();
+        var removed=method({caption:caption},function(){caption.text("Removed");});
+        callbacks.add(removed);callbacks.remove(removed);
+        callbacks.add(method({caption:caption},function(){caption.text("Sampled");}));
+        callbacks.invoke_all();
+        /* @goowee-preview code preview_state(target,"Sample",function(){callbacks.invoke_all();}); */
+    }`;
+    assert.strictEqual(node(preview(source),"caption").text,"Initial");
+    const r=preview(source,{selectStates(result){return {[node(result,"target").previewStateKey]:"Sample"};}});
+    assert.strictEqual(node(r,"caption").text,"Sampled");
+    assert.deepStrictEqual(r.diagnostics,[]);
+});
+
+test("preview-prefixed locals and fields take precedence over helper lookup", () => {
+    const source=`/* @goowee-preview setup
+        function apply_sample(control) {
+            var preview_data={caption:"Applied",width:175};
+            var preview_fields=variable_struct_get_names(preview_data);
+            var preview_copy={};
+            for(var i=0;i<array_length(preview_fields);i++){
+                var key=preview_fields[i];preview_copy[$ key]=preview_data[$ key];
+            }
+            control.text(preview_copy.caption);control.size(preview_copy.width,30);
+        }
+        preview_state("Label","Sample",function(control){apply_sample(control);});
+    */
+    function ui(){var target=new Label(undefined,"Original");}`;
+    const r=preview(source,{selectStates(result){return {[node(result,"target").previewStateKey]:"Sample"};}});
+    assert.strictEqual(node(r,"target").text,"Applied");
+    assert.strictEqual(node(r,"target").width,175);
+    assert.deepStrictEqual(r.diagnostics,[]);
+    const fields=preview(`function Sample(parent):Button(parent) constructor {
+        preview_caption="Field";
+        /* @goowee-preview code preview_state(self,"Sample",function(){text(preview_caption);}); */
+    }`,{selectStates(result){return {[result.nodes[0].previewStateKey]:"Sample"};}});
+    assert.strictEqual(fields.nodes[0].text,"Field");
+    assert.deepStrictEqual(fields.diagnostics,[]);
+});
+
 console.log(count + " GooWee engine tests passed.");

@@ -39,3 +39,10 @@
 .goowee-preview .gw-diagnostic { color: #d9b87e; white-space: normal; }
 .goowee-preview .gw-selection { padding: 6px 7px; border-top: 1px solid var(--color-border, #4b535f); overflow-wrap: anywhere; }
 .goowee-preview [hidden] { display: none !important; }
+
+.goowee-preview .gw-workspace { display: flex; flex: 1 1 180px; min-height: 90px; min-width: 0; overflow: hidden; }
+.goowee-preview .gw-tools { display: flex; flex-direction: column; gap: 4px; padding: 5px; flex: 0 0 auto; border-right: 1px solid var(--color-border, #4b535f); }
+.goowee-preview .gw-tool { display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; padding: 5px; }
+.goowee-preview .gw-tool svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.goowee-preview .gw-tool[aria-pressed=true] { color: var(--color-primary, #66cfff); background: #55ccff22; border-color: currentColor; }
+.goowee-preview .gw-tool:focus-visible { outline: 2px solid var(--color-primary, #66cfff); outline-offset: 1px; }
