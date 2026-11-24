@@ -1,0 +1,16 @@
+const assert = require('assert');
+const {editorSource} = require('../bin/resources/app/plugins/goowee-preview/project-resources');
+let disk = 'original setup';
+const project = {readTextFileSync: () => disk};
+const session = {getValue: () => 'editor setup', getUndoManager: () => ({isClean: () => true})};
+const path = 'scripts/example/example.gml';
+assert.strictEqual(editorSource({__changed:false}, session, path, project), disk);
+disk = 'updated setup';
+assert.strictEqual(editorSource({__changed:false}, session, path, project), disk);
+assert.strictEqual(editorSource({__changed:true}, session, path, project), 'editor setup');
+assert.strictEqual(editorSource({}, session, path, project), 'editor setup');
+assert.strictEqual(editorSource({__changed:false}, {...session, getUndoManager:()=>({isClean:()=>false})}, path, project), 'editor setup');
+assert.strictEqual(editorSource({__changed:false}, session, 'objects/example/example.yy', project), 'editor setup');
+assert.strictEqual(editorSource({__changed:false}, session, path, {readTextFileSync:()=>{throw Error('missing');}}), 'editor setup');
+assert.strictEqual(session.getValue(), 'editor setup');
+console.log('Preview source freshness: 8 checks passed.');

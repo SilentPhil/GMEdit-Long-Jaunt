@@ -105,7 +105,7 @@
         if (GmlFile.current) files.push(GmlFile.current);
         for (var i = files.length - 1; i >= 0; i--) {
             var file = files[i], buffer = file.codeEditor && file.codeEditor.session;
-            if (buffer && resources.relativeSourcePath(file.path) === path) return buffer.getValue();
+            if (buffer && resources.relativeSourcePath(file.path) === path) return GooWeePreviewResources.editorSource(file, buffer, path, Project.current);
         }
         return null;
     }
@@ -243,7 +243,7 @@
             return;
         }
         try {
-            var source = session.getValue();
+            var source = GooWeePreviewResources.editorSource(currentFile, session, getResources().relativeSourcePath(currentFile.path), Project.current);
             var locale = getLocalization(), localeInfo = locale.info();
             var setup = getResources().previewSetup();
             var result = GooWeePreviewEngine.analyze(source, {

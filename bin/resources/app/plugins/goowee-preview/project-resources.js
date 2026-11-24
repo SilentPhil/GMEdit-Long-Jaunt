@@ -320,5 +320,18 @@
 		function clear() { metadata = Object.create(null); frames = Object.create(null); sources = Object.create(null); objectEvents = Object.create(null); fontMetadata = Object.create(null); jsonCache = Object.create(null); jsonBytes = 0; }
 		return { sprite: sprite, font: font, collect: collect, sourceFor: sourceFor, relativeSourcePath: function(path) { return scriptPath(path) || objectPath(path); }, previewSetup: previewSetup, previewSourceFor: previewSourceFor, fontFileFor: fontFileFor, jsonFor: jsonFor, jsonFiles: jsonFiles, clear: clear, dispose: function() { clear(); project = null; api = null; readOpenSource = null; } };
 	}
-	return { create: create };
+	function editorSource(file, session, path, project) {
+		var changed = file && (typeof file.get_changed === "function" ? file.get_changed() : typeof file.changed === "boolean" ? file.changed : file.__changed);
+		var undo = session && typeof session.getUndoManager === "function" ? session.getUndoManager() : null;
+		var clean = changed === false && (!undo || typeof undo.isClean !== "function" || undo.isClean());
+		// Object tabs combine multiple events; only standalone GML buffers map directly to disk text.
+		if (clean && /\.gml$/i.test(path || "") && project && typeof project.readTextFileSync === "function") {
+			try {
+				var source = project.readTextFileSync(path);
+				if (typeof source === "string" && source.length <= 2 * 1024 * 1024) return source;
+			} catch (_) { }
+		}
+		return session.getValue();
+	}
+	return { create: create, editorSource: editorSource };
 });
